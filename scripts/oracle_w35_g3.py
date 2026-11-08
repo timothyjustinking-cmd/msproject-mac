@@ -79,6 +79,19 @@ def wbs_renumber(app, project):
                     for i in range(1, project.Tasks.Count + 1)}}
 
 
+def delete_assignment(app, project):
+    """Remove the one assignment of task 1 (resource UniqueID 2), as the wave-30
+    assign_delete pair does."""
+    task = project.Tasks(1)
+    for index in range(1, task.Assignments.Count + 1):
+        candidate = task.Assignments(index)
+        if candidate.ResourceUniqueID == 2:
+            candidate.Delete()
+            return {"call": "Tasks(1).Assignments(<resource uid 2>).Delete()",
+                    "remaining": task.Assignments.Count}
+    raise RuntimeError("task 1 has no assignment for resource uid 2")
+
+
 def set_task_note(row, text):
     def edit(app, project):
         project.Tasks(row).Notes = text
@@ -149,6 +162,11 @@ EDITS = {
     # the wave-30 three-task file before a code is defined and after.
     "wbs-renumber-default": (wbs_renumber, "file:wave30-wbs-control.mpp"),
     "wbs-renumber-defined": (wbs_renumber, "file:wave30-wbs-code.mpp"),
+    # W35-3.5: remove the assignment from the file the port saved (the port's
+    # Assign Resources output on wave30-assign-add-control.mpp, task 1, resource
+    # uid 2, built by tests/roundtrip_assignment_growth).
+    "assign-remove-port-saved": (delete_assignment,
+                                 "port:C:/w35/port/port-assign-add.mpp"),
     # W35-3.3: a note added on a file whose existing note was written by an
     # older RichEdit build (wave-30, Riched20 16.0.20430): does the new note's
     # generator string come from the machine or from the file?
@@ -231,8 +249,51 @@ def build(app):
     return project
 
 
+def measure_port(app, pair, entry):
+    """W35-3.5.  The control is a file the PORT saved (`port:<path>`), unchanged
+    byte for byte: Project never saves it, so the pair measures what Project's
+    edit does to the port's own output.  The null save is Project opening and
+    resaving that file."""
+    edit_fn, kind = EDITS[pair]
+    source = kind[len("port:"):]
+    control = os.path.join(FIXTURE_DIR, control_name(pair))
+    shutil.copyfile(source, control)
+    entry["base"] = "port-saved file " + os.path.basename(source)
+
+    copy = os.path.join(WORK, f"{pair}-edit.mpp")
+    shutil.copyfile(control, copy)
+    app.FileOpen(copy)
+    project = app.ActiveProject
+    neutralise(app, project, "Synthetic G3 Fixture")
+    entry["control_facts"] = facts(app, project)
+    try:
+        entry["edit"] = edit_fn(app, project)
+    except Exception as exc:  # noqa: BLE001
+        entry["edit"] = f"<raised: {type(exc).__name__}: {exc}>"
+        app.FileClose(0)
+        os.remove(control)
+        return False
+    entry["edit_facts"] = facts(app, project)
+    app.FileSaveAs(os.path.join(FIXTURE_DIR, edit_name(pair)))
+    app.FileClose(0)
+
+    app.FileOpen(os.path.join(FIXTURE_DIR, edit_name(pair)))
+    entry["edit_reopen"] = facts(app, app.ActiveProject)
+    app.FileClose(0)
+
+    copy = os.path.join(WORK, control_name(pair))
+    shutil.copyfile(control, copy)
+    app.FileOpen(copy)
+    app.UserName = "Fixture Builder"
+    app.FileSaveAs(os.path.join(NULL_DIR, null_name(pair)))
+    app.FileClose(0)
+    return True
+
+
 def measure(app, pair, entry):
     edit_fn, kind = EDITS[pair]
+    if kind.startswith("port:"):
+        return measure_port(app, pair, entry)
     seed = os.path.join(FIXTURE_DIR, f"wave35-g3-{pair}-seed.mpp")
     if kind.startswith("file:"):
         # An existing committed (synthetic, neutral) fixture, opened on a copy.
