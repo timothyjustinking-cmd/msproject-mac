@@ -743,7 +743,12 @@ void check_refusals() {
             }
         }
         stale.assignments = kept;
-        std::uint32_t other = 0;
+        /* The writer takes only a lower uid on the one assigned resource
+         * (wave34-assign-add-second), so the stale-plan check is reached with the
+         * lowest free resource; the greatest is refused by the writer (W35-0.4,
+         * RC-W2). */
+        std::uint32_t lowest = 0;
+        std::uint32_t highest = 0;
         for (const app::ResourceRow& row : second_plan.resources) {
             const app::AssignmentRow* held = nullptr;
             for (const app::AssignmentRow& a : second_plan.assignments) {
@@ -752,12 +757,17 @@ void check_refusals() {
                 }
             }
             if (held == nullptr && row.uid != 0) {
-                other = row.uid;
+                lowest = lowest == 0 ? row.uid : std::min(lowest, row.uid);
+                highest = std::max(highest, row.uid);
             }
         }
-        check(other != 0, "the settled-append fixture has a resource the task does not hold");
-        expect_refused(stale, second_path.string(), task, other, true, "no longer matches",
+        check(lowest != 0, "the settled-append fixture has a resource the task does not hold");
+        expect_refused(stale, second_path.string(), task, lowest, true, "no longer matches",
                        "a plan that shows no assignment on a task the file has assigned");
+        check(highest > lowest, "the settled-append fixture has a higher free resource");
+        expect_refused(stale, second_path.string(), task, highest, true,
+                       "in an order no pair measures",
+                       "assign: a higher uid on the one assigned resource (stale plan)");
     }
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    task, resource, true, "could not be read", "a missing project file");

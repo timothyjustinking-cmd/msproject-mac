@@ -48,7 +48,10 @@
  *
  * ADD, SETTLED APPEND (`assign_resource`), measured on
  * `wave34-assign-add-second` (count 1 -> 2) and `wave34-assign-add-third`
- * (count 2 -> 3); the task holds its real rows plus one free placeholder:
+ * (count 2 -> 3); the task holds its real rows plus one free placeholder.  The
+ * resource uid orders measured are a LOWER uid than the one assigned resource
+ * (second: 1 into [2]) and a HIGHER uid than both of two (third: 3 into
+ * [1, 2]); any other order is refused (W35-0.4, RC-W2):
  *   Assn FixedData  +110  append a copy of a real row with +0 = largest uid +
  *                         1, +8 = the resource uid; every old row is kept
  *   Assn FixedMeta  +34   append {+2 4, +4 old rows*110, tail f1 ff 23 f0 69 00

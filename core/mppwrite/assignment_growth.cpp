@@ -1629,6 +1629,24 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             old_total += get_f64(assn_fixed, r * kAssnRowBytes + kAssnRowWork);
         }
         std::sort(assigned.begin(), assigned.end());
+        /* W35-0.4 (RC-W2): the leaf array is stored sorted and the new row is
+         * appended, but only two orders were ever saved by Project:
+         * wave34-assign-add-second adds resource 1 to a task holding [2]
+         * (leaf [1, 2]: a lower uid, count 1 -> 2) and wave34-assign-add-third
+         * adds resource 3 to [1, 2] (leaf [1, 2, 3]: a higher uid, count
+         * 2 -> 3).  A higher uid on one assignment, or a uid below the
+         * greatest on two, would need an insertion position nobody measured. */
+        bool const measured_order =
+            (assigned.size() == 1 && key.resource_uid < assigned.front()) ||
+            (assigned.size() == 2 && key.resource_uid > assigned.back());
+        if (!measured_order) {
+            fail(function + ": resource UniqueID " +
+                 std::to_string(key.resource_uid) + " would join " +
+                 std::to_string(assigned.size()) + " assigned resource(s) in "
+                 "an order no pair measures; the measured orders are a lower "
+                 "uid than the one assigned resource (wave34-assign-add-second) "
+                 "and a higher uid than both of two (wave34-assign-add-third)");
+        }
         double const work = get_f64(model, kAssnRowWork);
         check_measured_work(work, function);
         double const units = get_f64(model, kAssnRowUnits);
