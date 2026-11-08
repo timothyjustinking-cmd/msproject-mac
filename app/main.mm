@@ -324,6 +324,56 @@ std::string to_std(NSString* string) {
     return utf8 != nullptr ? std::string(utf8) : std::string();
 }
 
+// W35b-1.7 (R35G4-1): a resource pop-up keyed by UniqueID.  NSPopUpButton's
+// addItemWithTitle: removes an existing item of the same title, so two resources
+// with one name (or two blank ones) collapsed to one item and every later choice
+// mapped through a parallel uid list to the wrong resource, and Save renamed or
+// assigned that one.  Items are added through the menu, each tagged with its
+// UniqueID, and the choice is read from the selected item's tag.  A duplicate or
+// blank name carries its UniqueID in the title so the items can be told apart.
+NSPopUpButton* resource_popup(NSRect frame, const std::vector<app::ResourceRow>& resources,
+                              std::vector<std::uint32_t>& uids) {
+    NSPopUpButton* popup = [[NSPopUpButton alloc] initWithFrame:frame pullsDown:NO];
+    uids.clear();
+    for (const app::ResourceRow& resource : resources) {
+        if (resource.uid == 0) {
+            continue;
+        }
+        std::size_t same = 0;
+        for (const app::ResourceRow& other : resources) {
+            if (other.uid != 0 && other.name == resource.name) {
+                ++same;
+            }
+        }
+        std::string title = resource.name;
+        if (title.empty() || same > 1) {
+            title = (title.empty() ? std::string("(no name)") : title) + " (UniqueID " +
+                    std::to_string(resource.uid) + ")";
+        }
+        NSMenuItem* item = [[NSMenuItem alloc] initWithTitle:to_ns(title)
+                                                      action:NULL
+                                               keyEquivalent:@""];
+        [item setTag:static_cast<NSInteger>(resource.uid)];
+        [[popup menu] addItem:item];
+        uids.push_back(resource.uid);
+    }
+    if (!uids.empty()) {
+        [popup selectItemAtIndex:0];
+    }
+    return popup;
+}
+
+// The UniqueID of the pop-up's selected item, or 0 when nothing (or nothing the
+// pop-up was built with) is selected.
+std::uint32_t resource_popup_uid(NSPopUpButton* popup, const std::vector<std::uint32_t>& uids) {
+    NSMenuItem* item = [popup selectedItem];
+    if (item == nil || [item tag] <= 0) {
+        return 0;
+    }
+    const std::uint32_t uid = static_cast<std::uint32_t>([item tag]);
+    return std::find(uids.begin(), uids.end(), uid) != uids.end() ? uid : 0;
+}
+
 NSDictionary* make_attributes(NSFont* font, NSColor* color, NSTextAlignment alignment) {
     NSMutableParagraphStyle* paragraph = [[NSMutableParagraphStyle alloc] init];
     [paragraph setAlignment:alignment];
@@ -3241,44 +3291,56 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     std::vector<std::uint32_t> uids;
-    NSPopUpButton* popup =
-        [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0.0, 30.0, 320.0, 25.0) pullsDown:NO];
-    for (const app::ResourceRow& resource : plan.base.resources) {
-        if (resource.uid != 0) {
-            [popup addItemWithTitle:to_ns(resource.name)];
-            uids.push_back(resource.uid);
-        }
-    }
+    NSPopUpButton* popup = resource_popup(NSMakeRect(0.0, 0.0, 320.0, 25.0),
+                                          plan.base.resources, uids);
     if (uids.empty()) {
         note(plan, "resource information: the project has no resources", true);
         [g_view setNeedsDisplay:YES];
         return;
     }
+    // Step one chooses the resource.  Step two asks for the new name with the
+    // chosen resource's current name prefilled, so the field never shows another
+    // resource's name (a pop-up change has no target here to refresh it).
+    NSAlert* choose = [[NSAlert alloc] init];
+    [choose setMessageText:@"Resource Information"];
+    [choose setInformativeText:@"Choose the resource to rename."];
+    [choose addButtonWithTitle:@"Next"];
+    [choose addButtonWithTitle:@"Cancel"];
+    [choose setAccessoryView:popup];
+    if ([choose runModal] != NSAlertFirstButtonReturn) {
+        note(plan, "resource information cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const std::uint32_t uid = resource_popup_uid(popup, uids);
+    if (uid == 0) {
+        note(plan, "resource information cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    std::string current_name;
+    for (const app::ResourceRow& resource : plan.base.resources) {
+        if (resource.uid == uid) {
+            current_name = resource.name;
+            break;
+        }
+    }
     NSTextField* name_field =
         [[NSTextField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 24.0)];
     [name_field setPlaceholderString:@"New name"];
-    NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 58.0)];
-    [accessory addSubview:popup];
-    [accessory addSubview:name_field];
+    [name_field setStringValue:to_ns(current_name)];
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Resource Information"];
-    [alert setInformativeText:@"Choose the resource and type its new name. The rename is "
-                              @"written to the .mpp when you save."];
+    [alert setInformativeText:to_ns("New name for resource UniqueID " + std::to_string(uid) +
+                                    ". The rename is written to the .mpp when you save.")];
     [alert addButtonWithTitle:@"Rename"];
     [alert addButtonWithTitle:@"Cancel"];
-    [alert setAccessoryView:accessory];
+    [alert setAccessoryView:name_field];
     if ([alert runModal] != NSAlertFirstButtonReturn) {
         note(plan, "resource information cancelled", false);
         [g_view setNeedsDisplay:YES];
         return;
     }
-    const NSInteger chosen = [popup indexOfSelectedItem];
-    if (chosen < 0 || static_cast<std::size_t>(chosen) >= uids.size()) {
-        note(plan, "resource information cancelled", false);
-        [g_view setNeedsDisplay:YES];
-        return;
-    }
-    const std::uint32_t uid = uids[static_cast<std::size_t>(chosen)];
     app::StructuralEdit edit;
     std::string error;
     if (!app::make_rename_resource_edit(plan.base, plan.path, uid,
@@ -3363,15 +3425,8 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         }
     } else {
         std::vector<std::uint32_t> uids;
-        NSPopUpButton* popup = [[NSPopUpButton alloc]
-            initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 25.0)
-                pullsDown:NO];
-        for (const app::ResourceRow& resource : plan.base.resources) {
-            if (resource.uid != 0) {
-                [popup addItemWithTitle:to_ns(resource.name)];
-                uids.push_back(resource.uid);
-            }
-        }
+        NSPopUpButton* popup = resource_popup(NSMakeRect(0.0, 0.0, 320.0, 25.0),
+                                              plan.base.resources, uids);
         if (uids.empty()) {
             note(plan, "assign resources: the project has no resources", true);
             [g_view setNeedsDisplay:YES];
@@ -3388,13 +3443,12 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
             [g_view setNeedsDisplay:YES];
             return;
         }
-        const NSInteger chosen = [popup indexOfSelectedItem];
-        if (chosen < 0 || static_cast<std::size_t>(chosen) >= uids.size()) {
+        resource_uid = resource_popup_uid(popup, uids);
+        if (resource_uid == 0) {
             note(plan, "assign resources cancelled", false);
             [g_view setNeedsDisplay:YES];
             return;
         }
-        resource_uid = uids[static_cast<std::size_t>(chosen)];
     }
     app::StructuralEdit edit;
     std::string error;

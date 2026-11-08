@@ -40,6 +40,7 @@
 #include <system_error>
 #include <vector>
 
+#include "dialogs.h"
 #include "edit_model.h"
 #include "gate_util.h"
 #include "main_window.h"
@@ -196,6 +197,38 @@ int main(int argc, char** argv) {
     if (file_error) {
         return gate::finish();
     }
+    // W35b-1.7 (R35G4-1): the Assign Resources combo resolved its choice by the
+    // chosen text, so two resources of one name (or two blank ones) always came
+    // back as the first.  Each position must come back as itself.
+    {
+        const QStringList names = {QStringLiteral("Crew"), QStringLiteral("Crew"), QString(),
+                                   QString(), QStringLiteral("Crew (resource 2)")};
+        const QStringList labels = msqt::assignment_resource_labels(names);
+        QStringList deduplicated = labels;
+        gate::check(labels.size() == names.size() && deduplicated.removeDuplicates() == 0,
+                    "duplicate and blank resource names get distinct combo labels");
+        const QStringList unique = {QStringLiteral("Crew"), QStringLiteral("Plant")};
+        gate::check(msqt::assignment_resource_labels(unique) == unique,
+                    "unique resource names are their own labels");
+        for (int pick = 0; pick < names.size(); ++pick) {
+            Prompt prompt;
+            int index = -1;
+            bool ok = false;
+            {
+                gate::PromptAnswerer answerer(&prompt, true,
+                                              msqt::assignment_resource_labels(names).at(pick));
+                ok = msqt::ask_assignment_resource(nullptr, QStringLiteral("Task"), names,
+                                                   &index);
+            }
+            gate::check(ok && index == pick,
+                        "the chosen duplicate or blank resource is the one returned");
+            if (!ok || index != pick) {
+                std::fprintf(stderr, "note: pick %d returned ok=%d index=%d\n", pick, ok ? 1 : 0,
+                             index);
+            }
+        }
+    }
+
     const std::uint32_t task = 1;
     const std::uint32_t resource = 2;
 

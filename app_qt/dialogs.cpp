@@ -15,6 +15,7 @@
 #include <QMessageBox>
 #include <QPushButton>
 #include <QRadioButton>
+#include <QSet>
 #include <QFont>
 #include <QSpinBox>
 #include <QString>
@@ -1062,19 +1063,44 @@ bool ask_new_resource_name(QWidget* parent, QString* name) {
     return true;
 }
 
+QStringList assignment_resource_labels(const QStringList& names) {
+    QStringList labels;
+    QSet<QString> used;
+    for (int i = 0; i < names.size(); ++i) {
+        const QString& name = names.at(i);
+        QString label = name;
+        if (name.isEmpty() || names.count(name) > 1) {
+            label = QStringLiteral("%1 (resource %2)")
+                        .arg(name.isEmpty() ? QStringLiteral("(no name)") : name)
+                        .arg(i + 1);
+        }
+        while (used.contains(label)) {
+            label += QLatin1Char('\'');
+        }
+        used.insert(label);
+        labels.push_back(label);
+    }
+    return labels;
+}
+
 bool ask_assignment_resource(QWidget* parent, const QString& task_name,
                              const QStringList& names, int* index) {
     if (index == nullptr || names.isEmpty()) {
         return false;
     }
+    // W35b-1.7 (R35G4-1): the combo returns the chosen text, and indexOf finds the
+    // first item of that text, so two resources with one name (or two blank ones)
+    // always resolved to the first.  Each item carries a unique label, and the
+    // index is looked up by label.
+    const QStringList labels = assignment_resource_labels(names);
     bool ok = false;
     const QString chosen = QInputDialog::getItem(
         parent, QStringLiteral("Assign Resources"),
-        QStringLiteral("Resource to assign to \"%1\":").arg(task_name), names, 0, false, &ok);
+        QStringLiteral("Resource to assign to \"%1\":").arg(task_name), labels, 0, false, &ok);
     if (!ok) {
         return false;
     }
-    *index = static_cast<int>(names.indexOf(chosen));
+    *index = static_cast<int>(labels.indexOf(chosen));
     return *index >= 0;
 }
 
