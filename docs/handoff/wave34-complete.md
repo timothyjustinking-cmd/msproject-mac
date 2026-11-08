@@ -773,6 +773,7 @@ Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
 | W34-4.4 | brief W34-4.4: Insert Summary and Insert Milestone on a clean last row (W33-1.2's conditions) | **DEFERRED with evidence** (both stay disabled, "future: not implemented in this port"; no write path exists) | probe `build/w34/4.4-probe.diff`, log `build/w34/4.4-probe-insert-ctest.log` (15 failing streams per pair, summary and milestone); evidence `spec/writers/evidence/wave30-insert-summary.md`, `spec/writers/table-growth.md` Limits |
 | W34-4.5 | brief W34-4.5: Font Bold on one cell (G2.1); the other font controls stay disabled | **DONE** (enabled for the one measured cell, the Task Name cell of UniqueID 1 on an unformatted view, alone in the save; every other cell refused up front) | the `W34-4.5` commit after `f950a03`; `core/mppwrite/viewstream_edit.{h,cpp}` (`dry_run`), `app/edit_model.{h,cpp}`; `app/app_edits_cell_bold_tests.cpp`; Qt shell `app_qt/{ribbon_bar,main_window}.*`, `app_qt/tests/cell_bold_gate_test.cpp`; gates `build/w34/f950a03-b45all-*.log` |
 | W34-4.6 | brief W34-4.6: WBS code definition (G2.2) with the measured prefix shape only | **DONE** (Project > Properties > WBS > Define Code... enabled for a project of exactly three flat tasks that stores no WBS text; every other shape refused up front; Renumber... stays disabled) | the `W34-4.6` commit after `b07d435`; `core/mppwrite/wbs_code.{h,cpp}`, `varmeta_edit.{h,cpp}` (uid-0 allowance), `tests/roundtrip_wbs.cpp`; `app/edit_model.{h,cpp}`, `app/app_edits_wbs_tests.cpp`; Qt shell `app_qt/{ribbon_bar,main_window}.*`, `app_qt/tests/wbs_code_gate_test.cpp`; gates `build/w34/b07d435-g46final-*.log` |
+| W34-4.7 | brief W34-4.7: Set Baseline 0 for the entire project (G1 + G2.2 + G3.4), no other baseline | **DEFERRED with evidence** (the Set Baseline menu stays disabled, "not implemented in this port"; the retained writers cannot produce Project's save) | probe `build/w34/4.7-probe.cpp`, log `build/w34/4.7-probe-ctest.log` (19 streams fail with the one block the writers can append); evidence `spec/writers/evidence/wave30-baseline.md`, `spec/writers/props-records.md`, `spec/writers/table-growth.md` Limits |
 
 W34-4.0 detail:
 
@@ -1194,3 +1195,37 @@ W34-4.6 detail:
   the menu item queues the one measured definition directly.  (4) The plan shows
   no WBS column, so the stored numbers are not displayed.
 - **Not verified here.**  `app/main.mm` was not touched.
+
+W34-4.7 detail:
+
+- **Brief item.**  Enable Set Baseline 0 for the entire project, no other
+  baseline, behind G1 + G2.2 + G3.4, with a field-by-field Project pair test.
+  Deferral needs evidence of an attempt.
+- **Attempt.**  A probe (`build/w34/4.7-probe.cpp`, registered temporarily in
+  `core/mppwrite/CMakeLists.txt` and reverted; the tree is clean) opens
+  Project's control `wave30-baseline-control.mpp`, appends the one block the
+  retained writers can append for this pair, Task uid 1 BaselineStart
+  (`0x0B40002B`, Project's own payload `78 1E F1 3B`), through
+  `save_var_record`, and compares every stream with Project's
+  `wave30-baseline-set.mpp` through `compare_all` with no KnownGap and the three
+  Task streams declared (`build/w34/4.7-probe-ctest.log`).  Result: **19 streams
+  fail**: 114/Props (144 bytes), TBkndAssn (Fixed2Meta, FixedMeta, Var2Data,
+  VarMeta), TBkndCal (all six streams), TBkndRsc (Fixed2Meta, FixedMeta,
+  Var2Data, VarMeta) and TBkndTask (Fixed2Meta, FixedMeta, Var2Data, VarMeta).
+- **Why it cannot be closed here.**  What the pair shows Project doing: 94 new
+  var blocks (Task 54 over the project row and three tasks, Assignment 27,
+  Resource 12, Calendar 1); 26 of them are structured blobs no note decodes (Task
+  `0x0B4000AD` 108-148 B, `0x0B4000AE` 76 B, `0x0B4000B3`; Assignment
+  `0x0F400034` 88 B, `0x0F400035` 76 B, `0x0F40010B`; Resource `0x0C400044`
+  68 B, `0x0C400045` 36 B; Calendar `0x0D400001` 96 B); a new calendar row
+  (uid 4: TBkndCal FixedData 100 -> 112, Fixed2Data +48); presence bits in four
+  tables' FixedMeta and Fixed2Meta; and a 110-byte tail growth of 114/Props with
+  the +12 word 262 -> 263 (the region `spec/writers/props-records.md` already
+  records as not rebuildable).  The retained var writer handles the Task and
+  Resource tables only, one record per call, and refuses the project row and
+  every Assignment or Calendar table; the baseline cost, work and duration
+  payloads are scheduler outputs.  None of these rules is decoded, so enabling
+  the command would write a file that differs from Project's own save in at least
+  19 streams, which standing rule 1 forbids.
+- **State left.**  Project > Schedule > Set Baseline stays disabled with the
+  exact tooltip; no source file changed in this commit.
