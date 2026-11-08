@@ -1005,6 +1005,58 @@ void check_refusals() {
               "the refused save writes no target file");
     }
 
+    /* W35-0.2 (R34b-6): a pending table-format or custom-field formula edit reaches
+     * the same save through the document-edit hook, so the cascade refuses the
+     * combination before the hook or any write; the queue is kept. */
+    {
+        app::StructuralEdit edit;
+        std::string error;
+        check(app::make_task_mode_edit(plan, source, 1, true, edit, error),
+              "the document-edit fixture builds its task-mode edit");
+        app::StructuralEdits edits;
+        check(edits.push(std::move(edit), &plan),
+              "the document-edit fixture queues the edit");
+        std::error_code fs_error;
+        std::filesystem::create_directories(std::filesystem::path(APP_TEST_OUT_DIR),
+                                            fs_error);
+        const std::filesystem::path out_path =
+            std::filesystem::path(APP_TEST_OUT_DIR) /
+            "app-task-mode-document-edit-refused.mpp";
+        const std::size_t queued = edits.applied().size();
+        int hook_calls = 0;
+        for (const bool as_formula : {false, true}) {
+            std::filesystem::remove(out_path, fs_error);
+            app::StructuralDocumentEdits request;
+            if (as_formula) {
+                request.formula.operation = app::CustomFormulaEdit::Operation::set;
+                request.formula.field_id = 0x0b400033u;
+                request.formula.formula = "[Duration]/240";
+            } else {
+                request.view.set_date_format = true;
+                request.view.date_format = 0x05;
+            }
+            request.hook = [&hook_calls](mppwrite::CfbDocument&, const app::ViewStateEdits&,
+                                         const app::CustomFormulaEdit&) {
+                ++hook_calls;
+                return app::DocumentEditOutcome{};
+            };
+            const std::string what = std::string("its task-mode edit with a pending ") +
+                                     (as_formula ? "formula" : "table format") + " edit";
+            const app::StructuralSaveResult saved = app::save_structural_edits(
+                edits, {}, source, out_path.string(), false, request);
+            check(!saved.ok, ("the save refuses " + what).c_str());
+            check(saved.error.find("a task-mode edit cannot be combined with a table format") !=
+                      std::string::npos,
+                  ("the save's refusal names the combination for " + what + " (got \"" +
+                   saved.error + "\")").c_str());
+            check(hook_calls == 0, ("the hook never ran for " + what).c_str());
+            check(!std::filesystem::exists(out_path),
+                  ("the refused save writes no target for " + what).c_str());
+            check(edits.applied().size() == queued,
+                  ("the queue is unchanged after " + what).c_str());
+        }
+    }
+
     /* More than one writer edit throws. */
     {
         mppwrite::CfbDocument document =
