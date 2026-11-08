@@ -188,6 +188,7 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     // calendar applies).  The resource-loaded percent shape is measured only on
     // the project calendar.
     row.calendar_uid = task.calendar_uid;
+    row.type_block_stored = task.type_block_stored;
     // Wave 12: the stored custom fields (W48's measured decodings, in the
     // reader's order).  Absent values are absent here too; app::make_record_set
     // turns each into a RecordSet value.

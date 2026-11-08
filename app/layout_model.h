@@ -135,6 +135,9 @@ struct TaskRow {
     // rule (one 9600-tick record pair) is measured only on the project calendar,
     // so the edit model refuses a task calendar.
     std::int32_t calendar_uid = -1;
+    // W35-0.2 (R34b-2): the task stores a Type block (VarMeta 0x0b400080).  The
+    // measured assignment fixtures store none, so Assign Resources refuses it.
+    bool type_block_stored = false;
     // W30-C5: the physical TBkndAssn row count naming this task (tombstones
     // included), or kAssignmentRowsUnknown for a plan not loaded from a file.
     std::size_t assignment_rows = kAssignmentRowsUnknown;

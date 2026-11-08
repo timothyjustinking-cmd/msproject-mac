@@ -786,6 +786,7 @@ constexpr std::uint32_t kProjectPropsTimelinePane = 0x03400008u;
 /* Task.Name: COM's PjFieldTaskName, the same id in analysis/field_id_map.tsv.
  * Evidence in the file header comment above. */
 constexpr std::uint32_t kFieldTaskName = 0x0B40000Eu;
+constexpr std::uint32_t kFieldTaskType = 0x0B400080u;  /* PjTaskFixedType */
 
 /* Real files add a second `mid`/uid family, 0x80000000 | uid (W1 §5.2). */
 constexpr std::uint32_t kSecondaryUidFamily = 0x80000000u;
@@ -2056,6 +2057,9 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                 if (entry.uid != uid &&
                     entry.uid != (uid | kSecondaryUidFamily)) {
                     continue;
+                }
+                if (entry.uid == uid && entry.key == kFieldTaskType) {
+                    task.type_block_stored = true;
                 }
                 const FieldKind kind = custom_field_kind(entry.key);
                 if (kind == FieldKind::unknown) {

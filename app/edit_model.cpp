@@ -2857,6 +2857,11 @@ namespace {
 // resource's default PjAccrueAt (3, Prorated, stored at FixedData +80).
 constexpr std::int64_t kAssignMeasuredDurationTicks = 24000;
 constexpr std::uint32_t kAssignMeasuredAccrueAt = 3;
+// W35-0.2 (R34b-2): the removed assignment of the measured pair holds 100 %
+// units and 40 hours of work (24000 ticks at 10 ticks a minute), the writer's
+// check_assn_row_work and check_measured_work.
+constexpr std::int64_t kAssignMeasuredWorkTicks = 24000;
+constexpr double kAssignMeasuredUnitsPercent = 100.0;
 
 // W34-4.3: the plan-side half of the Assign Resources rule, shared by the
 // builder and push().  The measured pairs (wave30-assign-add / -delete) assign
@@ -2913,6 +2918,11 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
                       "implemented in this port: the measured Project pairs "
                       "use an unconstrained task";
     }
+    if (task->type_block_stored) {
+        return what + " on a task that stores a task type is not implemented in "
+                      "this port: the measured Project pairs use a task with no "
+                      "stored type block";
+    }
     if (resource->type != core::view::ResourceType::work) {
         return what + " with a resource that is not a work resource is not "
                       "implemented in this port: the measured Project pairs "
@@ -2959,12 +2969,28 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
     }
     std::size_t real = 0;
     bool names_resource = false;
+    const AssignmentRow* removed = nullptr;
     for (const AssignmentRow& assignment : plan.assignments) {
         if (assignment.task_uid != task_uid || assignment.resource_uid == 0) {
             continue;
         }
         ++real;
         names_resource = names_resource || assignment.resource_uid == resource_uid;
+        if (assignment.resource_uid == resource_uid) {
+            removed = &assignment;
+        }
+    }
+    if (!assign && removed != nullptr && real == 1) {
+        if (removed->units_percent != kAssignMeasuredUnitsPercent) {
+            return "Removing an assignment whose units are not 100% is not "
+                   "implemented in this port: the measured Project pair removes "
+                   "an assignment at 100% units";
+        }
+        if (removed->work_ticks != kAssignMeasuredWorkTicks) {
+            return "Removing an assignment whose work is not the measured 40 "
+                   "hours is not implemented in this port: the measured Project "
+                   "pair removes an assignment holding 40 hours of work";
+        }
     }
     if (assign && real != 0) {
         return "Assign Resources on a task that already has an assignment is not "
