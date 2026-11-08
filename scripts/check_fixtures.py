@@ -665,6 +665,38 @@ DOCUMENTED = {
         "1A4FABE7F10956530E5F9F38C28CD4975235D9A673BAB3A6EAB2D26AED4821E5",
     "tests/data/wave35-viewstate-table-schedule.mpp":
         "47DB52EBA9F99A556523EBC0F3B261FD0B87264C8E931B5588B8E2F5F0DE83DF",
+    # W35-2.3 outline fixtures (Application.OutlineShowTasks)
+    "tests/data/wave35-viewstate-outline-all-control-null.mpp":
+        "E0D70A05635D9F1D58754E98B404CA7E4DF28351A2B2540A75FBBF6662E07132",
+    "tests/data/wave35-viewstate-outline-all-control.mpp":
+        "1EF56EC6EEA740C3DCB896F7CF38D1748CD9B3B88E187E0E1662FD0E0A7B9D20",
+    "tests/data/wave35-viewstate-outline-all.mpp":
+        "EEB61D10E2BB753B0E3605A980A8DC6593B92FFBCE58C2D246B8DA8D4E296C4E",
+    "tests/data/wave35-viewstate-outline-level1-control-null.mpp":
+        "A7BB9B6877EB3911D30788DC6DAAD35EFF658C2DA94395A243A44F983D5A5450",
+    "tests/data/wave35-viewstate-outline-level1-control.mpp":
+        "75B319AC737D9415184CEBA365ADE6949588F226631361DC7FC63AE12A7F972D",
+    "tests/data/wave35-viewstate-outline-level1.mpp":
+        "B5037B1BC64B58023C0819F60AE300ABA6F684BB598AEF4595F31208772AD671",
+    "tests/data/wave35-viewstate-outline-level2-control-null.mpp":
+        "029621B820FABC6041E4FC139600EAE49A763D4BD53990954F1FCF40F247066E",
+    "tests/data/wave35-viewstate-outline-level2-control.mpp":
+        "EDA2BE6F0A1F4283FD29604F3B5CD8C7EB8ED3AF907998A8EA1A5B517CEA399E",
+    "tests/data/wave35-viewstate-outline-level2.mpp":
+        "689510CD7352828E5A3C1B16C0C15BD47A74667D305275C2D52F0BAD90EFBD83",
+    # W35-2.3 outline fixtures, three-level base (Application.OutlineShowTasks)
+    "tests/data/wave35-viewstate-outline-deep-level1-control-null.mpp":
+        "9326F007BCF82A791260836207C754CDBC7BF3764F0FE057D5114949DDC96826",
+    "tests/data/wave35-viewstate-outline-deep-level1-control.mpp":
+        "57F34F48CC31EB05B98A21C8016862BF8433457D404AD8EC7C4EC4330EB5BBDD",
+    "tests/data/wave35-viewstate-outline-deep-level1.mpp":
+        "0033075EBDF7A3CB1E2785F4BE46B011F57D6DBF19797191538B2BB38E3EA7A7",
+    "tests/data/wave35-viewstate-outline-deep-level2-control-null.mpp":
+        "A02436AEC23F0219BFAA2387FDD4C8B35E6089BC325E21567225BCC9E241A504",
+    "tests/data/wave35-viewstate-outline-deep-level2-control.mpp":
+        "9C858EBF5BBD4796F34D3B16F165EB1996FF629E37FF0AAA4286D71171C80E57",
+    "tests/data/wave35-viewstate-outline-deep-level2.mpp":
+        "1353CAA790A5D92492F03E560187835167C204D1306FDA21DC980638DB8DA3B7",
     "tests/data/wave34-resource-add-third-control.mpp":
         "F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4",
     "tests/data/wave34-resource-add-third.mpp":
