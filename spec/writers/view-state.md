@@ -118,3 +118,47 @@ read-side gap, not a write-side one.
 `app_edits_sort` (edit model and cascade against the same pairs, every edit-model
 refusal) and `qt_sort_persist` (the shell). Mutation checks and gate logs are recorded
 in `docs/handoff/wave35-complete.md`.
+
+## 2. Applied table (W35-2.2): DEFERRED with evidence
+
+Pairs: `wave35-viewstate-table-cost`, `-table-schedule` (`Application.TableApply` on the
+five-task base, applied table Entry before). Reports: [`evidence/wave35-viewstate-table-cost.md`](evidence/wave35-viewstate-table-cost.md),
+[`evidence/wave35-viewstate-table-schedule.md`](evidence/wave35-viewstate-table-schedule.md).
+
+### 2.1 What applying a table changes
+
+Both pairs change the same streams; no task stream moves.
+
+| stream | change |
+|---|---|
+| `214/CTable/Var2Data` | 1,051 → 2,102 B: a second 1,047-byte table-definition block is appended (u32 length + payload), the Entry block untouched. The new block is Project's built-in definition of the chosen table (first column "Task Name" in both) |
+| `214/CTable/FixedData` | 230 → 460 B: a second table row |
+| `214/CTable/FixedMeta`, `VarMeta` | 26 → 36 B and 36 → 48 B: one more entry each |
+| `214/CV_iew/Var2Data` | the uid-2 view block holds the applied table's name as UTF-16 and is re-laid out: 100,178 → 100,176 B for Cost (name 5 → 4 characters, Entry → Cost, −2 B) and → 100,184 B for Schedule (5 → 8 characters, +6 B); every later byte shifts |
+| `214/CV_iew/VarMeta` | the view block's length and the offsets after it are re-pointed |
+| `214/CEdl/Var2Data` | the applied-table name record is rewritten with the new name; the stream length changes by the same delta |
+| `214/CEdl/VarMeta`, `214/Props` | derived lengths: the CEdl stream length (see 3.3), the CTable Var2Data length (`1b 04` → `36 08`, u16 at 10,738), the CV_iew Var2Data length low byte, and a table count (`01` → `02` at 10,690) |
+| `Props14` | the edit marker |
+
+### 2.2 Why it is not written
+
+The effect is not a rule over the plan. The 1,047-byte definition blocks are Project's
+own built-in tables, fixed-size structures whose column list, widths, titles and
+alignments are not derivable from the project; a writer would paste two constants
+copied from the pairs and re-lay a 100 KB view block around a name whose length
+changes, with one measured name pair per table. Under the standing rules a command is
+enabled only for a shape a port save reproduces field by field with a rule behind it;
+here the only rule is "replay these two blobs", and the view-block re-layout (offset
+re-pointing in `CV_iew/VarMeta` and shifted tails) was measured at two lengths only
+(−2 and +6). Replaying it would claim every other table, name length and view layout
+that has not been measured.
+
+### 2.3 Capability matrix
+
+| shape | state |
+|---|---|
+| applying any table to a task sheet | **refused** for the file (the shell lists only tables the file already stores and applies one to the session view, status "(session only)"; nothing is queued, so File > Save never writes a half-applied table) |
+
+Pairs still needed to enable it: one pair per built-in table to be supported (the
+oracle `table-<name>` pairs are one call each), a second measured name length per table
+for the view-block re-layout, and the table-definition layout decoded to the field.
