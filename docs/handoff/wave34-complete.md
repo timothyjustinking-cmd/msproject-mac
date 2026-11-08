@@ -1259,3 +1259,89 @@ oracle provenance, marker scans (worktree and messages), guard names and the
 client-name scan: every step exit 0.
 
 WAVE-34-G4-COMPLETE
+
+## CLOSE - fresh-tree gates, the two reviews, the record
+
+Wave 34 stopped after G4 under the brief's stop rule (the 12-hour point passed during
+G4), so CLOSE ran alone: G5 and G6 are wave 35.  Push and CI: by the coordinator
+(brief launch note); nothing on `wave34` is pushed and no CI was dispatched.  CLOSE
+changed no code: it adds `spec/README.md`, `wave34-verification/close-review.md`,
+this section, START-HERE, INDEX, `memory/coordinator.md` and the wave-35 queue in
+`plan-waves27-30.md`.
+
+| item | outcome | evidence |
+|---|---|---|
+| fresh-tree gates | DONE, every step exit 0 | `build/w34/W34-CLOSE-fresh-gates.log` (script `W34-CLOSE-fresh-gates.ps1`), trees configured from scratch with `CORE_WARNINGS_AS_ERRORS=ON` |
+| review of the writers (rule 1) | DONE | `wave34-verification/close-review.md`: 2 High (the G3 Highs, re-confirmed), Mediums RC-W1..W8 |
+| review of the refusals and shell enablements | DONE | the same file: RC-R1 shows R34G3-1 is also live in the UI; RC-R2..R8 |
+| both name scans and the marker check | DONE, 0 hits | in the gate log |
+| decode notes indexed from `spec/README.md` | DONE | `spec/README.md` (new) |
+| regenerated backlog | DONE, unchanged | `check_command_backlog`: 114 ribbon rows, 0 mismatches; `python app_qt/tools/command_backlog.py` left `docs/ui-command-backlog.md` byte-identical |
+| START-HERE, INDEX, `memory/coordinator.md`, wave-35 queue | DONE | the four files above |
+| push and CI dispatch | NOT DONE by design | by the coordinator |
+| brief section 4 (e), Project reopens each port save | NOT RE-RUN | needs COM, coordinator-only; the coordinator runs `oracle_w29_reopen.py` on the five enabled saves before any merge |
+| `ubuntu-asan` job | NOT RUN locally | clang/ASan is CI-only; its first wave-34 run is the coordinator's |
+
+Gates at the CLOSE code tree (the log's tree id is `587653e`, whose code equals
+`7ba26a1`'s; later commits are documentation only), 8 November 2026 16:24-17:00:
+
+| gate | result |
+|---|---|
+| core configure / build, warnings as errors | exit 0 / exit 0 |
+| core `ctest -E plan_recalc` | 62/62 passed |
+| `plan_recalc` with corpus / `MPP_NO_CORPUS=1` | 512 / 266 checks, exit 0 |
+| engine `--selftest` / `engine_diff_tests` / suite | 53 checks, 0 failures / 265 checks, 0 failures / 8 scenarios, 7 pass, 1 fail (`constraint-mso`, expected), 0 unrecorded |
+| reader with corpus / `MPP_NO_CORPUS=1` | 1469 / 789 checks, exit 0 |
+| M2 `recalc --compare` | 332/332, 268/268 and 64/64 fields match |
+| app configure and build / ctest / ctest `MPP_NO_CORPUS=1` | exit 0 / 31/31 / 31/31 |
+| app_qt configure and build / ctest | exit 0 / 47/47 |
+| `check_fixtures.py` | fixtures OK (185 documented hashes, 219 tracked `.mpp`); paths OK (268 files); property sets OK; provenance OK (8 oracles) |
+| `check_markers.py` self-test / worktree / `--range main..HEAD` | 19 checks, 0 failures / exit 0 / 0 hits |
+| `guard_names.py main..HEAD`, client-name scan with `--messages` | exit 0, exit 0 |
+| `check_command_backlog.py` | 114 ribbon rows, 0 mismatches |
+| line endings, `git diff --check main..HEAD` | 0 CR in the LF-pinned types, exit 0 |
+
+(The engine/reader/plan_recalc numbers above are larger than wave 33b's because the
+wave-34 tests add checks; `main`'s 1136 / 456 reader figures are the wave-33b ones.)
+
+### The reviews in one paragraph
+
+0 Critical, 2 High, 12 Medium (see `close-review.md`).  The Highs are the two the
+G3 verifier raised and nothing closed: R34G3-1 (any whole-hour assignment work is
+accepted by the writer and, per RC-R1, by the Assign Resources builder, `push()`
+and the Qt handler; only 40 hours is measured) and R34G3-2 (the assignment test
+masks the task and resource identity references at +16 and +32).  **Wave 34 is not
+mergeable until a fix-only `wave34b` closes both** and the coordinator's CI is
+green on all three platforms.  The G3 handoff's note that `app/main.mm` was not
+touched in G4 is wrong: 4.2 added the macOS `addResources:` handler (read, not run).
+
+### The 16 decisions re-scored (wave-33b close as the starting point)
+
+| # | decision | after wave 34 | why |
+|---|---|---|---|
+| 1 | all seven tabs | **DONE** | unchanged |
+| 2 | full backstage | **DONE** | unchanged |
+| 3 | original icon set | **DONE (stronger)** | unchanged |
+| 4 | measured chrome metrics | **DONE** | unchanged |
+| 5 | timeline strip | **DONE** | unchanged |
+| 6 | real Entry table | **DONE** | unchanged |
+| 7 | render what the file says | **DONE (stronger)** | unchanged; the Task Sheet does not paint a stored bold cell format (4.5, found not fixed) |
+| 8 | status bar | **PARTIAL (stronger)** | unchanged; Team Planner and Report still have no working view |
+| 9 | disabled commands + backlog | **DONE (stronger)** | 114 ribbon rows, 64 disabled counting split menu items (pin: 51 enabled / 63 disabled controls); the enabled five carry their gap text in the generated backlog; the still-disabled ones keep the exact tooltip (both reviews checked) |
+| 10 | light and dark themes | **PARTIAL (stronger)** | unchanged |
+| 11 | new-project defaults | **DONE (stronger)** | unchanged |
+| 12 | structural measurement | **PARTIAL (stronger)** | 15 new Project measurement sets with null saves (38 pair reports in `spec/writers/evidence/`), the five synthetic-base pairs and eight decode notes; the Assign Resources work amount (R34G3-1) and the identity-reference mask (R34G3-2) are the open measurement gaps |
+| 13 | Carlito bundled | **DONE** | unchanged |
+| 14 | every dialog on every tab | **DONE (stronger)** | unchanged in count; Resource Information, Assign Resources and WBS Define Code now do a real, refusing action |
+| 15 | dialog semantics | **PARTIAL (stronger)** | those three dialogs apply a measured effect and refuse every other shape in the shell (Assign Resources not yet for the work amount); the laid-out-only dialogs are unchanged |
+| 16 | split view | **DONE (stronger)** | unchanged |
+
+### Found, not fixed (CLOSE)
+
+- Everything in `wave34-verification/close-review.md` except what `wave34b` fixes;
+  the two Highs block the merge.  Queued in `plan-waves27-30.md`.
+- The deferrals listed under "Found, not fixed (G4)" and wave 35's G5 and G6.
+- The brief-4(e) Project reopen check and the first wave-34 CI run (with
+  `ubuntu-asan`) are not done here.
+
+WAVE-34-COMPLETE
