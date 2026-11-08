@@ -3155,28 +3155,6 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
 
 namespace {
 
-// W35-2.1: the Name comparison the pairs support.  Project's collation of case,
-// punctuation, digits and accents is not measured, so two sibling names are
-// ordered only when the first position where they differ holds two ASCII
-// letters of the same case (so neither name is a prefix of the other).
-bool sort_ascii_letter(char c) noexcept {
-    return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
-}
-
-bool sort_name_pinned(const std::string& left, const std::string& right) {
-    const std::size_t shared = std::min(left.size(), right.size());
-    for (std::size_t at = 0; at < shared; ++at) {
-        if (left[at] == right[at]) {
-            continue;
-        }
-        const bool left_lower = left[at] >= 'a' && left[at] <= 'z';
-        const bool right_lower = right[at] >= 'a' && right[at] <= 'z';
-        return sort_ascii_letter(left[at]) && sort_ascii_letter(right[at]) &&
-               left_lower == right_lower;
-    }
-    return false;  // equal or one a prefix of the other
-}
-
 // The plan-side half of Sort, shared by make_sort_edit and push().  Fills the
 // task UniqueIDs in file order and in sorted order; returns the reason, or an
 // empty string.
@@ -3209,80 +3187,22 @@ std::string sort_plan_order(const PlanInput& plan, std::uint32_t field_id, bool 
     std::sort(rows.begin(), rows.end(), [](const TaskRow* a, const TaskRow* b) {
         return a->file_row < b->file_row;
     });
-    // Outline: the tree of the rows in file order, from the 0-based levels.
-    struct Node {
-        const TaskRow* row = nullptr;
-        std::vector<std::size_t> children;
-    };
-    std::vector<Node> nodes(rows.size());
-    std::vector<std::size_t> roots;
-    std::vector<std::size_t> stack;  // the open ancestors
-    for (std::size_t index = 0; index < rows.size(); ++index) {
-        nodes[index].row = rows[index];
-        const int level = rows[index]->outline_level;
-        if (level > 0 && static_cast<std::size_t>(level) > stack.size()) {
-            return "Sort is not implemented in this port for this outline: a row sits "
-                   "deeper than its parent allows";
-        }
-        stack.resize(static_cast<std::size_t>(level));
-        if (stack.empty()) {
-            roots.push_back(index);
-        } else {
-            nodes[stack.back()].children.push_back(index);
-        }
-        stack.push_back(index);
-    }
+    // W35b-1.2: the order is the core rule the writer also applies to the file's own
+    // rows (outline, names, durations), so the two layers cannot drift.
+    std::vector<mppwrite::SortRow> sort_rows;
     for (const TaskRow* row : rows) {
         base.push_back(row->uid);
+        mppwrite::SortRow sort_row;
+        sort_row.uid = row->uid;
+        sort_row.level = row->outline_level;
+        sort_row.name = row->name;
+        sort_row.duration = static_cast<std::uint32_t>(row->duration_ticks);
+        sort_rows.push_back(std::move(sort_row));
     }
-    std::string refusal;
-    auto order_group = [&](std::vector<std::size_t>& group) {
-        for (std::size_t a = 0; a < group.size() && refusal.empty(); ++a) {
-            for (std::size_t b = a + 1; b < group.size() && refusal.empty(); ++b) {
-                const TaskRow& left = *nodes[group[a]].row;
-                const TaskRow& right = *nodes[group[b]].row;
-                if (by_name) {
-                    if (!sort_name_pinned(left.name, right.name)) {
-                        refusal =
-                            "Sort by Name is not implemented in this port for these "
-                            "names: the measured Project pairs order sibling names that "
-                            "differ at a letter of the same case, and \"" + left.name +
-                            "\" / \"" + right.name + "\" do not";
-                    }
-                } else if (left.duration_ticks == right.duration_ticks) {
-                    refusal =
-                        "Sort by Duration is not implemented in this port for equal "
-                        "durations: the measured Project pairs have distinct sibling "
-                        "durations";
-                }
-            }
-        }
-        std::stable_sort(group.begin(), group.end(), [&](std::size_t a, std::size_t b) {
-            const TaskRow& left = *nodes[a].row;
-            const TaskRow& right = *nodes[b].row;
-            const bool less = by_name ? left.name < right.name
-                                      : left.duration_ticks < right.duration_ticks;
-            const bool greater = by_name ? right.name < left.name
-                                         : right.duration_ticks < left.duration_ticks;
-            return ascending ? less : greater;
-        });
-    };
-    order_group(roots);
-    for (Node& node : nodes) {
-        order_group(node.children);
-    }
-    if (!refusal.empty()) {
-        return refusal;
-    }
-    std::vector<std::size_t> walk(roots.rbegin(), roots.rend());
-    while (!walk.empty()) {
-        const std::size_t at = walk.back();
-        walk.pop_back();
-        sorted.push_back(nodes[at].row->uid);
-        for (auto child = nodes[at].children.rbegin(); child != nodes[at].children.rend();
-             ++child) {
-            walk.push_back(*child);
-        }
+    if (std::string reason = mppwrite::sorted_order_of(sort_rows, field_id, ascending, sorted);
+        !reason.empty()) {
+        sorted.clear();
+        return "Sort is not implemented in this port for this outline or these rows: " + reason;
     }
     return {};
 }

@@ -37,6 +37,8 @@ constexpr std::size_t kOrderTailDwords = 3;
 constexpr std::uint32_t kEdlRowLayoutId = 0x2640003Du;
 constexpr std::uint32_t kLayoutRowHeight = 0x16;
 constexpr std::size_t kLayoutFixedBytes = 14;
+/* The task rows' OutlineLevel word (FixedData +172, 1-based in the file). */
+constexpr std::size_t kTaskOutlineLevel = 172;
 
 /* The outlines the pairs measure, 0-based levels in file order. */
 constexpr std::array<std::uint32_t, 5> kBaseLevels = {0, 1, 1, 0, 0};
@@ -510,6 +512,17 @@ ViewOutlineWrite save_view_outline(CfbDocument& doc, ViewOutlineEdit const& edit
                         "UniqueID " + number(table.uid(i + 1)) + ", not " +
                         number(edit.rows[i].uid) + "; the request is not the "
                         "file's row order");
+        }
+    }
+    /* W35b-1.2 (R35G2-2): the request's outline is the file's own.  OutlineLevel
+     * (+172) is 1-based in the file; the request's levels are 0-based. */
+    for (std::size_t i = 0; i < n; ++i) {
+        std::uint32_t const stored = table.u16(i + 1, kTaskOutlineLevel);
+        if (stored != edit.rows[i].level + 1) {
+            throw Error(function + ": task row " + number(i + 1) + " stores outline "
+                        "level " + number(stored) + " in the file, but the request "
+                        "describes level " + number(edit.rows[i].level + 1) +
+                        "; the request is not the file's outline");
         }
     }
 

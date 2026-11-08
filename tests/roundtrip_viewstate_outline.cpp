@@ -46,6 +46,7 @@
 #include "cfb_writer.h"
 #include "fixture_guard.h"
 #include "save_pair_compare.h"
+#include "table.h"
 #include "viewstate_outline.h"
 #include "viewstream_edit.h"
 
@@ -522,6 +523,32 @@ void test_refusals(TestContext& t) {
             ViewOutlineEdit const deep_edit = make_edit(2, kDeepLevels);
             (void)mppwrite::save_view_outline(deep, deep_edit, "", true);
         }
+    }
+
+    /* W35b-1.2 (R35G2-2): the request's outline is the file's own.  The request
+     * below is the measured shape (so every request-side check passes); the file's
+     * OutlineLevel word (FixedData +172) disagrees with it. */
+    {
+        auto with_level = [&](std::size_t row, std::uint16_t stored) {
+            CfbDocument doc = control;
+            mppwrite::TaskTable table = mppwrite::TaskTable::from_document(doc);
+            table.set_u16(row, 172, stored);
+            table.store_into(doc);
+            return doc;
+        };
+        t.check(mppwrite::TaskTable::from_document(control).u16(3, 172) == 2,
+                "R35G2-2: the control stores row 3 at outline level 2");
+        refuses(with_level(3, 1), measured_edit(),
+                "task row 3 stores outline level 1 in the file, but the request describes level 2",
+                "R35G2-2: a file that stores a row at another level refused");
+        refuses(with_level(4, 2), measured_edit(),
+                "task row 4 stores outline level 2 in the file, but the request describes level 1",
+                "R35G2-2: a file that nests a top-level row refused");
+        refuses(with_level(1, 0), measured_edit(), "stores outline level 0 in the file",
+                "R35G2-2: a level word of 0 refused");
+        /* The request is the file's: the same edit still writes the control. */
+        CfbDocument whole = control;
+        (void)mppwrite::save_view_outline(whole, measured_edit(), "", true);
     }
 
     /* The output path. */
