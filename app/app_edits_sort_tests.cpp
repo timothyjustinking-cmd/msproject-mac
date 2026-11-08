@@ -422,11 +422,31 @@ void check_refusals() {
         expect_refused(renamed, source, name_desc, true, false,
                        "the sorted order does not match the order the file's own outline",
                        "a plan whose names are not the file's");
-        app::PlanInput reindented = plan;
-        task_by_uid(reindented, 3)->outline_level = 0;
-        expect_refused(reindented, source, name_desc, true, false,
-                       "the sorted order does not match the order the file's own outline",
-                       "a plan whose outline is not the file's");
+        /* W35b-1.3 (R35G2-3): the pairs measure one outline (levels 0, 1, 1, 0, 0). */
+        struct Shape {
+            std::array<int, 5> levels;
+            const char* needle;
+            const char* what;
+        };
+        const std::vector<Shape> shapes = {
+            {{0, 1, 2, 0, 0}, "and this one has levels 1, 2, 3, 1, 1", "a three-level outline"},
+            {{0, 0, 0, 0, 0}, "and this one has levels 1, 1, 1, 1, 1", "a flat outline"},
+            {{0, 1, 1, 1, 0}, "and this one has levels 1, 2, 2, 2, 1",
+             "a third child under the summary"},
+            {{0, 1, 0, 1, 0}, "and this one has levels 1, 2, 1, 2, 1", "two summaries"},
+            {{0, 2, 1, 0, 0}, "deeper than its parent allows", "a row deeper than its parent"},
+        };
+        for (const Shape& shape : shapes) {
+            app::PlanInput reindented = plan;
+            for (std::uint32_t uid = 1; uid <= 5; ++uid) {
+                task_by_uid(reindented, uid)->outline_level = shape.levels[uid - 1];
+            }
+            expect_refused(reindented, source, name_desc, true, false, shape.needle,
+                           std::string("a plan with ") + shape.what);
+            expect_refused(reindented, source, one_key(app::SortKeyKind::duration, false), true,
+                           false, shape.needle,
+                           std::string("a Duration sort of a plan with ") + shape.what);
+        }
         app::PlanInput lengthened = plan;
         task_by_uid(lengthened, 5)->duration_ticks = 100;
         task_by_uid(lengthened, 4)->duration_ticks = 200;

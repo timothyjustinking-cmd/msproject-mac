@@ -7,6 +7,7 @@
 #include "viewstate_sort.h"
 
 #include <algorithm>
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <set>
@@ -411,6 +412,27 @@ std::string sorted_order_of(std::vector<SortRow> const& rows, std::uint32_t fiel
             nodes[stack.back()].children.push_back(index);
         }
         stack.push_back(index);
+    }
+    /* W35b-1.3 (R35G2-3): the pairs measure one outline, a summary with two
+     * children and then two leaves.  The flat-name-desc pair is the same five rows
+     * with the Outline option off (its file stores the same levels), so it adds no
+     * outline; any other nesting, a three-level one included, is unmeasured. */
+    {
+        constexpr std::array<int, kSortMeasuredRows> kMeasuredLevels{0, 1, 1, 0, 0};
+        bool measured = rows.size() == kMeasuredLevels.size();
+        for (std::size_t index = 0; measured && index < rows.size(); ++index) {
+            measured = rows[index].level == kMeasuredLevels[index];
+        }
+        if (!measured) {
+            std::string levels;
+            for (SortRow const& row : rows) {
+                levels += (levels.empty() ? "" : ", ") +
+                          number(static_cast<std::size_t>(row.level + 1));
+            }
+            return "the measured Project pairs sort one outline (a summary with two "
+                   "children, then two leaves: levels 1, 2, 2, 1, 1), and this one has "
+                   "levels " + levels;
+        }
     }
     std::string refusal;
     auto order_group = [&](std::vector<std::size_t>& group) {
