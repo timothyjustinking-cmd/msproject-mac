@@ -128,6 +128,11 @@ enum class RibbonCommand : std::uint8_t {
     mark_on_track,
     // The two drop-down buttons: their click opens the menu the capture shows.
     wbs_menu,
+    // Wave 34 (W34-4.6): the WBS drop-down's Define Code... item (not a control
+    // of its own: the menu action runs it).  Queues the one measured code ("W"
+    // with ordered two-digit numbers) on a project shaped like Project's pair;
+    // Renumber... stays disabled.
+    wbs_define_code,
     set_baseline_menu,
     // Wave 29 (W29-2.1): the Gantt Chart Format tab's three dialogs.
     text_styles,

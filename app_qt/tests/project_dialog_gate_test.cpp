@@ -702,6 +702,17 @@ void check_ribbon_menus(const QJsonObject& measures, const QString& data_dir) {
         for (int index = 0; index < items.size() && index < actions.size(); ++index) {
             gate::check(actions.at(index)->text() == items.at(index).toString(),
                         "the menu item is the capture's label in order");
+            if (std::string(menu.name) == "WBS" &&
+                actions.at(index)->text() == QStringLiteral("Define Code...")) {
+                // W34-4.6: the one WBS item with a measured engine (the shape
+                // gate is wbs_code_gate_test); Renumber... stays disabled.
+                gate::check(actions.at(index)->isEnabled() &&
+                                actions.at(index)->toolTip() !=
+                                    QString::fromUtf8(
+                                        msqt::project_dialog_geometry::kNotImplemented),
+                            "Define Code... is live and carries its own tooltip (W34-4.6)");
+                continue;
+            }
             gate::check(!actions.at(index)->isEnabled() &&
                             actions.at(index)->toolTip() ==
                                 QString::fromUtf8(

@@ -170,6 +170,14 @@ enum class StructuralKind : std::uint8_t {
     // cell's stored field id.  Only the measured cell is enabled (row uid 1,
     // Task Name, an unformatted view); like the kinds above it is EXCLUSIVE.
     bold_cell = 17,
+    // Wave 34 (W34-4.6): the WBS code "W" with ordered two-digit numbers, from
+    // Project > Properties > WBS > Define Code, written by mppwrite::
+    // save_wbs_code (core/mppwrite/wbs_code.h) against Project's wave30-wbs
+    // pair: four stored WBS number blocks plus the two code records in 114/Props.
+    // The edit carries no row (`uid` is 0) and no parameters -- the measured
+    // definition is the only one -- and only a project with exactly the pair's
+    // three flat tasks is enabled; like the kinds above it is EXCLUSIVE.
+    define_wbs_code = 18,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -550,6 +558,18 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
                          std::uint32_t task_uid, std::uint32_t field_id,
                          StructuralEdit& out, std::string& error);
 
+// Builds a ready-to-push define_wbs_code edit (W34-4.6).  The plan-side rule is
+// the measured pair's own population: Project's wave30-wbs holds exactly three
+// saved tasks with UniqueIDs 1, 2 and 3, all top-level and none a summary, and
+// one pair is one data point (brief rule 2), so every other count, a nested
+// outline or a summary is refused with the decision-9 "is not implemented in
+// this port" text.  The FILE is the authority for the rest: the writer's dry run
+// validates the task rows, the absence of any stored WBS text or code
+// definition, and the two 114/Props records, and its refusal text is returned
+// as the reason.  `out` is default-constructed on refusal.
+bool make_wbs_code_edit(const PlanInput& plan, std::string_view source_path,
+                        StructuralEdit& out, std::string& error);
+
 // The one cell Font Bold is measured for: Task Name of the task with
 // UniqueID 1 (core/mppwrite/viewstream_edit.h, wave30-textstyle).
 inline constexpr std::uint32_t kBoldMeasuredTaskUid = 1;
@@ -846,6 +866,8 @@ struct StructuralSaveResult {
     std::size_t assignments_written = 0;
     // Wave 34 (W34-4.5): 1 when a Font Bold cell-format item was appended.
     std::size_t cell_styles_written = 0;
+    // Wave 34 (W34-4.6): 1 when the WBS code was defined (four number blocks).
+    std::size_t wbs_codes_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the

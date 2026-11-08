@@ -2425,8 +2425,13 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             show_move_project();
             return;
         case RibbonCommand::wbs_menu:
-            set_message("WBS: no command is implemented in this port", false);
+            set_message("WBS: choose Define Code... from the drop-down; Renumber is not "
+                        "implemented in this port",
+                        false);
             update_status();
+            return;
+        case RibbonCommand::wbs_define_code:
+            define_wbs_code();
             return;
         case RibbonCommand::set_baseline_menu:
             set_message("Set Baseline: no command is implemented in this port", false);
@@ -3277,6 +3282,35 @@ void MainWindow::bold_selected_cell() {
     after_structural_change(task_uid);
     set_message("queued Font Bold on the Task Name cell of task uid " + std::to_string(task_uid) +
                     "; File > Save writes it",
+                false);
+    update_status();
+}
+
+void MainWindow::define_wbs_code() {
+    if (refuse_read_only()) {
+        return;
+    }
+    if (!doc_.has_document()) {
+        set_message("open a project first", false);
+        update_status();
+        return;
+    }
+    // W34-4.6: the builder owns every refusal (the task count and shape, a file
+    // that already stores WBS text or a code definition, a stale file).
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_wbs_code_edit(doc_.plan(), doc_.path(), edit, error)) {
+        set_message("Define WBS Code: " + error, true);
+        update_status();
+        return;
+    }
+    if (!structural_.push(std::move(edit), &doc_.plan())) {
+        set_message("Define WBS Code: the edit was refused", true);
+        update_status();
+        return;
+    }
+    after_structural_change(doc_.selected_uid());
+    set_message("queued the WBS code W with ordered two-digit numbers; File > Save writes it",
                 false);
     update_status();
 }

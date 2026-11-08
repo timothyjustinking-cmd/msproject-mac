@@ -68,7 +68,8 @@
  *   Task, uid != 0         enabled             enabled             enabled
  *   Resource, uid != 0     refused (no pair)   enabled             refused (no pair)
  *   Assignment             refused             refused             refused
- *   project row (uid 0)    refused             refused             refused
+ *   project row (uid 0)    Task key 0x0B40019F refused             refused
+ *                          only (W34-4.6)
  *
  * Refusals (all before `doc` or the output path is touched; every one has a
  * test in tests/roundtrip_varmeta.cpp):
@@ -130,6 +131,13 @@ inline constexpr char const* kVarResourceTable = "114/TBkndRsc";
 
 /* Resource/Name: the first consumer's key (W34-1.3). */
 inline constexpr std::uint32_t kResourceNameFieldId = 0x0C400001u;
+
+/* The two Task keys wave30-wbs-code appends (W34-4.6): each task's stored WBS
+ * number text (UTF-16LE + NUL, e.g. "01") and the project row's (uid 0) last
+ * issued number.  The project-row append is the one measured edit of uid 0's
+ * var records. */
+inline constexpr std::uint32_t kTaskWbsFieldId = 0x0B40018Du;
+inline constexpr std::uint32_t kTaskProjectWbsFieldId = 0x0B40019Fu;
 
 /* The three measured shapes. */
 enum class VarRecordShape : std::uint8_t {

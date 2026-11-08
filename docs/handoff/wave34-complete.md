@@ -772,6 +772,7 @@ Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
 | W34-4.3 | brief W34-4.3: Assign Resources (one work resource at 100 % to an unstarted leaf, and remove it) | **DONE** (enabled for the first assignment of a task and for removing a task's one assignment from a settled file; every other shape refused up front) | the `W34-4.3` commit after `399902d`; `core/mppwrite/assignment_growth.{h,cpp}` (`dry_run`), `app/edit_model.{h,cpp}`; `app/app_edits_assignment_tests.cpp`; Qt shell `app_qt/{ribbon_bar,dialogs,main_window}.*`, `app_qt/tests/assign_resources_gate_test.cpp`; gates `build/w34/399902d-g43f-*.log` |
 | W34-4.4 | brief W34-4.4: Insert Summary and Insert Milestone on a clean last row (W33-1.2's conditions) | **DEFERRED with evidence** (both stay disabled, "future: not implemented in this port"; no write path exists) | probe `build/w34/4.4-probe.diff`, log `build/w34/4.4-probe-insert-ctest.log` (15 failing streams per pair, summary and milestone); evidence `spec/writers/evidence/wave30-insert-summary.md`, `spec/writers/table-growth.md` Limits |
 | W34-4.5 | brief W34-4.5: Font Bold on one cell (G2.1); the other font controls stay disabled | **DONE** (enabled for the one measured cell, the Task Name cell of UniqueID 1 on an unformatted view, alone in the save; every other cell refused up front) | the `W34-4.5` commit after `f950a03`; `core/mppwrite/viewstream_edit.{h,cpp}` (`dry_run`), `app/edit_model.{h,cpp}`; `app/app_edits_cell_bold_tests.cpp`; Qt shell `app_qt/{ribbon_bar,main_window}.*`, `app_qt/tests/cell_bold_gate_test.cpp`; gates `build/w34/f950a03-b45all-*.log` |
+| W34-4.6 | brief W34-4.6: WBS code definition (G2.2) with the measured prefix shape only | **DONE** (Project > Properties > WBS > Define Code... enabled for a project of exactly three flat tasks that stores no WBS text; every other shape refused up front; Renumber... stays disabled) | the `W34-4.6` commit after `b07d435`; `core/mppwrite/wbs_code.{h,cpp}`, `varmeta_edit.{h,cpp}` (uid-0 allowance), `tests/roundtrip_wbs.cpp`; `app/edit_model.{h,cpp}`, `app/app_edits_wbs_tests.cpp`; Qt shell `app_qt/{ribbon_bar,main_window}.*`, `app_qt/tests/wbs_code_gate_test.cpp`; gates `build/w34/b07d435-g46final-*.log` |
 
 W34-4.0 detail:
 
@@ -1134,4 +1135,62 @@ W34-4.5 detail:
   size and colour need further Project pairs, each varying one factor.  (2) The
   Task Sheet does not paint the stored font word: a bolded cell reads back as
   bold only in Project; the port's display and the plan do not render it.
+- **Not verified here.**  `app/main.mm` was not touched.
+
+W34-4.6 detail:
+
+- **Measured shape.**  One pair, with Project's own no-edit save of the control:
+  `wave30-wbs-control.mpp` (project row plus three flat tasks, UniqueIDs 1-3) ->
+  `wave30-wbs-code.mpp` (prefix `W`, ordered two-digit numbers).  Project's edit
+  is four Task var blocks (the project row's last-issued number `03` under key
+  `0x0B40019F`, and `01`..`03` under key `0x0B40018D` for the three tasks), the
+  matching FixedMeta presence bits (+40 `0x04`, +20 `0x80`), the VarMeta count
+  42 -> 46, Var2Data 512 -> 552, and two 114/Props directory records growing
+  (`0x0240138B` 4 -> 24 B holding the mask/prefix definition, `0x024013BE` 2 ->
+  6 B holding the prefix) with the Props14 marker.  `mppwrite::save_wbs_code`
+  composes `save_var_record` x4 and `save_props_edit` and reproduces every byte:
+  `mppwrite_roundtrip_wbs` 340 checks, 0 failures, no KnownGap.  The two Props
+  records grow mid-stream, so control and null are zero-filled to the edit's
+  coordinates before `compare_all` (harness unchanged).  The chain runs on a
+  scratch file and the target is written once after every stream is proven
+  (only FixedMeta, VarMeta, Var2Data, 114/Props and Props14 may change), so a
+  refused save leaves an existing target byte-identical.
+- **Enabled only for that shape (brief rule 2).**  `make_wbs_code_edit` (shared
+  by both shells) refuses, with "Define WBS Code is not implemented in this
+  port ...": any task count but three, a pending task, UniqueIDs other than
+  1, 2, 3, a summary or nested task; then a dry run against the FILE refuses a
+  file that already stores WBS text or a code definition, a stale or truncated
+  table, and a non-empty directory record.  `StructuralKind::define_wbs_code`
+  is exclusive; the cascade repeats the dry run and refuses a start-date edit
+  beside it; `push()` is a backstop.  `app_edits_wbs`: 368 checks, **effects 216**
+  (8+108+48+40+11+1), refusals, exclusivity, and a refused save leaves the target
+  untouched.
+- **Shells.**  Qt: the WBS split's Define Code... item is live with its own
+  tooltip, Renumber... stays disabled with the exact tooltip, and
+  `MainWindow::define_wbs_code()` surfaces the builder's refusal in the status
+  line.  Backlog row WBS now `implemented` with its gap text (114 / 114 / 0; 64
+  disabled in the table; the pin counts the control, 1 split remains live with
+  all items disabled).  `qt_wbs_code_gate` drives the real window: another
+  shape queues nothing and names the refusal; the control queues one edit; a
+  second click keeps the queue at one; the real save differs from the control;
+  a reopen refuses a second definition.  `project_dialog_gate_test` expects the
+  new item state.  macOS: `app/main.mm` not touched.
+- **Guards seen red.**  Twelve mutations each turned a gate red and were
+  restored (trees rebuilt afterwards): task-row count, existing-WBS-text check,
+  both presence bits, the mask payload, the prefix payload, the uid-0 allowance
+  (red in `roundtrip_varmeta`, not in `roundtrip_wbs`), the app task count,
+  the outline/summary refusal, the UniqueID set, the pending-task refusal and
+  the Qt ribbon item (`build/w34/mut-*.log`).  Two first forms did not compile
+  (warnings as errors) and left a stale binary; they were redone with compiling
+  mutations (`existing2`, `uid03`) and only those reds are counted.
+- **Gates (this session).**  core build exit 0, ctest `-E plan_recalc` 62/62;
+  app build exit 0, ctest 31/31; Qt build exit 0, ctest 47/47
+  (`b07d435-g46final-{core,app,qt}-ctest.log`); `check_command_backlog.py` 114 /
+  114 / 0; `check_fixtures.py` OK; `check_markers.py --worktree` OK.
+- **Found, not fixed (4.6).**  (1) Other task counts, outlines (summary tasks
+  number differently), prefixes, separators and number lengths need further
+  Project pairs, each varying one factor.  (2) Redefining an existing code and
+  Renumber... have no pair.  (3) The Define Code dialog's fields are not built:
+  the menu item queues the one measured definition directly.  (4) The plan shows
+  no WBS column, so the stored numbers are not displayed.
 - **Not verified here.**  `app/main.mm` was not touched.

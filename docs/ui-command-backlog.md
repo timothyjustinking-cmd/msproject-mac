@@ -77,7 +77,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Properties | Project Information | implemented | gap: only the project priority has a measured writer; every other field is read-only |
 | Project | Properties | Custom Fields | implemented |  |
 | Project | Properties | Links Between Projects | implemented | gap: the port decodes no external project links; the dialog changes nothing |
-| Project | Properties | WBS | disabled | future: not implemented in this port |
+| Project | Properties | WBS | implemented | gap: Define Code... writes the prefix W with ordered two-digit numbers on a project of exactly three flat tasks that stores no WBS text, alone in the save; every other count, outline, prefix, separator or length, a redefinition, and Renumber... are refused as not implemented in this port (no Define Code dialog fields are built) |
 | Project | Properties | Change Working Time | implemented | gap: no calendar writer; the dialog changes nothing |
 | Project | Schedule | Calculate Project | disabled | future: not implemented in this port |
 | Project | Schedule | Set Baseline | disabled | future: not implemented in this port |
@@ -189,8 +189,8 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 
 ## Summary
 
-* ribbon commands: 114 (65 disabled)
-* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 51 enabled / 63 disabled command controls. The table above reports 65 disabled because it counts a split by its menu items; the pin counts the control.
-* the difference (2): 2 splits whose button is live while every menu item is disabled: Project > Properties > WBS, Project > Schedule > Set Baseline
+* ribbon commands: 114 (64 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 51 enabled / 63 disabled command controls. The table above reports 64 disabled because it counts a split by its menu items; the pin counts the control.
+* the difference (1): 1 split whose button is live while every menu item is disabled: Project > Schedule > Set Baseline
 * menu commands: 51 (6 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

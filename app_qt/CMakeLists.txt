@@ -348,6 +348,22 @@ add_test(NAME qt_cell_bold_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/wave30-textstyle-control.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# Wave 34 (W34-4.6): Project > Properties > WBS > Define Code... is enabled for
+# exactly the measured shape (three flat tasks, no WBS text stored).  Another
+# project is refused up front with the decision-9 reason and an empty queue; the
+# control queues one edit, a second click is refused, the real save writes it,
+# and a reopen refuses a second definition.  Renumber... stays disabled.
+add_executable(qt_wbs_code_gate_tests tests/wbs_code_gate_test.cpp)
+target_link_libraries(qt_wbs_code_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_wbs_code_gate_tests)
+
+add_test(NAME qt_wbs_code_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_wbs_code_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave30-wbs-control.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave30-insert-milestone.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
 # the loaded Task Sheet's geometry; these gate the empty project, the chrome,

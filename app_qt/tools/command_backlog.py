@@ -66,8 +66,9 @@ MENU_SCOPE_REASON = {
 # W28-1.3 / W29-2.1: controls whose click runs a RibbonCommand rather than a
 # MenuAction.  A split carries no MenuAction; a large button with a RibbonCommand
 # still passes MenuAction::none.  The ribbon table names the implemented ones
-# here.  The WBS and Set Baseline splits open menus whose every item is disabled,
-# and the Format/Drawing splits have no engine, so those stay "none".
+# here.  The Set Baseline split opens a menu whose every item is disabled, and
+# the Format/Drawing splits have no engine, so those stay "none" (the WBS split
+# is implemented for its Define Code... item since W34-4.6).
 IMPLEMENTED_RIBBON_COMMANDS = {
     "mark_on_track",
     "text_styles",
@@ -95,6 +96,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W34-4.5: the Font group's Bold bolds the one Task Name cell Project's pair
     # measured (the other font controls stay disabled).
     "font_bold",
+    # W34-4.6: the WBS split's Define Code... item queues the one WBS code
+    # definition Project's pair measured (Renumber... stays disabled).
+    "wbs_menu",
     # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
     # the chart to the task's start; a view, never a file write.
     "scroll_to_task",
@@ -195,6 +199,13 @@ RIBBON_GAPS = {
         "wave30-textstyle pair), alone in the save; every other cell, a view "
         "that already stores a cell format, Bold off and the other font "
         "attributes are refused as not implemented in this port",
+    # W34-4.6: Define Code... for the measured shape only.
+    "wbs_menu":
+        "gap: Define Code... writes the prefix W with ordered two-digit numbers "
+        "on a project of exactly three flat tasks that stores no WBS text, alone "
+        "in the save; every other count, outline, prefix, separator or length, a "
+        "redefinition, and Renumber... are refused as not implemented in this "
+        "port (no Define Code dialog fields are built)",
     # W31-C4: the command buttons the old parser did not reach.
     "project_information":
         "gap: only the project priority has a measured writer; every other "

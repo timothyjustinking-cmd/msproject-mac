@@ -647,6 +647,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::move_project: return "move_project";
         case RibbonCommand::mark_on_track: return "mark_on_track";
         case RibbonCommand::wbs_menu: return "wbs_menu";
+        case RibbonCommand::wbs_define_code: return "wbs_define_code";
         case RibbonCommand::set_baseline_menu: return "set_baseline_menu";
         case RibbonCommand::text_styles: return "text_styles";
         case RibbonCommand::gridlines: return "gridlines";

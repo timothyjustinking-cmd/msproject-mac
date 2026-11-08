@@ -930,7 +930,13 @@ VarRecordWrite save_var_record(CfbDocument& doc, std::string_view table,
                     "measured, so a multi-row edit is refused");
     }
     VarRecordEdit const& edit = edits.front();
-    if (edit.uid == 0) {
+    /* W34-4.6: wave30-wbs-code appends ONE record to the Task table's project
+     * row (uid 0, key 0x0B40019F, the last-issued WBS number); that append is
+     * the only measured edit of the row's var records. */
+    bool const wbs_project_row = edit.uid == 0 && table_path == kVarTaskTable &&
+                                 edit.shape == VarRecordShape::append &&
+                                 edit.field_id == kTaskProjectWbsFieldId;
+    if (edit.uid == 0 && !wbs_project_row) {
         throw Error(function + ": uid 0 is the project row (the Resource "
                     "placeholder row in TBkndRsc); editing its var records is "
                     "not measured");

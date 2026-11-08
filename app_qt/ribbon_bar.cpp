@@ -1193,6 +1193,23 @@ void RibbonBar::build_page(int tab_index) {
                                 : app::baseline_menu_items();
                         for (const std::string& item : items) {
                             QAction* action = menu->addAction(QString::fromStdString(item));
+                            if (spec.command == RibbonCommand::wbs_menu &&
+                                item == "Define Code...") {
+                                // W34-4.6: the one measured code definition.  The
+                                // handler refuses every project shape the pair did
+                                // not measure, with the reason.
+                                action->setToolTip(QStringLiteral(
+                                    "Define the WBS code W with ordered two-digit "
+                                    "numbers (the definition measured against "
+                                    "Project)"));
+                                connect(action, &QAction::triggered, this, [this](bool) {
+                                    if (command_handler_) {
+                                        command_handler_(RibbonCommand::wbs_define_code,
+                                                         false);
+                                    }
+                                });
+                                continue;
+                            }
                             action->setEnabled(false);
                             action->setToolTip(QString::fromUtf8(kNotImplemented));
                         }

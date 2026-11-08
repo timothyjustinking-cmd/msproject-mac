@@ -9,6 +9,7 @@
 #include "edit_model.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <cmath>
 #include <cstddef>
@@ -38,6 +39,7 @@
 #include "task_mode.h"
 #include "varmeta_edit.h"
 #include "viewstream_edit.h"
+#include "wbs_code.h"
 
 namespace app {
 namespace {
@@ -92,7 +94,8 @@ bool is_exclusive_kind(StructuralKind kind) noexcept {
            kind == StructuralKind::add_resource ||
            kind == StructuralKind::assign_resource ||
            kind == StructuralKind::unassign_resource ||
-           kind == StructuralKind::bold_cell;
+           kind == StructuralKind::bold_cell ||
+           kind == StructuralKind::define_wbs_code;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -3003,6 +3006,72 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
     return true;
 }
 
+namespace {
+
+// W34-4.6: the plan-side half of the WBS code rule, shared by the builder and
+// push().  wave30-wbs holds the project row and exactly three saved, top-level,
+// non-summary tasks (UniqueIDs 1 to 3); the generated numbers of any other
+// population (a nested outline's "1.1", a fourth task's "04", a summary) are
+// not measured.  Returns the reason, or an empty string.
+std::string wbs_code_plan_refusal(const PlanInput& plan) {
+    constexpr std::size_t kMeasuredTasks = mppwrite::kWbsMeasuredTaskCount;
+    if (plan.tasks.size() != kMeasuredTasks) {
+        return "Define WBS Code is not implemented in this port for a project with " +
+               std::to_string(plan.tasks.size()) +
+               " tasks: the measured Project pair has exactly " +
+               std::to_string(kMeasuredTasks) + " tasks";
+    }
+    std::array<bool, kMeasuredTasks + 1> seen{};
+    for (const TaskRow& task : plan.tasks) {
+        if (task.file_row == 0) {
+            return "Define WBS Code is not implemented in this port while a task is "
+                   "pending: save the project first";
+        }
+        if (task.uid < 1 || task.uid > kMeasuredTasks || seen[task.uid]) {
+            return "Define WBS Code is not implemented in this port for these tasks: "
+                   "the measured Project pair has the tasks with UniqueIDs 1, 2 and 3";
+        }
+        seen[task.uid] = true;
+        if (task.summary || task.outline_level != 0) {
+            return "Define WBS Code is not implemented in this port for an outline: "
+                   "the measured Project pair has three top-level tasks and no summary";
+        }
+    }
+    return {};
+}
+
+}  // namespace
+
+bool make_wbs_code_edit(const PlanInput& plan, std::string_view source_path,
+                        StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (std::string reason = wbs_code_plan_refusal(plan); !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    // The writer's dry run validates the Task table, the stored WBS text and the
+    // two 114/Props records against the FILE; nothing is written.
+    try {
+        (void)mppwrite::save_wbs_code(document, std::string(), true);
+    } catch (const std::exception& refusal) {
+        error = std::string("Define WBS Code is not implemented in this port for "
+                            "this project: ") +
+                refusal.what();
+        return false;
+    }
+    out.kind = StructuralKind::define_wbs_code;
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                            const std::vector<std::uint32_t>& pending_start_uids) {
     // W33-1.7 (A-8 / D-7): a document opened from a container with FAT slack
@@ -3436,6 +3505,20 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             // applied_ is empty by the exclusivity check above.
             if (plan == nullptr || edit.uid == 0 || edit.field_id == 0 ||
                 !cell_bold_plan_refusal(*plan, edit.uid, edit.field_id).empty()) {
+                return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::define_wbs_code: {
+            // W34-4.6: the plan-side half.  The file-side half (the writer's dry
+            // run) ran in make_wbs_code_edit and runs again in the writer;
+            // applied_ is empty by the exclusivity check above.  The edit has no
+            // row and no parameters, so a hand-built one that carries either is
+            // not the measured edit.
+            if (plan == nullptr || edit.uid != 0 || !edit.name.empty() ||
+                !wbs_code_plan_refusal(*plan).empty()) {
                 return false;
             }
             edit.anchor_uid = 0;
@@ -4476,6 +4559,30 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W34-4.6: the WBS code definition is exclusive the same way.
+    const StructuralEdit* wbs_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::define_wbs_code) {
+            wbs_edit = &edit;
+        }
+    }
+    if (wbs_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "a WBS code edit must be the only edit in a save; another edit is "
+                "queued with it, and the measured Project pair is one code defined "
+                "on an otherwise untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a WBS code edit cannot be combined with a start-date edit; the "
+                "measured Project pair is one code defined on an otherwise "
+                "untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -4694,6 +4801,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (bold_edit != nullptr) {
         ++write_ops;  // the view's VarMeta, Var2Data, Props and Props14, one file
+    }
+    if (wbs_edit != nullptr) {
+        ++write_ops;  // the Task WBS streams, 114/Props and Props14, one file
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -5305,6 +5415,24 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 std::to_string(written.block_payload_after) + " bytes)");
         }
 
+        // 5j (wave 34, W34-4.6).  The measured WBS code definition: four stored
+        // number blocks and the two code records (core/mppwrite/wbs_code.h).  The
+        // edit is exclusive (checked above); a dry run first proves the file is
+        // still the one the edit was built from, then the writer re-validates and
+        // writes the target once.  A refusal is an exception, reported as the
+        // save error.
+        if (wbs_edit != nullptr) {
+            (void)mppwrite::save_wbs_code(document, std::string(), true);
+            const mppwrite::WbsCodeWrite written =
+                mppwrite::save_wbs_code(document, next_write_path());
+            result.wbs_codes_written = 1;
+            result.notes.push_back(
+                "WBS code defined (" + std::to_string(written.blocks_written) +
+                " number blocks; task Var2Data " +
+                std::to_string(written.var2_bytes_before) + " -> " +
+                std::to_string(written.var2_bytes_after) + " bytes)");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -5383,6 +5511,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (result.cell_styles_written != 0) {
             result.api += " save_view_cell_style";
+        }
+        if (result.wbs_codes_written != 0) {
+            result.api += " save_wbs_code";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";
