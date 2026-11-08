@@ -96,12 +96,15 @@ jobs:
             os: windows-2022
             arch: win64_msvc2019_64
             generator: Ninja
-          # macos-14 is Apple Silicon.  Pinned by image name (not macos-latest)
+          # macos-15 is Apple Silicon.  Pinned by image name (not macos-latest)
           # so an image rollover cannot silently change the OS under the render
           # tests; the Qt 6.5.3 clang_64 package is universal, so it links
-          # natively here.
+          # natively here.  GitHub retired macos-14 in November 2026: every job
+          # on it was cancelled before start ("The configuration
+          # 'macos-14-arm64-us-default' is not supported", runs 42453367272 and
+          # 42470277458), so the pin moved to macos-15.
           - name: macos-qt
-            os: macos-14
+            os: macos-15
             arch: clang_64
             generator: Unix Makefiles
 
