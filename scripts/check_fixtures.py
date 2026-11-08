@@ -728,6 +728,13 @@ DOCUMENTED = {
         "6A536AE817E7E30D7578B8F909387C58A08D4CD32EEE0F2033DFC029D2B9CC3A",
     "tests/data/wave35-viewstate-zoom-reset.mpp":
         "C69D367156042604246A83E3378B611A3F718D54AC7B018C7E6B3E0D67E9BFFF",
+    # Wave 35 (W35-3.5): the G3 pairs.
+    "tests/data/wave35-g3-assign-remove-port-saved-control-null.mpp":
+        "8D5458358BFC8A08AF379B3B43374D021319027B6288B9DC3F3F9E40A1ADDECF",
+    "tests/data/wave35-g3-assign-remove-port-saved-control.mpp":
+        "BCECAD7302E04B063FF46904F58E6A004B6CA26CE3E8E2255090B916FA08F336",
+    "tests/data/wave35-g3-assign-remove-port-saved.mpp":
+        "8E1CE76710E8BF8B775DDC01BE308EFD1CDB823C23E34C6A413AB78D109513B8",
     # Wave 35 (W35-3.4): the G3 pairs.
     "tests/data/wave35-g3-font-bold-off-control-null.mpp":
         "8A84C700FC90ED8ED2ED432B68299D1AF0591E9EB9F8A0196E176B57600D18F0",
