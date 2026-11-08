@@ -1896,6 +1896,30 @@ void test_settled_damaged(TestContext& t) {
                 "are 1 and 2",
                 "settled add: a fourth assignment, another resource");
     }
+    /* W35-0.4 (RC-W2): only a lower uid on one assigned resource
+     * (wave34-assign-add-second: 1 into [2]) and a higher uid on two
+     * (wave34-assign-add-third: 3 into [1, 2]) were saved by Project; the
+     * other orders are refused before the leaf array is read.  The control's
+     * task holds resource 2, so resource 3 would be a higher uid on one. */
+    refuses(doc_from_data(control), key(1, 3),
+            "in an order no pair measures",
+            "settled add: a higher uid on one assigned resource");
+    {
+        /* The third control's task holds resources 1 and 2.  Re-pointing the
+         * resource-2 row at resource 3 leaves [1, 3], so adding 2 would go in
+         * between. */
+        char const* third_control = "wave34-assign-add-third-control.mpp";
+        refuses(with_edit(third_control, kAssnFixed,
+                          [](Bytes& b) { put_u32_at(b, 3 * 110 + 8, 3); }),
+                key(1, 2), "in an order no pair measures",
+                "settled add: a uid between two assigned resources");
+        /* Re-pointing the resource-1 row at resource 3 leaves [2, 3], so
+         * adding 1 would go below both. */
+        refuses(with_edit(third_control, kAssnFixed,
+                          [](Bytes& b) { put_u32_at(b, 4 * 110 + 8, 3); }),
+                key(1, 1), "in an order no pair measures",
+                "settled add: a uid below two assigned resources");
+    }
     refuses(with_edit(control, kTaskFixed,
                       [](Bytes& b) { put_f64_at(b, 48 + 202 + 8, 1.0); }),
             target, "task row 1's work words", "settled add: the task work");
