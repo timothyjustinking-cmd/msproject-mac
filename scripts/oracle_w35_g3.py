@@ -264,7 +264,10 @@ def measure_port(app, pair, entry):
     shutil.copyfile(control, copy)
     app.FileOpen(copy)
     project = app.ActiveProject
-    neutralise(app, project, "Synthetic G3 Fixture")
+    # The port's file is already neutral; neutralise() would change the project
+    # properties and bump the revision counter, which the null save (UserName
+    # only) does not, so the edit save would differ from the null by one revision.
+    app.UserName = "Fixture Builder"
     entry["control_facts"] = facts(app, project)
     try:
         entry["edit"] = edit_fn(app, project)
