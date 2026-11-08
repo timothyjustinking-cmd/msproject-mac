@@ -70,6 +70,7 @@ char const* kEdlMeta = "214/CEdl/VarMeta";
 char const* kProps = "214/Props";
 
 constexpr std::size_t kEdlSizeAt = 11402; /* the 0x07000100 scalar's value */
+constexpr std::size_t kViewBlockAt = 42576; /* the uid-2 block in CV_iew/Var2Data */
 
 class TestContext {
   public:
@@ -442,6 +443,85 @@ void test_refusals(TestContext& t) {
                 "rows that are not the file's order refused");
         refuses(doc_from_data(control_name("outline-deep-level1")), measured_edit(),
                 "task rows (with the project row)", "a six-task file with a five-task request");
+    }
+
+    /* W35b-1.1 (R35G2-1): the view state the level sits on.  Each Project save
+     * below passes every other check (five tasks UID 1..5, every row shown, the
+     * CEdl order 1..5) and differs from the measured control only in its view
+     * state, so only the new pins refuse it. */
+    {
+        for (char const* stem : {"table-cost", "table-schedule", "zoom-entire",
+                                 "zoom-custom", "zoom-reset", "sort-name-asc"}) {
+            fixture::require_committed(join(MPPWRITE_TEST_DATA, edit_name(stem)));
+        }
+        refuses(doc_from_data(edit_name("table-cost")), measured_edit(),
+                "the applied table is \"Cost\", not the measured Entry table",
+                "R35G2-1: the Cost table applied refused");
+        refuses(doc_from_data(edit_name("table-schedule")), measured_edit(),
+                "the applied table is \"Schedule\", not the measured Entry table",
+                "R35G2-1: the Schedule table applied refused");
+        for (char const* stem : {"zoom-entire", "zoom-custom", "zoom-reset"}) {
+            refuses(doc_from_data(edit_name(stem)), measured_edit(),
+                    "view-state block is not one of the two measured controls' "
+                    "outside its sort spec (digest mismatch",
+                    std::string("R35G2-1: a zoomed timescale refused: ") + stem);
+        }
+        refuses(doc_from_data(edit_name("sort-name-asc")), measured_edit(),
+                "the file already carries a sort (the spec at block + 40",
+                "R35G2-1: a persisted Name-ascending sort refused");
+
+        /* Synthetic damage to the two records, so each pin is reached alone. */
+        auto with_edl = [&](auto&& mutate) {
+            CfbDocument doc = control;
+            Bytes edl = doc.read_stream(kEdlVar2);
+            mutate(edl);
+            doc.replace_stream(kEdlVar2, edl);
+            return doc;
+        };
+        Bytes const control_edl = control.read_stream(kEdlVar2);
+        std::size_t const view_name = item_of(control_edl, 0x26400018u);
+        std::size_t const table_name = item_of(control_edl, 0x26400019u);
+        std::size_t const table_fields = item_of(control_edl, 0x26400017u);
+        t.check(view_name != 0 && table_name != 0 && table_fields != 0,
+                "R35G2-1: the control holds the applied view, table and column records");
+        /* '&Gantt Chart' -> '&Gantt Charm' (the 11th UTF-16 unit). */
+        refuses(with_edl([&](Bytes& e) { e[view_name + 12 + 2 * 11] = 'm'; }),
+                measured_edit(), "the applied view is \"&Gantt Charm\", not the measured",
+                "R35G2-1: another applied view refused");
+        refuses(with_edl([&](Bytes& e) { e[table_name + 12] = 'X'; }), measured_edit(),
+                "the applied table is \"Xntry\"", "R35G2-1: another table name refused");
+        refuses(with_edl([&](Bytes& e) { put_u32_at(e, table_fields + 12 + 8, 0x0b400009u); }),
+                measured_edit(), "applied table's columns are not the measured Entry table's",
+                "R35G2-1: another column list refused");
+        refuses(with_edl([&](Bytes& e) { put_u32_at(e, view_name + 4, 0x26400099u); }),
+                measured_edit(), "holds no applied-view name record",
+                "R35G2-1: a CEdl without the applied view refused");
+
+        /* One sort-spec copy changed in an otherwise measured control. */
+        CfbDocument spec_one = control;
+        Bytes var2 = spec_one.read_stream("214/CV_iew/Var2Data");
+        std::size_t const block = kViewBlockAt;
+        t.equal(u32_at(var2, block), 42692, "R35G2-1: the uid-2 block is at its measured offset");
+        var2[block + 1192] = 0x0e;
+        spec_one.replace_stream("214/CV_iew/Var2Data", var2);
+        refuses(spec_one, measured_edit(),
+                "the file already carries a sort (the spec at block + 1192",
+                "R35G2-1: a sort in the second spec copy only refused");
+        /* A byte outside the spec changed: the digest no longer matches. */
+        CfbDocument style_changed = control;
+        var2 = style_changed.read_stream("214/CV_iew/Var2Data");
+        var2[block + 4 + 5000] ^= 0x01;
+        style_changed.replace_stream("214/CV_iew/Var2Data", var2);
+        refuses(style_changed, measured_edit(), "(digest mismatch",
+                "R35G2-1: a changed byte in the view block refused");
+        /* The six-task control's own digest still passes (the pair test writes it). */
+        {
+            CfbDocument deep = doc_from_data(control_name("outline-deep-level2"));
+            t.check(!deep.read_stream("214/CV_iew/Var2Data").empty(),
+                    "R35G2-1: the alternate-digest control opens");
+            ViewOutlineEdit const deep_edit = make_edit(2, kDeepLevels);
+            (void)mppwrite::save_view_outline(deep, deep_edit, "", true);
+        }
     }
 
     /* The output path. */

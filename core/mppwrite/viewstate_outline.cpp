@@ -384,6 +384,79 @@ std::size_t props_value_offset(Bytes const& props, std::uint32_t tag,
     return found;
 }
 
+/* W35b-1.1: the CEdl records that name the applied view (0x26400018), the
+ * applied table (0x26400019) and the table's columns (0x26400017).  Every pair
+ * is the Gantt Chart view on the Entry table; a Show Level on any other table or
+ * view is unmeasured (the committed table-cost and table-schedule saves apply
+ * the Cost and Schedule tables). */
+constexpr std::uint32_t kEdlTableNameId = 0x26400019u;
+constexpr std::uint32_t kEdlTableFieldsId = 0x26400017u;
+constexpr std::array<std::uint32_t, 8> kEntryTableFields = {
+    0x0b4000cdu, 0x0b400500u, 0x0b40000eu, 0x0b400507u,
+    0x0b400505u, 0x0b400506u, 0x0b40002fu, 0x0b400031u};
+
+std::string edl_text(Bytes const& edl, EdlItem const& item) {
+    std::string out;
+    for (std::size_t i = 0; i + 1 < item.length; i += 2) {
+        std::uint32_t const unit = edl[item.payload() + i] |
+                                   (static_cast<std::uint32_t>(edl[item.payload() + i + 1]) << 8);
+        if (unit == 0) {
+            break;
+        }
+        out.push_back(unit < 0x80 ? static_cast<char>(unit) : '?');
+    }
+    return out;
+}
+
+EdlItem const& unique_edl_item(std::vector<EdlItem> const& items,
+                               std::uint32_t id, std::string const& what,
+                               std::string const& function) {
+    EdlItem const* found = nullptr;
+    for (EdlItem const& item : items) {
+        if (item.id != id) {
+            continue;
+        }
+        if (found != nullptr) {
+            throw Error(function + ": 214/CEdl holds two " + what + " records, "
+                        "so the applied view is not the measured one");
+        }
+        found = &item;
+    }
+    if (found == nullptr) {
+        throw Error(function + ": 214/CEdl holds no " + what + " record, so the "
+                    "applied view is not the measured one");
+    }
+    return *found;
+}
+
+void require_applied_view(Bytes const& edl, std::string const& function) {
+    std::vector<EdlItem> const items = parse_edl_items(edl, function);
+    EdlItem const& view = unique_edl_item(items, kEdlViewNameId,
+                                          "applied-view name", function);
+    if (edl_text(edl, view) != "&Gantt Chart") {
+        throw Error(function + ": the applied view is \"" + edl_text(edl, view) +
+                    "\", not the measured Gantt Chart, so this outline level is "
+                    "refused");
+    }
+    EdlItem const& table = unique_edl_item(items, kEdlTableNameId,
+                                           "applied-table name", function);
+    if (edl_text(edl, table) != "Entry") {
+        throw Error(function + ": the applied table is \"" + edl_text(edl, table) +
+                    "\", not the measured Entry table (the pairs persist a "
+                    "level on Entry only), so this outline level is refused");
+    }
+    EdlItem const& fields = unique_edl_item(items, kEdlTableFieldsId,
+                                            "applied-table column", function);
+    bool same = fields.length == 4 * kEntryTableFields.size();
+    for (std::size_t i = 0; same && i < kEntryTableFields.size(); ++i) {
+        same = get_u32(edl, fields.payload() + 4 * i) == kEntryTableFields[i];
+    }
+    if (!same) {
+        throw Error(function + ": the applied table's columns are not the "
+                    "measured Entry table's, so this outline level is refused");
+    }
+}
+
 std::size_t meta_flag_at(std::size_t row) {
     return kOutlineMetaHeader + kOutlineMetaEntry * (row + 3) + kOutlineMetaFlag;
 }
@@ -466,6 +539,10 @@ ViewOutlineWrite save_view_outline(CfbDocument& doc, ViewOutlineEdit const& edit
         all.push_back(row.uid);
     }
     require_edl_state(edl, records, all, 0, function, "control's");
+    /* W35b-1.1: the view the level is persisted on is the measured one, the
+     * Gantt Chart on the Entry table with the control's uid-2 block and no sort. */
+    require_applied_view(edl, function);
+    require_measured_view_block(doc, function, "this outline level");
     Bytes const edl_meta = doc.read_stream(kEdlMeta);
     if (edl_meta.size() < kVarMetaHeaderSize ||
         get_u32(edl_meta, kVarMetaVar2SizeOffset) != edl.size()) {

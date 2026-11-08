@@ -439,6 +439,21 @@ void check_refusals() {
     expect_refused(plan, data_path("wave31-resource-sheet.mpp").string(), 1,
                    "not implemented in this port for this project",
                    "a file whose tasks are not the plan's");
+    /* W35b-1.1 (R35G2-1): Project saves that differ from the control only in their
+     * view state.  Each has the same five tasks as the plan, so only the writer's
+     * view-state pins can refuse it, each with its own reason. */
+    expect_refused(plan, data_path(edit_name("table-cost")).string(), 1,
+                   "the applied table is \"Cost\", not the measured Entry table",
+                   "R35G2-1: a file with the Cost table applied");
+    expect_refused(plan, data_path(edit_name("table-schedule")).string(), 1,
+                   "the applied table is \"Schedule\", not the measured Entry table",
+                   "R35G2-1: a file with the Schedule table applied");
+    expect_refused(plan, data_path(edit_name("zoom-entire")).string(), 1,
+                   "outside its sort spec (digest mismatch",
+                   "R35G2-1: a file with a zoomed timescale");
+    expect_refused(plan, data_path(edit_name("sort-name-asc")).string(), 1,
+                   "the file already carries a sort (the spec at block + 40",
+                   "R35G2-1: a file with a persisted sort");
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    1, "could not be read", "a missing project file");
 
@@ -573,6 +588,31 @@ void check_refusals() {
         check(!std::filesystem::exists(out), "the refused save writes no target file");
         check(!std::filesystem::exists(out.string() + ".w51-structural-tmp"),
               "the refused save leaves no intermediate file");
+    }
+
+    /* R35G2-1 at save time: the level queued on the control, the file replaced by a
+     * Project save with another table or a zoom, is refused by the writer (not by
+     * the queue) and writes nothing. */
+    for (const char* stem : {"table-cost", "zoom-entire", "sort-name-asc"}) {
+        app::StructuralEdit edit;
+        std::string error;
+        check(app::make_show_level_edit(plan, source, 1, edit, error),
+              std::string("the view-state fixture builds its level: ") + stem);
+        app::StructuralEdits edits;
+        check(edits.push(std::move(edit), &plan),
+              std::string("the view-state fixture queues it: ") + stem);
+        const std::filesystem::path out =
+            out_path(std::string("app-outline-view-state-") + stem + ".mpp");
+        std::error_code fs_error;
+        std::filesystem::remove(out, fs_error);
+        const app::StructuralSaveResult saved = app::save_structural_edits(
+            edits, {}, data_path(edit_name(stem)).string(), out.string(), false);
+        check(!saved.ok, std::string("the save refuses a file whose view state is ") + stem);
+        check(saved.error.find("view outline write") != std::string::npos,
+              std::string("R35G2-1: the save's refusal is the writer's for ") + stem +
+                  " (got \"" + saved.error + "\")");
+        check(!std::filesystem::exists(out),
+              std::string("the refused save writes no target for ") + stem);
     }
 }
 
