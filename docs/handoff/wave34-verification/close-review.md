@@ -78,3 +78,17 @@ re-runs `oracle_w29_reopen.py` on the five enabled saves before any merge.
 The findings above are queued for `wave34b` (fix-only): G0 holds R34G3-1/RC-R1 and
 R34G3-2; G1 holds R34G3-3, R34G3-4, RC-W5, RC-R3 and RC-W4; the remaining Mediums and
 the Lows are queued in `plan-waves27-30.md`.  Push and CI are the coordinator's.
+
+## Erratum, 08 November 2026 (W34b-1.5, R34G4-7)
+
+Appended; nothing above is rewritten.
+
+- The "refuses every other shape up front" column of the table in "Per enabled command"
+  overstated the shell.  It was wrong for Assign Resources (fixed in W34b-0.1, `f08249e`),
+  and for Add Resources, Font Bold and Define Code, whose "yes in the shell" held only
+  for the shapes the shell checked, not every shape (fixed in W34b-0.3, `f8452b4`,
+  W34b-0.4, `dee4998`, and W34b-0.5, `7103578`).
+- Section 4 (e): no G4 entry carried Project-reopen evidence for brief section 4(e).
+  "The record's G4 entries carry the evidence each item attached" above must not be read
+  as covering the reopen check.  That check is the coordinator's (`oracle_w29_reopen.py`
+  on the five enabled saves) and has not been run here.

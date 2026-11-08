@@ -775,6 +775,14 @@ Builder: Claude Sonnet 5.5 (W34-BUILDER), commits carry the
 | W34-4.6 | brief W34-4.6: WBS code definition (G2.2) with the measured prefix shape only | **DONE** (Project > Properties > WBS > Define Code... enabled for a project of exactly three flat tasks that stores no WBS text; every other shape refused up front; Renumber... stays disabled) | the `W34-4.6` commit after `b07d435`; `core/mppwrite/wbs_code.{h,cpp}`, `varmeta_edit.{h,cpp}` (uid-0 allowance), `tests/roundtrip_wbs.cpp`; `app/edit_model.{h,cpp}`, `app/app_edits_wbs_tests.cpp`; Qt shell `app_qt/{ribbon_bar,main_window}.*`, `app_qt/tests/wbs_code_gate_test.cpp`; gates `build/w34/b07d435-g46final-*.log` |
 | W34-4.7 | brief W34-4.7: Set Baseline 0 for the entire project (G1 + G2.2 + G3.4), no other baseline | **DEFERRED with evidence** (the Set Baseline menu stays disabled, "not implemented in this port"; the retained writers cannot produce Project's save) | probe `build/w34/4.7-probe.cpp`, log `build/w34/4.7-probe-ctest.log` (19 streams fail with the one block the writers can append); evidence `spec/writers/evidence/wave30-baseline.md`, `spec/writers/props-records.md`, `spec/writers/table-growth.md` Limits |
 
+Erratum, 08 November 2026 (W34b-1.5, R34G4-7), to the W34-4.3 row above: the identity
+dwords of the appended Assn Fixed2Data record were masked, not compared, until W34b-0.2
+(`afb0aab`).  The row's "DONE", and the W34-4.3 detail's "the identity dwords of the
+appended Assn Fixed2Data record compared under `TailNormalisation`", stood on that mask:
+`TailNormalisation` hid the values, and nothing checked that the task and resource
+references resolved.  The row also did not hold that every other shape was refused for
+Assign Resources; W34b-0.1 (`f08249e`) added the missing refusals.
+
 W34-4.0 detail:
 
 - **Refuse, not show-as-noise.**  Every difference in the five KnownGap tables
