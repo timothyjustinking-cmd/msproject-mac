@@ -26,6 +26,43 @@
 #include "varmeta_edit.h"
 
 namespace mppwrite {
+
+bool calculate_measured_finish(std::uint32_t start, std::uint32_t duration,
+                               std::uint32_t& finish) {
+    constexpr int kDayStartSeconds = 8 * 3600;
+    constexpr int kDayFinishSeconds = 17 * 3600;
+    constexpr std::uint32_t kDayTicks = 4800; /* 8 hours */
+    constexpr int kSaturday = 0;              /* day 0 (1983-12-31) was a Saturday */
+    constexpr int kSunday = 1;
+    if (!is_date(start) || duration == 0 || duration % kDayTicks != 0) {
+        return false;
+    }
+    PackedDate const first = unpack_date(start);
+    int const weekday = first.day % 7;
+    if (first.seconds_of_day != kDayStartSeconds || weekday == kSaturday ||
+        weekday == kSunday) {
+        return false;
+    }
+    std::uint32_t remaining = duration / kDayTicks - 1;
+    if (remaining > 0xFFFFu) {
+        return false;
+    }
+    PackedDate last = first;
+    while (remaining > 0) {
+        ++last.day;
+        int const next = last.day % 7;
+        if (next != kSaturday && next != kSunday) {
+            --remaining;
+        }
+    }
+    if (last.day > 0xFFFF) {
+        return false;
+    }
+    last.seconds_of_day = kDayFinishSeconds;
+    finish = pack_date(last);
+    return true;
+}
+
 namespace {
 
 constexpr char const* kTable = "114/TBkndTask";
@@ -233,6 +270,23 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "finish, as the other leaf must); the "
                                        "measured Calculate Project save leaves the "
                                        "critical flags as they were");
+            }
+        }
+        /* W35b-0.4 (RW35-W2): the pair changes one Duration, so every leaf's
+         * early dates are already final: Finish is Start plus Duration on the
+         * measured calendar.  A file left pending by a Start, Finish, progress or
+         * calendar edit fails this, and the writer would save the old dates. */
+        for (std::size_t row = 1; row < kRows; ++row) {
+            std::uint32_t expected = 0;
+            if (!calculate_measured_finish(rows.u32(row, task_row::kStart),
+                                           rows.u32(row, task_row::kDuration), expected) ||
+                expected != rows.u32(row, task_row::kFinish)) {
+                return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                       "'s finish is not its start plus its duration "
+                                       "on the measured calendar (Monday to Friday, "
+                                       "08:00 to 17:00, whole 8-hour days), so the "
+                                       "pending recalculation was not caused by a "
+                                       "Duration edit alone");
             }
         }
         for (std::size_t row = 1; row < kRows; ++row) {

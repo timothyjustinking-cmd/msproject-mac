@@ -437,6 +437,7 @@ void check_refusals() {
     {
         /* The critical path moves: the plan says leaf 1 is critical, leaf 2 is longer. */
         app::PlanInput changed = plan;
+        changed.tasks[1].duration_ticks = 72000;
         changed.tasks[1].finish = app::date32_from_packed(0x3C0427D8u);
         expect_refused(changed, source, "moves the critical path",
                        "a recalculation that moves the critical path (plan)");
@@ -463,6 +464,39 @@ void check_refusals() {
         app::StructuralEdits edits;
         check(!edits.push(hand_edit(changed), &changed),
               "push() refuses a Calculate edit over a plan with a moved leaf start");
+    }
+    /* W35b-0.4 (RW35-W2): the pending recalculation must have been caused by a Duration
+     * change alone, so each leaf's Finish is its Start plus its Duration on the measured
+     * calendar (Monday to Friday, 08:00 to 17:00, whole 8-hour days). */
+    {
+        /* A Duration edit whose Finish Project has not moved. */
+        app::PlanInput changed = plan;
+        changed.tasks[1].duration_ticks = 19200;
+        expect_refused(changed, source, "is not its start plus its duration",
+                       "a leaf duration without its finish (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan whose leaf duration and finish differ");
+    }
+    {
+        /* A Finish edit. */
+        app::PlanInput changed = plan;
+        changed.tasks[1].finish = app::date32_from_packed(0x3BF527D8u);
+        expect_refused(changed, source, "is not its start plus its duration",
+                       "a leaf finish edit (plan)");
+    }
+    {
+        /* A Start edit that moved the project start and both leaf starts together, so the
+         * leaves still start at the project start and the Finish dates are the old ones. */
+        app::PlanInput changed = plan;
+        changed.project_start = app::date32_from_packed(0x3BF312C0u);
+        changed.tasks[0].start = app::date32_from_packed(0x3BF312C0u);
+        changed.tasks[1].start = app::date32_from_packed(0x3BF312C0u);
+        expect_refused(changed, source, "is not its start plus its duration",
+                       "a leaf start edit (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(changed), &changed),
+              "push() refuses a Calculate edit over a plan whose start edit left the finish");
     }
     {
         app::PlanInput changed = plan;
@@ -537,6 +571,41 @@ void check_refusals() {
         early.save(early_path.string());
         expect_refused(plan, early_path.string(), "starts at a date other than the project start",
                        "a file whose leaf does not start at the project start");
+    }
+    {
+        /* W35b-0.4: the FILE holds a leaf whose Duration, Finish or Start was edited and not
+         * recalculated; the plan is the clean control's, so the writer's own check names it. */
+        mppwrite::CfbDocument longer = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(longer);
+        rows.set_u32(2, mppwrite::task_row::kDuration, 19200);
+        rows.store_into(longer);
+        set_planned_work(longer, 2, 19200);
+        const std::filesystem::path longer_path = out_path("app-calculate-duration-edit.mpp");
+        longer.save(longer_path.string());
+        expect_refused(plan, longer_path.string(), "is not its start plus its duration",
+                       "a file whose leaf duration has no matching finish");
+    }
+    {
+        mppwrite::CfbDocument moved = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(moved);
+        rows.set_u32(2, mppwrite::task_row::kFinish, 0x3BF527D8u);
+        rows.store_into(moved);
+        const std::filesystem::path moved_path = out_path("app-calculate-finish-edit.mpp");
+        moved.save(moved_path.string());
+        expect_refused(plan, moved_path.string(), "is not its start plus its duration",
+                       "a file whose leaf finish was edited");
+    }
+    {
+        mppwrite::CfbDocument shifted = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(shifted);
+        for (std::size_t row = 0; row < 3; ++row) {
+            rows.set_u32(row, mppwrite::task_row::kStart, 0x3BF312C0u);
+        }
+        rows.store_into(shifted);
+        const std::filesystem::path shifted_path = out_path("app-calculate-start-edit.mpp");
+        shifted.save(shifted_path.string());
+        expect_refused(plan, shifted_path.string(), "is not its start plus its duration",
+                       "a file whose project and leaf starts were edited");
     }
     {
         mppwrite::CfbDocument manual = mppwrite::CfbDocument::from_file(source);

@@ -3640,6 +3640,22 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
             }
         }
     }
+    // W35b-0.4 (RW35-W2): the pair changes one Duration, so every leaf's early dates are
+    // already final: Finish is Start plus Duration on the measured calendar.
+    for (const TaskRow& task : plan.tasks) {
+        std::uint32_t expected = 0;
+        if (task.start == kDateNa || task.duration_ticks <= 0 ||
+            task.duration_ticks > 0x7FFFFFFF ||
+            !mppwrite::calculate_measured_finish(static_cast<std::uint32_t>(task.start),
+                                                 static_cast<std::uint32_t>(task.duration_ticks),
+                                                 expected) ||
+            static_cast<std::uint32_t>(task.finish) != expected) {
+            return prefix + "for a task whose finish is not its start plus its duration on the "
+                            "measured calendar (Monday to Friday, 08:00 to 17:00, whole 8-hour "
+                            "days): the pending recalculation was not caused by a Duration "
+                            "edit alone";
+        }
+    }
     return {};
 }
 
