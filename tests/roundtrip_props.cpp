@@ -816,6 +816,19 @@ void test_edit_refusals(TestContext& t) {
                 "an absent record (the insert) refused");
     }
     {
+        /* W35-0.4 (RC-W7): a record that exists but that no pair updated is
+         * refused, whatever its kind and payload. */
+        PropsEdit edit;
+        edit.records.push_back({0x02400002u, 4, Bytes(64, 0)});
+        refuses(control, edit, "is not one a committed pair updated",
+                "an existing record no pair updated refused");
+        PropsEdit mixed;
+        mixed.records.push_back({0x0240138Bu, 0, bigger_8b});
+        mixed.records.push_back({0x02400002u, 4, Bytes(64, 0)});
+        refuses(control, mixed, "is not one a committed pair updated",
+                "a measured record next to an unmeasured one refused");
+    }
+    {
         CfbDocument duplicated = with_stream(
             "wave30-wbs-control.mpp", mppwrite::kPropsBackEnd,
             with_duplicate_record(bytes, 0x02400002u, "refusals"));
