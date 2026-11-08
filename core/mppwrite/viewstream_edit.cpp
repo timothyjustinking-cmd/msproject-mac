@@ -168,6 +168,7 @@ struct ViewState {
     std::size_t payload_length = 0;
     std::size_t item_count = 0;
     std::size_t cell_format_items = 0;
+    std::size_t cell_item_offset = 0; /* payload-relative, of the last 0x2240000c item */
     std::size_t last_item_offset = 0; /* payload-relative, payload start 0 */
     std::size_t last_item_bytes = 0;  /* header + payload */
 };
@@ -328,6 +329,7 @@ ViewState load_view(CfbDocument const& doc, std::uint32_t view_uid,
         state.last_item_bytes = kViewItemHeaderSize + length;
         if (id == kViewCellFormatItemId) {
             ++state.cell_format_items;
+            state.cell_item_offset = pos;
         }
         std::size_t const end = pos + kViewItemHeaderSize + length;
         if (end == state.payload_length) {
@@ -386,7 +388,13 @@ ViewState load_view(CfbDocument const& doc, std::uint32_t view_uid,
  * every other item are in that digest; the font word 0x90000001 is undecoded, so
  * a view with any other style is not a shape the pair measured. */
 constexpr std::size_t kMeasuredViewBlockBytes = 42692;
-constexpr std::uint64_t kMeasuredViewBlockDigest = 0xc4a86de4acee2cfbULL;
+/* W35-3.4: one byte of the block, payload offset 42,678, is per-save noise.  It
+ * holds six values (0x15 0x16 0x17 0x18 0x1c 0x26) across the 258 committed
+ * saves that share the rest of the block, so a control saved by another Project
+ * session differs there and nowhere else.  It is masked, and the digest below
+ * is taken with it masked; all 258 digest to this one value. */
+constexpr std::size_t kViewBlockNoiseAt = 42678;
+constexpr std::uint64_t kMeasuredViewBlockDigest = 0xd2f37d751e6e8333ULL;
 
 std::string strip_accelerators(std::string const& text) {
     std::string out;
@@ -504,13 +512,22 @@ std::uint32_t view_uid_for_caption(CfbDocument const& doc, std::string const& na
     return uid;
 }
 
+/* `skip_len` payload bytes from `skip_at` are left out of the digest: Bold off
+ * digests the block without the one item it finds, which must then be the
+ * measured control's block. */
 std::uint64_t masked_block_digest(Bytes const& var2, std::size_t block_offset,
-                                  std::size_t payload_length) {
+                                  std::size_t payload_length,
+                                  std::size_t skip_at = 0,
+                                  std::size_t skip_len = 0) {
     std::uint64_t hash = 0xcbf29ce484222325ULL;
     std::size_t const payload_at = block_offset + 4;
     for (std::size_t i = 0; i < payload_length; ++i) {
+        if (i >= skip_at && i < skip_at + skip_len) {
+            continue;
+        }
         bool const edited = i < kBlockFormatWord ||
-                            (i >= kBlockCountWord && i < kBlockCountWord + 2);
+                            (i >= kBlockCountWord && i < kBlockCountWord + 2) ||
+                            i == kViewBlockNoiseAt;
         std::uint8_t const byte = edited ? 0 : var2[payload_at + i];
         hash = (hash ^ byte) * 0x100000001b3ULL;
     }
@@ -521,7 +538,8 @@ std::uint64_t masked_block_digest(Bytes const& var2, std::size_t block_offset,
  * be the measured control's outside the bytes the edit rewrites. */
 void require_measured_view(CfbDocument const& doc, ViewState const& state,
                            ViewCellStyleEdit const& edit,
-                           std::string const& function) {
+                           std::string const& function,
+                           std::size_t skip_at = 0, std::size_t skip_len = 0) {
     std::string const name = applied_view_name(doc, function);
     std::uint32_t const applied = view_uid_for_caption(doc, name, function);
     if (applied != edit.view_uid) {
@@ -531,9 +549,9 @@ void require_measured_view(CfbDocument const& doc, ViewState const& state,
                     "; a Bold item written into another view would format "
                     "nothing the user sees");
     }
-    if (state.payload_length != kMeasuredViewBlockBytes ||
-        masked_block_digest(state.var2, state.block_offset, state.payload_length) !=
-            kMeasuredViewBlockDigest) {
+    if (state.payload_length - skip_len != kMeasuredViewBlockBytes ||
+        masked_block_digest(state.var2, state.block_offset, state.payload_length,
+                            skip_at, skip_len) != kMeasuredViewBlockDigest) {
         throw Error(function + ": the applied view's record (" +
                     std::to_string(state.payload_length) + " bytes) differs from "
                     "the measured control's outside the size words and item "
@@ -598,11 +616,6 @@ void validate_edit(ViewCellStyleEdit const& edit, std::string const& function) {
                     "strikethrough and the two colours are unmeasured and "
                     "refused");
     }
-    if (!edit.enabled) {
-        throw Error(function + ": turning Bold off would replace or remove the "
-                    "cell format item; only the append of a Bold item is "
-                    "measured");
-    }
     if (edit.selection != ViewCellSelection::cell) {
         throw Error(function + ": whole-row selection stores a row-default "
                     "entry, which is not a measured shape; only one cell is");
@@ -644,6 +657,143 @@ std::size_t block_end(ViewState const& state, std::size_t offset) {
     return offset + 4 + get_u32(state.var2, offset);
 }
 
+/* W35-3.4: Bold OFF on the cell whose Bold item the file holds.  The pair
+ * (wave35-g3-font-bold-off) shows Project rewriting that item IN PLACE: the
+ * flags word 0x01000003 -> 0x00000003 and the font word 0x90000001 ->
+ * 0x90000000, nothing else in the view streams (Var2Data keeps its 100,234
+ * bytes, VarMeta and 214/Props are untouched).  Everything is therefore the
+ * file's own bytes except those two words, and the Props14 marker. */
+constexpr std::size_t kCellEntryFlagsAt = 8;
+constexpr std::size_t kCellEntryFontAt = 40;
+constexpr std::uint32_t kBoldOffFlags = 0x00000003u;
+constexpr std::uint32_t kBoldOffFontWord = 0x90000000u;
+
+ViewCellStyleWrite unbold_cell(CfbDocument& doc, ViewCellStyleEdit const& edit,
+                               std::string const& path, bool dry_run,
+                               std::string const& function) {
+    CfbDocument const opened = doc;
+    ViewState const state = load_view(doc, edit.view_uid, function, true);
+    if (state.cell_format_items != 1) {
+        throw Error(function + ": turning Bold off is measured on a view block "
+                    "that carries exactly one cell format item (the Bold item); "
+                    "this block carries " +
+                    std::to_string(state.cell_format_items));
+    }
+    std::size_t const item_bytes = kViewItemHeaderSize + kCellFormatEntrySize;
+    if (state.cell_item_offset + item_bytes != state.payload_length) {
+        throw Error(function + ": the cell format item is not the last item of "
+                    "the view block, which is where the measured pair appended "
+                    "it; turning Bold off on another layout is refused");
+    }
+    require_measured_view(doc, state, edit, function, state.cell_item_offset,
+                          item_bytes);
+    std::size_t const item_at =
+        state.block_offset + 4 + state.cell_item_offset;
+    Bytes const bold_on = build_item(edit);
+    if (!std::equal(bold_on.begin(), bold_on.end(),
+                    state.var2.begin() + static_cast<std::ptrdiff_t>(item_at))) {
+        throw Error(function + ": the block's cell format item is not the "
+                    "measured Bold item for row uid " + std::to_string(edit.uid) +
+                    ", field " + hex_u32(edit.field_id) +
+                    " (flags " + hex_u32(kCellFormatFlags) + ", font word " +
+                    hex_u32(kMeasuredFontWord) + "); only that item can be "
+                    "turned off");
+    }
+
+    Bytes var2 = state.var2;
+    put_u32(var2, item_at + kViewItemHeaderSize + kCellEntryFlagsAt,
+            kBoldOffFlags);
+    put_u32(var2, item_at + kViewItemHeaderSize + kCellEntryFontAt,
+            kBoldOffFontWord);
+    CfbDocument work = doc;
+    work.replace_stream(std::string(kViewTable) + "/Var2Data", var2);
+    EditMarker const marker = write_edit_marker(work);
+    if (marker.record_present && marker.after != kEditMarkerAfterSave) {
+        throw Error(function + ": the staged document's Props14 marker is " +
+                    std::to_string(marker.after) + ", not 1");
+    }
+
+    auto summary = [&](ViewState const& shown) {
+        ViewCellStyleWrite out;
+        out.view_uid = edit.view_uid;
+        out.uid = edit.uid;
+        out.field_id = edit.field_id;
+        out.block_offset = state.block_offset;
+        out.block_payload_before = state.payload_length;
+        out.block_payload_after = shown.payload_length;
+        out.item_count_before = state.item_count;
+        out.item_count_after = shown.item_count;
+        out.appended_bytes = 0;
+        out.var2_bytes_before = state.var2.size();
+        out.var2_bytes_after = shown.var2.size();
+        out.repointed_entries = 0;
+        out.props_value_before = state.props_value;
+        out.props_value_after = shown.props_value;
+        return out;
+    };
+    ViewState const staged = load_view(work, edit.view_uid, function, true);
+    if (staged.var2.size() != state.var2.size() ||
+        staged.item_count != state.item_count ||
+        staged.cell_format_items != 1) {
+        throw Error(function + ": the staged view does not keep its counts");
+    }
+    if (dry_run) {
+        return summary(staged);
+    }
+
+    Bytes const intended = work.to_bytes();
+    work.save(path);
+    Bytes const on_disk = read_file_bytes(path);
+    if (on_disk != intended) {
+        throw Error(function + ": " + path + " holds " +
+                    std::to_string(on_disk.size()) + " bytes, but the document "
+                    "built " + std::to_string(intended.size()) +
+                    "; the write did not land");
+    }
+    CfbDocument reread = CfbDocument::from_file(path);
+    if (reread.to_bytes() != on_disk) {
+        throw Error(function + ": the written file does not re-emit "
+                    "byte-identically");
+    }
+    if (!reread.check().empty()) {
+        throw Error(function + ": the written container is inconsistent: " +
+                    reread.check());
+    }
+    ViewState const after = load_view(reread, edit.view_uid, function, true);
+    Bytes const opened_var2 =
+        opened.read_stream(std::string(kViewTable) + "/Var2Data");
+    if (after.var2.size() != opened_var2.size()) {
+        throw Error(function + ": the written Var2Data changed size");
+    }
+    for (std::size_t i = 0; i < opened_var2.size(); ++i) {
+        bool const flags_word = i >= item_at + kViewItemHeaderSize + kCellEntryFlagsAt &&
+                                i < item_at + kViewItemHeaderSize + kCellEntryFlagsAt + 4;
+        bool const font_word = i >= item_at + kViewItemHeaderSize + kCellEntryFontAt &&
+                               i < item_at + kViewItemHeaderSize + kCellEntryFontAt + 4;
+        if (!flags_word && !font_word && after.var2[i] != opened_var2[i]) {
+            throw Error(function + ": the written Var2Data changed at byte " +
+                        std::to_string(i) +
+                        ", outside the item's flags and font words");
+        }
+    }
+    if (get_u32(after.var2, item_at + kViewItemHeaderSize + kCellEntryFlagsAt) !=
+            kBoldOffFlags ||
+        get_u32(after.var2, item_at + kViewItemHeaderSize + kCellEntryFontAt) !=
+            kBoldOffFontWord) {
+        throw Error(function + ": the written item does not hold the measured "
+                    "Bold-off words");
+    }
+    if (after.var_meta != state.var_meta || after.props != state.props) {
+        throw Error(function + ": the written VarMeta or 214/Props changed; "
+                    "turning Bold off rewrites the item in place and owns "
+                    "neither");
+    }
+    prove_only_owned_streams_changed(opened, reread, function);
+    ViewCellStyleWrite written = summary(after);
+    doc = std::move(reread);
+    return written;
+}
+
 } /* namespace */
 
 ViewCellStyleWrite save_view_cell_style(
@@ -660,6 +810,9 @@ ViewCellStyleWrite save_view_cell_style(
     }
     ViewCellStyleEdit const& edit = edits.front();
     validate_edit(edit, function);
+    if (!edit.enabled) {
+        return unbold_cell(doc, edit, path, dry_run, function);
+    }
 
     CfbDocument const opened = doc;
     ViewState state = load_view(doc, edit.view_uid, function);

@@ -71,9 +71,16 @@
  *   block state      no 0x2240000c item in the target block
  *   edits per save   exactly one
  *
- * "Bold set" is the measured direction only: turning Bold OFF would be a
- * replace or a remove of the item, and no pair measures either (`wave30-textstyle`
- * starts from an unformatted control and appends).  The payload's row uid and
+ * "Bold set" appends (`wave30-textstyle` starts from an unformatted control).
+ * Bold OFF (W35-3.4, `wave35-g3-font-bold-off`) is the second measured
+ * direction: on a block that carries exactly one cell format item, the measured
+ * Bold item for the measured cell, last in the block, Project rewrites the
+ * item IN PLACE (flags 0x01000003 -> 0x00000003, font word 0x90000001 ->
+ * 0x90000000; no size, offset or Props change), and so does `enabled = false`
+ * here.  Every other un-format (another item, another layout, a second item) is
+ * refused.  The shells still build only `enabled = true` edits.  The block
+ * digest masks one noise byte (payload offset 42,678) because a control saved
+ * by another Project session differs there.  The payload's row uid and
  * field id are pinned to the cell the pair measures, uid 1 / field 0x0B40000E
  * (Task/Name); any other row or field is refused (W35-0.4, RC-W8).
  *
@@ -81,7 +88,7 @@
  * test in tests/roundtrip_viewstream.cpp):
  *   - a count other than one, an empty or unusable output path, uid 0, a uid
  *     other than the measured 1, field id 0, a field id other than the
- *     measured 0x0B40000E, an attribute other than Bold, Bold not set, a whole-row selection,
+ *     measured 0x0B40000E, an attribute other than Bold, Bold off without the one measured Bold item, a whole-row selection,
  *     a view uid other than the measured 2;
  *   - a missing 214/CV_iew/VarMeta, Var2Data or 214/Props stream; a VarMeta
  *     that is not 24 + 12*n, a magic or declared count that is not the physical
@@ -170,7 +177,8 @@ struct ViewCellStyleEdit {
     std::uint32_t field_id = 0;  /* the cell's field id; measured 0x0b40000e */
     ViewCellAttribute attribute = ViewCellAttribute::bold;
     ViewCellSelection selection = ViewCellSelection::cell;
-    bool enabled = true; /* measured true only (an append, never a replace) */
+    bool enabled = true; /* true appends the Bold item; false turns the one Bold
+                          * item the block carries off in place (W35-3.4) */
 };
 
 /* What the write proved from the file on disk. */

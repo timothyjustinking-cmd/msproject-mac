@@ -137,6 +137,78 @@ selection, every view uid but the measured 2, and the project summary row
 (uid 0). A future pair that varies exactly one of those factors is what would
 extend it.
 
+### W35-3.4: Font controls beyond one Bold cell, and Renumber
+
+Ten pairs, each with its null save, through `scripts/oracle_w35_g3.py` (the
+reports are `evidence/wave35-g3-font-*.md` and `wave35-g3-wbs-renumber-defined.md`).
+Every font pair changes only `214/CV_iew/Var2Data` (+56 bytes, one appended
+`0x2240000c` item, except Bold off, below), `214/CV_iew/VarMeta` and
+`214/Props` (the size words), plus the `Props14` marker.  The appended entry,
+in words after the row uid and field id:
+
+| pair | row uid | field | flags | colour words | font word |
+|---|---|---|---|---|---|
+| Bold, Name, row 1 (wave 30) | 1 | `0x0b40000e` | `0x01000003` | `ff000000 0 0 ff000000 0 0`, pattern 1 | `0x90000001` |
+| Bold, Name, row 2 | 2 | `0x0b40000e` | `0x01000003` | same | `0x6b000001` |
+| Bold, Start, row 1 | 1 | `0x0b400505` | `0x01000003` | same | `0x00000001` |
+| Bold over a two-row selection | 2 | `0x0b40000e` | `0x01000003` | same | `0x00000001` |
+| Italic (toolbar call) | 1 | `0x0b40000e` | `0x02000003` | same | `0x6b000004` |
+| Underline (`Font32Ex`) | 1 | `0x0b40000e` | `0x04000003` | all zero, pattern 0 | `0x000000ca` |
+| size 14 (`Font32Ex`) | 1 | `0x0b40000e` | `0x00000006` | all zero, pattern 0 | `0x6b0000d8` |
+| name Arial (`Font32Ex`) | 1 | `0x0b40000e` | `0x00000006` | all zero, pattern 0 | `0x340000d8` |
+| colour 255 (`Font32Ex`) | 1 | `0x0b40000e` | `0x00000003` | `000000ff` then zeros | `0xd70000c8` |
+
+What this settles:
+
+- **Another cell and another column** change only the row uid and the field id
+  of the entry: the structure, the 56-byte growth and every offset rewrite are
+  the Bold pair's.
+- **The font word's top byte is not a function of the edit.**  Four Bold saves of
+  the same attribute store `0x90`, `0x6b`, `0x00` and `0x00` in it, so it is
+  uninitialised memory and no writer can match it byte for byte on an append.
+  The wave-30 pair matches the port's `0x90000001` only because that session
+  happened to store `0x90`.  The compare harness records a mismatch there as a
+  named expected failure, and a command is not enabled on an expected failure
+  (standing rule 1), so none of the append shapes above is enabled.  The
+  existing Bold-on writer is unchanged and still matches the wave-30 pair.
+- **Italic** is the same structure with flags `0x02000003` and a font word whose
+  low byte is `0x04`; **Bold off** shows the flags byte is a per-attribute
+  mask.  Underline, size, name and colour were applied through `Font32Ex`, which
+  writes a different entry (zero colour words, pattern 0, flags `0x06` or `0x04`
+  and a font word whose low byte is also noise-like: `0xca`, `0xd8`, `0xd8`,
+  `0xc8`); the item carries no font name or size, so where the name, size and
+  colour are stored is not in the appended item.  `FontUnderline(True)` could not
+  be called through late binding ("'bool' object is not callable"), so the
+  toolbar Underline shape is unmeasured.
+- **A range** (`SelectTaskField` row 1 extended to row 2, then `FontBold(True)`)
+  stored ONE item, for row 2: the extended selection did not store one item per
+  row, or did not select both rows.  The range shape is unmeasured.
+- **Bold off** (`wave35-g3-font-bold-off`, from the wave-30 Bold file resaved
+  by Project) rewrites the existing item in place: flags `0x01000003` ->
+  `0x00000003` and font word `0x90000001` -> `0x90000000`, two bytes in all;
+  `CV_iew/Var2Data` keeps 100,234 bytes and VarMeta and `214/Props` are
+  untouched.  The top byte of the font word is kept from the control, so this
+  direction has no noise problem.  `core/mppwrite/viewstream_edit` implements
+  exactly this (`ViewCellStyleEdit::enabled = false`) and the pair test proves it
+  with zero KnownGaps; the edit model and the shells do not build such an edit
+  yet.
+- **Block digest.**  A control saved by another Project session differs from the
+  wave-30 control at payload offset 42,678 (`0x18` -> `0x26`) and nowhere else
+  in the block; the byte holds six values (`0x15 0x16 0x17 0x18 0x1c 0x26`)
+  across the 258 committed saves that share the rest of the block, so it is
+  per-save noise, and the writer's pinned block digest now masks it
+  (`0xd2f37d751e6e8333`, the value all 258 share).
+
+**Renumber** (`wave35-g3-wbs-renumber-defined`: `wave30-wbs-code.mpp` resaved,
+then `WBSCodeRenumber(All=True)`): on the three-task file whose numbers already
+follow the definition (`W01`, `W02`, `W03`) Renumber changes nothing but the
+`Props14` marker (one effect byte; every other byte is per-save noise).  On
+`wave30-wbs-control.mpp`, which has no code definition, Project refuses the call
+(`The method is not available in this situation`, `build/w35/g3-run7.log`).  The
+only measurable shape is therefore a no-op, and the shapes where Renumber does
+work (stale numbers after an insert or an outline change) need pre-states the
+port cannot yet produce, so Renumber stays disabled.
+
 ### COM facts
 
 The textstyle pair is a Project 2021 editor save after a cell text-style
@@ -168,9 +240,10 @@ writer and none is written blind.
 - The 11 `CV_iew` class entries are an in-memory class table, not 11
   storages: the measured file has one `214/CV_iew` stream set. The index is
   not visible in the file layout.
-- Replace and remove are unmeasured. Only append has been observed; whether a
-  second change to the same cell appends a second item or replaces the first
-  is open.
+- Replace and remove are measured only for Bold off on the one Bold item (an
+  in-place rewrite, W35-3.4).  Whether a second change to the same cell
+  appends a second item or replaces the first, for any other attribute, is
+  open.
 - The font word is not decoded (W34-2.1 above): the writer stores the measured
   `0x90000001` for Bold and refuses every other attribute and every unset.
 - The writer does not claim a second item, an item in a block that already
