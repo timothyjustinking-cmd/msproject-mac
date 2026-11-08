@@ -1570,6 +1570,7 @@ app::MenuState current_menu_state() {
     }
     state.has_document = true;
     state.task_view = app::view_mode_is_task(g_plan->view_mode);
+    state.resource_sheet_view = g_plan->view_mode == app::ViewMode::resource_sheet;
     state.editing = g_plan->sheet->editing();
     state.has_selection = g_plan->sheet->has_selection();
     // Either stack may hold the next step: a structural edit clears the sheet's
@@ -1946,6 +1947,7 @@ void show_shortcuts() {
                 @"Backspace: edit the text, or clear the cell\n"
                 @"Cmd-Z / Cmd-Shift-Z: undo / redo\n"
                 @"Cmd-C / Cmd-V: copy / paste\n"
+                @"Cmd-B: bold the selected cell (one cell)\n"
                 @"Cmd-F / Cmd-Shift-F: filter / clear filter\n"
                 @"Cmd-Shift-D: working-day shading\n"
                 @"Cmd-1 / Cmd-2 / Cmd-3: day / week / month timescale\n"
@@ -2717,6 +2719,11 @@ BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) 
 - (void)performMenuAction:(id)sender;
 - (void)insertTask:(id)sender;
 - (void)addResources:(id)sender;
+- (void)resourceInformation:(id)sender;
+- (void)assignResources:(id)sender;
+- (void)fontBold:(id)sender;
+- (void)defineWbsCode:(id)sender;
+- (void)calculateProject:(id)sender;
 - (void)deleteTask:(id)sender;
 - (void)indentTask:(id)sender;
 - (void)outdentTask:(id)sender;
@@ -3137,6 +3144,21 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         case app::MenuAction::insert_resource:
             [self addResources:nil];
             return;
+        case app::MenuAction::resource_information:
+            [self resourceInformation:nil];
+            return;
+        case app::MenuAction::assign_resources:
+            [self assignResources:nil];
+            return;
+        case app::MenuAction::font_bold:
+            [self fontBold:nil];
+            return;
+        case app::MenuAction::define_wbs_code:
+            [self defineWbsCode:nil];
+            return;
+        case app::MenuAction::calculate_project:
+            [self calculateProject:nil];
+            return;
     }
 }
 
@@ -3189,6 +3211,337 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     apply_structural_change(plan);
     note(plan, "queued a new resource (uid " + std::to_string(uid) +
                    "; pending; Save writes it)",
+         false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
+}
+
+// Resource Information (W35-4.1, from W34-4.1): rename one resource.  Only the name
+// is editable (the measured shape); the shared builder owns every refusal
+// (assigned, shorter / same-size, non-ASCII, empty).  The Qt shell picks the
+// resource from the sheet's selection; this shell's resource grid has no cell
+// selection, so the dialog chooses the resource.  Resource Sheet view only.
+- (void)resourceInformation:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet != nullptr && plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    if (plan.view_mode != app::ViewMode::resource_sheet) {
+        note(plan, "resource information is available in the Resource Sheet view", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    std::vector<std::uint32_t> uids;
+    NSPopUpButton* popup =
+        [[NSPopUpButton alloc] initWithFrame:NSMakeRect(0.0, 30.0, 320.0, 25.0) pullsDown:NO];
+    for (const app::ResourceRow& resource : plan.base.resources) {
+        if (resource.uid != 0) {
+            [popup addItemWithTitle:to_ns(resource.name)];
+            uids.push_back(resource.uid);
+        }
+    }
+    if (uids.empty()) {
+        note(plan, "resource information: the project has no resources", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    NSTextField* name_field =
+        [[NSTextField alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 24.0)];
+    [name_field setPlaceholderString:@"New name"];
+    NSView* accessory = [[NSView alloc] initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 58.0)];
+    [accessory addSubview:popup];
+    [accessory addSubview:name_field];
+    NSAlert* alert = [[NSAlert alloc] init];
+    [alert setMessageText:@"Resource Information"];
+    [alert setInformativeText:@"Choose the resource and type its new name. The rename is "
+                              @"written to the .mpp when you save."];
+    [alert addButtonWithTitle:@"Rename"];
+    [alert addButtonWithTitle:@"Cancel"];
+    [alert setAccessoryView:accessory];
+    if ([alert runModal] != NSAlertFirstButtonReturn) {
+        note(plan, "resource information cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const NSInteger chosen = [popup indexOfSelectedItem];
+    if (chosen < 0 || static_cast<std::size_t>(chosen) >= uids.size()) {
+        note(plan, "resource information cancelled", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const std::uint32_t uid = uids[static_cast<std::size_t>(chosen)];
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_rename_resource_edit(plan.base, plan.path, uid,
+                                        to_std([name_field stringValue]), edit, error)) {
+        note(plan, "resource information: " + error, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (!plan.edits.push(std::move(edit), &plan.base)) {
+        note(plan, "resource information: the edit was refused", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    apply_structural_change(plan);
+    note(plan, "queued rename of resource uid " + std::to_string(uid) + "; Save writes it",
+         false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
+}
+
+// Assign Resources (W35-4.1, from W34-4.3): on the selected task, assign one
+// resource, or remove the task's one real assignment when it holds one.  The
+// shared builder owns every refusal (summary, started, material or part-time
+// resource, a second assignment, a stale file); this handler only chooses the
+// direction and the resource, exactly as the Qt shell does.  Task Sheet view only.
+- (void)assignResources:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet == nullptr || !app::view_mode_is_task(plan.view_mode)) {
+        note(plan, "Assign Resources is available in the Task Sheet view", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    const app::SelectedTask selected = app::selected_task(*plan.sheet, plan.row_map);
+    if (!selected.has_selection || selected.uid == 0) {
+        note(plan, "select a task first", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const std::uint32_t task_uid = selected.uid;
+    std::string task_name;
+    for (const app::TaskRow& task : plan.base.tasks) {
+        if (task.uid == task_uid) {
+            task_name = task.name;
+            break;
+        }
+    }
+    const std::uint32_t held_resource = app::held_assignment_resource(plan.base, task_uid);
+    std::uint32_t resource_uid = 0;
+    bool assign = true;
+    if (held_resource != 0) {
+        assign = false;
+        resource_uid = held_resource;
+        std::string resource_name = std::to_string(resource_uid);
+        for (const app::ResourceRow& resource : plan.base.resources) {
+            if (resource.uid == resource_uid) {
+                resource_name = resource.name;
+            }
+        }
+        NSAlert* confirm = [[NSAlert alloc] init];
+        [confirm setMessageText:@"Assign Resources"];
+        [confirm setInformativeText:
+                     to_ns("Remove \"" + resource_name + "\" from \"" + task_name +
+                           "\"?\n\nThis is a pending edit; Save writes it.")];
+        [confirm addButtonWithTitle:@"Remove"];
+        [confirm addButtonWithTitle:@"Cancel"];
+        if ([confirm runModal] != NSAlertFirstButtonReturn) {
+            note(plan, "assign resources cancelled", false);
+            [g_view setNeedsDisplay:YES];
+            return;
+        }
+    } else {
+        std::vector<std::uint32_t> uids;
+        NSPopUpButton* popup = [[NSPopUpButton alloc]
+            initWithFrame:NSMakeRect(0.0, 0.0, 320.0, 25.0)
+                pullsDown:NO];
+        for (const app::ResourceRow& resource : plan.base.resources) {
+            if (resource.uid != 0) {
+                [popup addItemWithTitle:to_ns(resource.name)];
+                uids.push_back(resource.uid);
+            }
+        }
+        if (uids.empty()) {
+            note(plan, "assign resources: the project has no resources", true);
+            [g_view setNeedsDisplay:YES];
+            return;
+        }
+        NSAlert* alert = [[NSAlert alloc] init];
+        [alert setMessageText:@"Assign Resources"];
+        [alert setInformativeText:to_ns("Resource to assign to \"" + task_name + "\":")];
+        [alert addButtonWithTitle:@"Assign"];
+        [alert addButtonWithTitle:@"Cancel"];
+        [alert setAccessoryView:popup];
+        if ([alert runModal] != NSAlertFirstButtonReturn) {
+            note(plan, "assign resources cancelled", false);
+            [g_view setNeedsDisplay:YES];
+            return;
+        }
+        const NSInteger chosen = [popup indexOfSelectedItem];
+        if (chosen < 0 || static_cast<std::size_t>(chosen) >= uids.size()) {
+            note(plan, "assign resources cancelled", false);
+            [g_view setNeedsDisplay:YES];
+            return;
+        }
+        resource_uid = uids[static_cast<std::size_t>(chosen)];
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_assignment_edit(plan.base, plan.path, task_uid, resource_uid, assign, edit,
+                                   error)) {
+        note(plan, "assign resources: " + error, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (!plan.edits.push(std::move(edit), &plan.base)) {
+        note(plan, "assign resources: the edit was refused", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    apply_structural_change(plan);
+    note(plan, std::string(assign ? "queued an assignment on task uid "
+                                  : "queued the removal of the assignment on task uid ") +
+                   std::to_string(task_uid) + "; Save writes it",
+         false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
+}
+
+// Font Bold (W35-4.1, from W34-4.5): bold the one selected cell.  A range is
+// refused with the shared text before anything is built; the shared builder
+// refuses every other row and column.  Task Sheet view only.
+- (void)fontBold:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet == nullptr || !app::view_mode_is_task(plan.view_mode)) {
+        note(plan, "Font Bold is available in the Task Sheet view", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    const app::SelectedTask selected = app::selected_task(*plan.sheet, plan.row_map);
+    if (!selected.has_selection || selected.uid == 0) {
+        note(plan, "select a cell first", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (!(plan.sheet->anchor() == plan.sheet->focus())) {
+        note(plan, "Font Bold: " + std::string(app::bold_range_refusal()), true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    const std::uint32_t task_uid = selected.uid;
+    // The sheet's field id for Task Name equals the stored one the writer is
+    // measured for; the builder names the refusal for any other column.
+    const std::uint32_t field_id = plan.sheet->column(plan.sheet->focus().column).field;
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_cell_bold_edit(plan.base, plan.path, task_uid, field_id, edit, error)) {
+        note(plan, "Font Bold: " + error, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (!plan.edits.push(std::move(edit), &plan.base)) {
+        note(plan, "Font Bold: the edit was refused", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    apply_structural_change(plan);
+    note(plan, "queued Font Bold on the Task Name cell of task uid " +
+                   std::to_string(task_uid) + "; Save writes it",
+         false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
+}
+
+// Define WBS Code (W35-4.1, from W34-4.6): no input; the shared builder owns every
+// refusal (the task count and shape, a file that already stores WBS text or a
+// code definition, a stale file).
+- (void)defineWbsCode:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet != nullptr && plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_wbs_code_edit(plan.base, plan.path, edit, error)) {
+        note(plan, "Define WBS Code: " + error, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (!plan.edits.push(std::move(edit), &plan.base)) {
+        note(plan, "Define WBS Code: the edit was refused", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    apply_structural_change(plan);
+    note(plan, "queued the WBS code W with ordered two-digit numbers; Save writes it", false);
+    [g_view refreshAfterChange];
+    refresh_menu_bar();
+}
+
+// Calculate Project (W35-4.1, from W35-1.3): no input; the shared builder owns
+// every refusal (the task count and shape, a link, a file whose recalculation is
+// not pending, a stale file).
+- (void)calculateProject:(id)sender {
+    (void)sender;
+    if (g_plan == nullptr) {
+        return;
+    }
+    PlanState& plan = *g_plan;
+    if (!plan.read_only_reason.empty()) {
+        note(plan, plan.read_only_reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (plan.sheet != nullptr && plan.sheet->editing()) {
+        plan.sheet->cancel_edit();
+    }
+    app::StructuralEdit edit;
+    std::string error;
+    if (!app::make_calculate_edit(plan.base, plan.path, edit, error)) {
+        note(plan, "Calculate Project: " + error, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    if (!plan.edits.push(std::move(edit), &plan.base)) {
+        note(plan, "Calculate Project: the edit was refused", true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    apply_structural_change(plan);
+    note(plan, "queued Calculate Project (the project row, two tasks' slack and late "
+               "dates); Save writes it",
          false);
     [g_view refreshAfterChange];
     refresh_menu_bar();

@@ -579,6 +579,14 @@ void check_refusals() {
 int main() {
     check_pair();
     check_refusals();
+    // W35-4.1: the range refusal both shells print names the cause and the pair.
+    {
+        const std::string text(app::bold_range_refusal());
+        check(text.find("more than one cell") != std::string::npos &&
+                  text.find("single cell") != std::string::npos &&
+                  text.find("is not implemented in this port") != std::string::npos,
+              "the shared Font Bold range refusal names the cause and the measured pair");
+    }
     std::printf("app_edits_cell_bold_tests: %d checks passed\n", g_checks - g_failures);
     if (g_failures != 0) {
         std::printf("app_edits_cell_bold_tests: %d FAILURE(S)\n", g_failures);

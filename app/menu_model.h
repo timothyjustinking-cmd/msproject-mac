@@ -97,6 +97,14 @@ enum class MenuAction : std::uint8_t {
     // two share app::build_print_job()'s layout (app/page_layout.h).
     print,
     save_as_pdf,
+    // Wave 35 (W35-4.1): the commands waves 34 and 35 enabled in the Qt shell.  Each
+    // routes through the same shared builder (app/edit_model.h) the Qt shell calls,
+    // so a refusal exists in both shells or neither.
+    resource_information,
+    assign_resources,
+    font_bold,
+    define_wbs_code,
+    calculate_project,
 };
 
 // Every action, for tests and for the shell's exhaustive dispatch check.
@@ -157,6 +165,9 @@ struct MenuState {
     // collapse, PDF export) degrade cleanly to disabled rather than acting on a
     // hidden task sheet.  The view and usage-period switches stay enabled.
     bool task_view = true;
+    // Wave 35: true only in the Resource Sheet view.  Resource Information is a
+    // Resource Sheet command in the Qt shell, so the menu item mirrors it.
+    bool resource_sheet_view = false;
 };
 
 // True when `action` may run in `state`.  An action the model cannot support is

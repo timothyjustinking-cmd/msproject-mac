@@ -3168,18 +3168,12 @@ void MainWindow::assign_resources() {
     const std::uint32_t task_uid = task->uid;
     const QString task_name = to_q(task->name);
     // The task's one real assignment, if it has one: the command then removes it.
-    const app::AssignmentRow* held = nullptr;
-    for (const app::AssignmentRow& row : plan.assignments) {
-        if (row.task_uid == task_uid && row.resource_uid != 0) {
-            held = &row;
-            break;
-        }
-    }
+    const std::uint32_t held_resource = app::held_assignment_resource(plan, task_uid);
     std::uint32_t resource_uid = 0;
     bool assign = true;
-    if (held != nullptr) {
+    if (held_resource != 0) {
         assign = false;
-        resource_uid = held->resource_uid;
+        resource_uid = held_resource;
         QString resource_name = to_q(std::to_string(resource_uid));
         for (const app::ResourceRow& resource : plan.resources) {
             if (resource.uid == resource_uid) {
@@ -3260,9 +3254,7 @@ void MainWindow::bold_selected_cell() {
     // W34-4.5: one cell only.  The measured pair bolds a single Task Name cell,
     // so a range is refused with the reason before anything is built.
     if (!(sheet.anchor() == sheet.focus())) {
-        set_message("Font Bold: Font Bold on more than one cell is not implemented in this "
-                    "port: the measured Project pair bolds a single cell",
-                    true);
+        set_message("Font Bold: " + std::string(app::bold_range_refusal()), true);
         update_status();
         return;
     }

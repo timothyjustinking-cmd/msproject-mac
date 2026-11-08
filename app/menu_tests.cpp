@@ -60,6 +60,9 @@ MenuState everything_state() {
     state.filter_active = true;
     state.any_collapsed = true;
     state.any_expanded = true;
+    // Both view flags are set so the generic "enabled when possible" sweep reaches
+    // the Resource Sheet command; the view-specific tests below clear one.
+    state.resource_sheet_view = true;
     return state;
 }
 
@@ -505,6 +508,58 @@ void test_enablement() {
               "Insert Resource is disabled during a cell edit");
         check(!app::menu_item_enabled(MenuAction::insert_resource, empty),
               "Insert Resource is disabled without a document");
+    }
+    // W35-4.1: the five writer-backed commands.  Each is offered once, in Edit,
+    // and gated by the same preconditions the Qt shell checks before it calls the
+    // shared builder.
+    {
+        const MenuAction wave35[] = {
+            MenuAction::resource_information, MenuAction::assign_resources,
+            MenuAction::font_bold, MenuAction::define_wbs_code, MenuAction::calculate_project,
+        };
+        for (const MenuAction action : wave35) {
+            check(app::menu_item_supported(action), "a wave-35 command is supported");
+            check(count_items(action) == 1, "a wave-35 command is offered exactly once");
+            check(!app::menu_item_enabled(action, empty),
+                  "a wave-35 command is disabled without a document");
+            MenuState editing = full;
+            editing.editing = true;
+            check(!app::menu_item_enabled(action, editing),
+                  "a wave-35 command is disabled during a cell edit");
+        }
+        const MenuItemSpec* bold = app::find_menu_item(MenuAction::font_bold);
+        check(bold != nullptr && std::string(bold->key) == "b" && bold->command_key &&
+                  !bold->shift && !bold->option,
+              "Font Bold is Cmd-B");
+
+        MenuState task_only = full;
+        task_only.resource_sheet_view = false;
+        check(!app::menu_item_enabled(MenuAction::resource_information, task_only),
+              "Resource Information needs the Resource Sheet view");
+        check(app::menu_item_enabled(MenuAction::assign_resources, task_only),
+              "Assign Resources is enabled in the task view with a selection");
+        check(app::menu_item_enabled(MenuAction::font_bold, task_only),
+              "Font Bold is enabled in the task view with a selection");
+
+        MenuState resource_only = full;
+        resource_only.task_view = false;
+        check(app::menu_item_enabled(MenuAction::resource_information, resource_only),
+              "Resource Information is enabled in the Resource Sheet view");
+        check(!app::menu_item_enabled(MenuAction::assign_resources, resource_only),
+              "Assign Resources is disabled outside the task view");
+        check(!app::menu_item_enabled(MenuAction::font_bold, resource_only),
+              "Font Bold is disabled outside the task view");
+
+        MenuState no_selection = full;
+        no_selection.has_selection = false;
+        check(!app::menu_item_enabled(MenuAction::assign_resources, no_selection),
+              "Assign Resources needs a selected task");
+        check(!app::menu_item_enabled(MenuAction::font_bold, no_selection),
+              "Font Bold needs a selected cell");
+        check(app::menu_item_enabled(MenuAction::define_wbs_code, no_selection),
+              "Define WBS Code needs no selection");
+        check(app::menu_item_enabled(MenuAction::calculate_project, resource_only),
+              "Calculate Project is a project-level command in every view");
     }
     check(app::menu_item_supported(MenuAction::insert_task), "Insert Task is supported");
     check(app::menu_item_supported(MenuAction::delete_task), "Delete Task is supported");
