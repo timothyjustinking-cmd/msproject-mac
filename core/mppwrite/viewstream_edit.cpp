@@ -226,15 +226,16 @@ ViewState load_view(CfbDocument const& doc, std::uint32_t view_uid,
                         " has the 0xFFFFFFFF no-block offset; no committed pair "
                         "stores one, so the view is refused");
         }
-        if (static_cast<std::size_t>(entry.offset) + 4 > state.var2.size()) {
+        if (static_cast<std::size_t>(entry.offset) > state.var2.size() ||
+            4 > state.var2.size() - static_cast<std::size_t>(entry.offset)) {
             throw Error(function + ": " + var_meta_path + " entry " +
                         std::to_string(entry.index) + " offset " +
                         std::to_string(entry.offset) +
                         " is past the end of Var2Data");
         }
         std::size_t const length = get_u32(state.var2, entry.offset);
-        if (static_cast<std::size_t>(entry.offset) + 4 + length >
-            state.var2.size()) {
+        if (length > state.var2.size() -
+                         static_cast<std::size_t>(entry.offset) - 4) {
             throw Error(function + ": " + var_meta_path + " entry " +
                         std::to_string(entry.index) +
                         " block runs past the end of Var2Data");
@@ -425,12 +426,14 @@ std::string applied_view_name(CfbDocument const& doc, std::string const& functio
                     "cannot be resolved");
     }
     std::uint32_t const offset = get_u32(var_meta, kVarMetaHeaderSize + 4);
-    if (static_cast<std::size_t>(offset) + 4 > var2.size()) {
+    if (static_cast<std::size_t>(offset) > var2.size() ||
+        4 > var2.size() - static_cast<std::size_t>(offset)) {
         throw Error(function + ": the 214/CEdl block starts past the end of "
                     "Var2Data");
     }
     std::size_t const length = get_u32(var2, offset);
-    if (length < 16 || static_cast<std::size_t>(offset) + 4 + length > var2.size()) {
+    if (length < 16 ||
+        length > var2.size() - static_cast<std::size_t>(offset) - 4) {
         throw Error(function + ": the 214/CEdl block does not fit Var2Data");
     }
     std::size_t const start = static_cast<std::size_t>(offset) + 4;

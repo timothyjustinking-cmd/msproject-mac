@@ -929,6 +929,22 @@ void test_refusals(TestContext& t) {
                      },
                      "0xFFFFFFFF no-block offset",
                      "a 0xFFFFFFFF entry offset refused for a remove too");
+        /* W34b-1.1 (R34G3-3): offsets within four of 2^32 must be refused as
+         * past the end of Var2Data, not wrapped by the +4 of the bounds check. */
+        for (std::uint32_t const wild : {0xFFFFFFFCu, 0xFFFFFFFDu, 0xFFFFFFFEu}) {
+            std::vector<std::uint8_t> wrapped = var_meta;
+            put_u32_at(wrapped, at + 4, wild);
+            CfbDocument wild_doc =
+                with_stream("wave30-notes-control.mpp", kTaskVarMeta, wrapped);
+            expect_error(t,
+                         [&] {
+                             (void)mppwrite::save_var_record(
+                                 wild_doc, mppwrite::kVarTaskTable, edits, missing);
+                         },
+                         "is past the end of Var2Data",
+                         "an entry offset 0x" + std::to_string(wild) +
+                             " (32-bit wrap) refused");
+        }
     }
     {
         /* A duplicated (uid, key) pair: overwrite a second uid 2 entry with the

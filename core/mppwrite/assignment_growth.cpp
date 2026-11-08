@@ -357,7 +357,9 @@ std::vector<VarEntryView> load_var_meta(Bytes const& var_meta,
         entry.uid = get_u32(var_meta, kVarMetaHeaderBytes + i * 12);
         entry.offset = get_u32(var_meta, kVarMetaHeaderBytes + i * 12 + 4);
         entry.key = get_u32(var_meta, kVarMetaHeaderBytes + i * 12 + 8);
-        if (entry.offset + 4 > var2.size()) {
+        /* Overflow-free (R34G3-3): offset + 4 wraps in 32 bits above
+         * 0xFFFFFFFB. */
+        if (entry.offset > var2.size() || 4 > var2.size() - entry.offset) {
             fail(std::string(what) + ": entry " + std::to_string(i) +
                  " points past Var2Data");
         }

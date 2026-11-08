@@ -384,15 +384,16 @@ TableState load_table(CfbDocument const& doc, std::string const& table,
                         " has the 0xFFFFFFFF no-block offset; no committed pair "
                         "stores one, so the table is refused");
         }
-        if (static_cast<std::size_t>(entry.offset) + 4 > state.var2.size()) {
+        if (static_cast<std::size_t>(entry.offset) > state.var2.size() ||
+            4 > state.var2.size() - static_cast<std::size_t>(entry.offset)) {
             throw Error(function + ": " + state.var_meta_path + " entry " +
                         std::to_string(entry.index) + " offset " +
                         std::to_string(entry.offset) +
                         " is past the end of Var2Data");
         }
         std::uint32_t const length = get_u32(state.var2, entry.offset);
-        if (static_cast<std::size_t>(entry.offset) + 4 + length >
-            state.var2.size()) {
+        if (length > state.var2.size() -
+                         static_cast<std::size_t>(entry.offset) - 4) {
             throw Error(function + ": " + state.var_meta_path + " entry " +
                         std::to_string(entry.index) +
                         " block runs past the end of Var2Data");

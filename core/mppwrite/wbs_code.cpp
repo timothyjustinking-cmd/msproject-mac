@@ -185,7 +185,8 @@ void check_directory_records(CfbDocument const& doc) {
     while (at + 12 <= props.size()) {
         std::uint32_t const length = get_u32(props, at);
         std::uint32_t const id = get_u32(props, at + 4);
-        if (((id >> 16) & 0xFFu) != 0x40u || at + 12 + length > props.size()) {
+        if (((id >> 16) & 0xFFu) != 0x40u ||
+            length > props.size() - at - 12) {
             break;
         }
         if (id == kMaskRecordId) {

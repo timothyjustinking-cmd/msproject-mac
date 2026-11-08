@@ -1695,6 +1695,17 @@ void test_add_damaged(TestContext& t) {
     refuses(with_edit(kAddControl, kAssnVarMeta,
                       [](Bytes& b) { put_u32_at(b, 24 + 4, 400); }),
             target, "points past Var2Data", "add: an entry past Var2Data");
+    /* W34b-1.1 (R34G3-3): an offset within four of 2^32 made offset + 4 wrap to
+     * a small number in 32-bit arithmetic, so the old check let get_u32 read
+     * far outside Var2Data.  It must be refused as past the end. */
+    refuses(with_edit(kAddControl, kAssnVarMeta,
+                      [](Bytes& b) { put_u32_at(b, 24 + 4, 0xFFFFFFFDu); }),
+            target, "points past Var2Data",
+            "add: an entry at offset 0xFFFFFFFD (32-bit wrap)");
+    refuses(with_edit(kAddControl, kAssnVarMeta,
+                      [](Bytes& b) { put_u32_at(b, 24 + 4, 0xFFFFFFFCu); }),
+            target, "points past Var2Data",
+            "add: an entry at offset 0xFFFFFFFC (32-bit wrap)");
     {
         CfbDocument const control = doc_from_data(kAddControl);
         std::size_t const first =
@@ -1964,6 +1975,10 @@ void test_remove_damaged(TestContext& t) {
     refuses(with_edit(kDeleteControl, kAssnVarMeta,
                       [](Bytes& b) { put_u32_at(b, 24 + 4, 640); }),
             target, "points past Var2Data", "remove: an entry past Var2Data");
+    refuses(with_edit(kDeleteControl, kAssnVarMeta,
+                      [](Bytes& b) { put_u32_at(b, 24 + 4, 0xFFFFFFFDu); }),
+            target, "points past Var2Data",
+            "remove: an entry at offset 0xFFFFFFFD (32-bit wrap)");
 
     refuses(with_edit(kDeleteControl, kProps,
                       [](Bytes& b) {

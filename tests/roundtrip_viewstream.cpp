@@ -655,6 +655,16 @@ void test_damaged_streams(TestContext& t) {
                 "is past the end of Var2Data",
                 "an entry offset past Var2Data refused");
     }
+    for (std::uint32_t const wild : {0xFFFFFFFCu, 0xFFFFFFFDu, 0xFFFFFFFEu}) {
+        /* W34b-1.1 (R34G3-3): an offset within four of 2^32 is past the end, not
+         * a small number after a wrapped +4. */
+        std::vector<std::uint8_t> damaged = meta;
+        put_u32_at(damaged, mppwrite::kVarMetaHeaderSize + 4, wild);
+        refuses(with_stream(kControl, kViewMeta, damaged),
+                "is past the end of Var2Data",
+                "an entry offset " + std::to_string(wild) +
+                    " (32-bit wrap) refused");
+    }
     {
         std::vector<std::uint8_t> damaged = var2;
         put_u32_at(damaged, 0, 0x7FFFFFFFu);
