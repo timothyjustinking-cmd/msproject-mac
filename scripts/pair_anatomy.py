@@ -225,7 +225,8 @@ for _view_pair in ("outline-all", "outline-deep-level1",
         "wave35-viewstate-%s.mpp" % _view_pair)
 
 # W35-3: the G3 pairs (scripts/oracle_w35_g3.py).
-for _g3_pair in ("insert-milestone-first", "insert-milestone-last",
+for _g3_pair in ("baseline-set-nested",
+                 "insert-milestone-first", "insert-milestone-last",
                  "insert-milestone-nested", "insert-summary-nested"):
     PAIRS["wave35-g3-" + _g3_pair] = (
         "wave35-g3-%s-control.mpp" % _g3_pair,
