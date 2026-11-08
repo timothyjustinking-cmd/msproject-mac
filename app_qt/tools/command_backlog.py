@@ -99,6 +99,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W34-4.6: the WBS split's Define Code... item queues the one WBS code
     # definition Project's pair measured (Renumber... stays disabled).
     "wbs_menu",
+    # W35-1.3: Calculate Project queues the one recalculation Project's
+    # wave35-calculate-unlinked pair measured.
+    "calculate_project",
     # W30-1.7: Scroll to Task scrolls the sheet to the selected row and pans
     # the chart to the task's start; a view, never a file write.
     "scroll_to_task",
@@ -206,6 +209,13 @@ RIBBON_GAPS = {
         "in the save; every other count, outline, prefix, separator or length, a "
         "redefinition, and Renumber... are refused as not implemented in this "
         "port (no Define Code dialog fields are built)",
+    # W35-1.3: Calculate Project for the measured shape.
+    "calculate_project":
+        "gap: a pending recalculation of the project row and exactly two "
+        "unlinked, automatically scheduled leaf tasks with no constraint, "
+        "progress or task calendar, alone in the save; a link, a lag, a "
+        "constraint, a summary, another task count and a file that is not "
+        "pending are refused as not implemented in this port",
     # W31-C4: the command buttons the old parser did not reach.
     "project_information":
         "gap: only the project priority has a measured writer; every other "

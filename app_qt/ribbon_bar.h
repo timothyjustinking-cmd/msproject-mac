@@ -123,6 +123,10 @@ enum class RibbonCommand : std::uint8_t {
     links_between_projects,
     update_project,
     move_project,
+    // Wave 35 (W35-1.3): the Project tab's Calculate Project (F9) queues the one
+    // measured recalculation (a pending Duration change on two unlinked
+    // automatic leaves); the builder owns every refusal.
+    calculate_project,
     // Wave 28 (W28-1.3): Mark on Track's main button on the measured actuals
     // writer.  Its drop-down has no measured menu, so only the button runs.
     mark_on_track,

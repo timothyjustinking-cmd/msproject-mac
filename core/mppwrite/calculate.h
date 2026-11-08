@@ -97,6 +97,12 @@ struct CalculateWrite {
 };
 
 /*
+ * The dry run of save_calculate: the shape check and every request check, with
+ * nothing written.  Throws Error with the text save_calculate would.
+ */
+void validate_calculate(CfbDocument const& doc, CalculateRequest const& request);
+
+/*
  * Apply the measured F9 save to `doc` and write the package to `path`.  Throws
  * Error on a shape or request refusal, naming the difference; then neither
  * `doc` nor a new output file has been left behind.

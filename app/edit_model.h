@@ -178,6 +178,15 @@ enum class StructuralKind : std::uint8_t {
     // definition is the only one -- and only a project with exactly the pair's
     // three flat tasks is enabled; like the kinds above it is EXCLUSIVE.
     define_wbs_code = 18,
+    // Wave 35 (W35-1.3): Project > Calculate Project (F9), written by mppwrite::
+    // save_calculate (core/mppwrite/calculate.h) against Project's
+    // wave35-calculate-unlinked pair.  The edit carries the recalculated words
+    // the engine computed -- `summary_duration` and `restored_finish` hold the
+    // project row's Duration and Finish, `slack` one entry per leaf -- and no
+    // row of its own (`uid` is 0).  Only the measured shape is enabled: a
+    // pending recalculation of the project row plus two unlinked automatic
+    // leaves.  Like the kinds above it is EXCLUSIVE.
+    calculate_project = 19,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -570,6 +579,23 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
 bool make_wbs_code_edit(const PlanInput& plan, std::string_view source_path,
                         StructuralEdit& out, std::string& error);
 
+// Builds a ready-to-push calculate_project edit (W35-1.3).  The plan-side rule
+// is the measured pair's own population: the project row plus exactly two
+// unlinked, automatically scheduled, top-level leaves with no constraint or
+// progress; any link, summary, manual row or other count is refused with the
+// "is not implemented in this port" text.  The FILE is the authority for the
+// rest: the mppwrite shape check requires the recalculation to be PENDING (the
+// project row's Finish is not yet the latest leaf Finish), and the recalculated
+// words -- the project Duration and Finish, and each leaf's free/start/total
+// slack and late dates -- are computed here from the file's rows and the project
+// calendar by the rule build_outline_slack established (the four wave-29 pairs)
+// and proved equal to Project's own result for this shape by
+// app_edits_calculate_tests.  The mppwrite dry run (validate_calculate) then
+// checks the request against the file, and its refusal is returned as the
+// reason.  `out` is default-constructed on refusal.
+bool make_calculate_edit(const PlanInput& plan, std::string_view source_path,
+                         StructuralEdit& out, std::string& error);
+
 // The one cell Font Bold is measured for: Task Name of the task with
 // UniqueID 1 (core/mppwrite/viewstream_edit.h, wave30-textstyle).
 inline constexpr std::uint32_t kBoldMeasuredTaskUid = 1;
@@ -868,6 +894,9 @@ struct StructuralSaveResult {
     std::size_t cell_styles_written = 0;
     // Wave 34 (W34-4.6): 1 when the WBS code was defined (four number blocks).
     std::size_t wbs_codes_written = 0;
+    // Wave 35 (W35-1.3): 1 when Calculate Project was written (the project row,
+    // two leaves and five overtime records).
+    std::size_t calculations_written = 0;
 
     // Wave 17: the document-edit seam (DocumentEditHook below).  All three stay
     // at their defaults when no hook was supplied -- that is exactly the

@@ -79,7 +79,7 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Project | Properties | Links Between Projects | implemented | gap: the port decodes no external project links; the dialog changes nothing |
 | Project | Properties | WBS | implemented | gap: Define Code... writes the prefix W with ordered two-digit numbers on a project of exactly three flat tasks that stores no WBS text, alone in the save; every other count, outline, prefix, separator or length, a redefinition, and Renumber... are refused as not implemented in this port (no Define Code dialog fields are built) |
 | Project | Properties | Change Working Time | implemented | gap: no calendar writer; the dialog changes nothing |
-| Project | Schedule | Calculate Project | disabled | future: not implemented in this port |
+| Project | Schedule | Calculate Project | implemented | gap: a pending recalculation of the project row and exactly two unlinked, automatically scheduled leaf tasks with no constraint, progress or task calendar, alone in the save; a link, a lag, a constraint, a summary, another task count and a file that is not pending are refused as not implemented in this port |
 | Project | Schedule | Set Baseline | disabled | future: not implemented in this port |
 | Project | Schedule | Move Project | implemented | gap: moving a project is not implemented; the prompt reports it and the file is unchanged |
 | Project | Status | Update Project | implemented |  |
@@ -189,8 +189,8 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 
 ## Summary
 
-* ribbon commands: 114 (64 disabled)
-* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 51 enabled / 63 disabled command controls. The table above reports 64 disabled because it counts a split by its menu items; the pin counts the control.
+* ribbon commands: 114 (63 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 52 enabled / 62 disabled command controls. The table above reports 63 disabled because it counts a split by its menu items; the pin counts the control.
 * the difference (1): 1 split whose button is live while every menu item is disabled: Project > Schedule > Set Baseline
 * menu commands: 51 (6 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

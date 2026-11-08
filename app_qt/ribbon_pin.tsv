@@ -128,7 +128,7 @@ Project	0	Properties	button	Links Between Projects	1	properties.links_between	0	
 Project	0	Properties	split	WBS	1	properties.wbs	0	-
 Project	0	Properties	button	Change Working Time	1	properties.change_working_time	0	-
 Project	0	Schedule	group	-	-	-	-	-
-Project	0	Schedule	button	Calculate Project	0	schedule.calculate	0	-
+Project	0	Schedule	button	Calculate Project	1	schedule.calculate	0	-
 Project	0	Schedule	split	Set Baseline	1	schedule.set_baseline	0	-
 Project	0	Schedule	button	Move Project	1	schedule.move	0	-
 Project	0	Status	group	-	-	-	-	-

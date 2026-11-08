@@ -530,6 +530,8 @@ const EnabledWiring kEnabledWiring[] = {
     {"Project", "Properties", "WBS", "", "wbs_menu"},
     {"Project", "Schedule", "Set Baseline", "", "set_baseline_menu"},
     {"Project", "Schedule", "Move Project", "", "move_project"},
+    // W35-1.3: Calculate Project is enabled for the measured shape only.
+    {"Project", "Schedule", "Calculate Project", "", "calculate_project"},
     {"Project", "Status", "Update Project", "", "update_project"},
     // W30-3.3: Spelling opens the read-only word-list report over task names.
     {"Project", "Proofing", "Spelling", "", "spelling"},
@@ -645,6 +647,7 @@ const char* command_name(RibbonCommand command) {
         case RibbonCommand::links_between_projects: return "links_between_projects";
         case RibbonCommand::update_project: return "update_project";
         case RibbonCommand::move_project: return "move_project";
+        case RibbonCommand::calculate_project: return "calculate_project";
         case RibbonCommand::mark_on_track: return "mark_on_track";
         case RibbonCommand::wbs_menu: return "wbs_menu";
         case RibbonCommand::wbs_define_code: return "wbs_define_code";

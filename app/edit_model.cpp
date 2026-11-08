@@ -27,6 +27,7 @@
 #include "actuals.h"
 #include "add_delete.h"
 #include "cal.h"
+#include "calculate.h"
 #include "cfb_writer.h"
 #include "field_values.h"
 #include "outline.h"
@@ -34,6 +35,7 @@
 #include "reader.h"
 #include "assignment_growth.h"
 #include "resource_growth.h"
+#include "row_writer.h"
 #include "save.h"
 #include "table.h"
 #include "task_mode.h"
@@ -95,7 +97,8 @@ bool is_exclusive_kind(StructuralKind kind) noexcept {
            kind == StructuralKind::assign_resource ||
            kind == StructuralKind::unassign_resource ||
            kind == StructuralKind::bold_cell ||
-           kind == StructuralKind::define_wbs_code;
+           kind == StructuralKind::define_wbs_code ||
+           kind == StructuralKind::calculate_project;
 }
 
 const TaskRow* task_row_for_uid(const std::vector<TaskRow>& tasks,
@@ -3224,6 +3227,154 @@ bool make_wbs_code_edit(const PlanInput& plan, std::string_view source_path,
     return true;
 }
 
+namespace {
+
+// W35-1.3: the plan-side half of the Calculate Project rule, shared by the
+// builder and push().  wave35-calculate-unlinked holds the project row and two
+// saved top-level automatic leaves with no link, constraint, progress or task
+// calendar; any other population is a different shape (the linked, lag and snet
+// pairs differ in words the writer does not model).  Returns the reason, or an
+// empty string.
+std::string calculate_plan_refusal(const PlanInput& plan) {
+    constexpr std::size_t kMeasuredLeaves = 2;
+    const std::string prefix = "Calculate Project is not implemented in this port ";
+    if (plan.tasks.size() != kMeasuredLeaves) {
+        return prefix + "for a project with " + std::to_string(plan.tasks.size()) +
+               " tasks: the measured Project pair has exactly " +
+               std::to_string(kMeasuredLeaves) + " tasks";
+    }
+    if (!plan.links.empty() || plan.skipped_links != 0) {
+        return prefix + "for a project with links: the measured Project pairs "
+                        "that recalculate a linked schedule write words this port "
+                        "does not model";
+    }
+    for (const TaskRow& task : plan.tasks) {
+        if (task.file_row == 0) {
+            return prefix + "while a task is pending: save the project first";
+        }
+        if (task.summary || task.outline_level != 0) {
+            return prefix + "for an outline: the measured Project pair has two "
+                            "top-level tasks and no summary";
+        }
+        if (task.manually_scheduled) {
+            return prefix + "for a manually scheduled task: the measured Project "
+                            "pair has automatic tasks";
+        }
+        if (task.constraint_type != 0) {
+            return prefix + "for a task with a constraint: the measured Project "
+                            "pair has none";
+        }
+        if (task.percent_complete != 0 || task.actual_duration_ticks != 0) {
+            return prefix + "for a task with progress: the measured Project pair "
+                            "has none";
+        }
+        if (task.calendar_uid != -1) {
+            return prefix + "for a task with its own calendar: the measured "
+                            "Project pair uses the project calendar";
+        }
+    }
+    return {};
+}
+
+}  // namespace
+
+bool make_calculate_edit(const PlanInput& plan, std::string_view source_path,
+                         StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (std::string reason = calculate_plan_refusal(plan); !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    const std::string prefix =
+        "Calculate Project is not implemented in this port for this project: ";
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    mppwrite::CalculateShape shape;
+    std::string shape_error;
+    if (!mppwrite::read_calculate_shape(document, shape, shape_error)) {
+        error = prefix + shape_error;
+        return false;
+    }
+    core::sched::Calendar calendar;
+    try {
+        calendar = core::cal::load_project_calendar(std::string(source_path));
+    } catch (const std::exception& calendar_error) {
+        error = std::string("the project calendar could not be read (") +
+                calendar_error.what() + ")";
+        return false;
+    }
+    // The recalculated words.  Every leaf finishes at or before the project
+    // finish (the latest leaf Finish), the unlinked backward pass gives each leaf
+    // the project finish as its late finish, and the slack is the working time
+    // between its finish and that date -- the same rule build_outline_slack
+    // proved on the four wave-29 automatic pairs, and equal to Project's own
+    // result for this pair (app_edits_calculate_tests).
+    mppwrite::CalculateRequest request;
+    request.project_duration = shape.critical_duration;
+    request.project_finish = shape.project_finish;
+    std::vector<OutlineSlackEntry> slack;
+    try {
+        const mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(document);
+        for (const std::uint32_t uid : shape.leaf_uids) {
+            const std::size_t row = rows.row_for_uid(uid);
+            const std::uint32_t finish = rows.u32(row, mppwrite::task_row::kFinish);
+            const std::uint32_t duration = rows.u32(row, mppwrite::task_row::kDuration);
+            const core::sched::ticks span = calendar.work_time_between(
+                static_cast<core::sched::date32>(finish),
+                static_cast<core::sched::date32>(shape.project_finish));
+            if (span < 0 || static_cast<std::uint64_t>(span) > 0x7FFFFFFFull) {
+                error = prefix + "task uid " + std::to_string(uid) +
+                        " has slack that does not fit the measured shape";
+                return false;
+            }
+            const core::sched::date32 late_start = calendar.sub_work(
+                static_cast<core::sched::date32>(shape.project_finish), duration);
+            const core::sched::date32 late_finish =
+                static_cast<core::sched::date32>(shape.project_finish);
+            if (core::sched::is_overflow(late_start) || core::sched::is_na(late_start) ||
+                core::sched::is_overflow(late_finish) || core::sched::is_na(late_finish)) {
+                error = prefix + "task uid " + std::to_string(uid) +
+                        "'s late dates overflow the project calendar";
+                return false;
+            }
+            mppwrite::CalculateLeaf leaf;
+            leaf.uid = uid;
+            leaf.late_start = late_start;
+            leaf.late_finish = late_finish;
+            leaf.free_slack = static_cast<std::int32_t>(span);
+            leaf.start_slack = leaf.free_slack;
+            leaf.total_slack = leaf.free_slack;
+            request.leaves.push_back(leaf);
+            OutlineSlackEntry entry;
+            entry.uid = uid;
+            entry.free_slack = static_cast<std::uint32_t>(span);
+            entry.start_slack = entry.free_slack;
+            entry.total_slack = entry.free_slack;
+            entry.late_start = late_start;
+            entry.late_finish = late_finish;
+            slack.push_back(entry);
+        }
+        // The writer's dry run validates the request against the FILE; nothing
+        // is written.
+        mppwrite::validate_calculate(document, request);
+    } catch (const std::exception& refusal) {
+        error = prefix + refusal.what();
+        return false;
+    }
+    out.kind = StructuralKind::calculate_project;
+    out.summary_duration = request.project_duration;
+    out.restored_finish = static_cast<date32>(request.project_finish);
+    out.slack = std::move(slack);
+    return true;
+}
+
 bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                            const std::vector<std::uint32_t>& pending_start_uids) {
     // W33-1.7 (A-8 / D-7): a document opened from a container with FAT slack
@@ -3671,6 +3822,22 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             // not the measured edit.
             if (plan == nullptr || edit.uid != 0 || !edit.name.empty() ||
                 !wbs_code_plan_refusal(*plan).empty()) {
+                return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
+        case StructuralKind::calculate_project: {
+            // W35-1.3: the plan-side half.  The file-side half (the mppwrite
+            // shape check and request validation) ran in make_calculate_edit
+            // and runs again in the writer; applied_ is empty by the exclusivity
+            // check above.  The edit has no row and no name, and carries one
+            // recalculated entry per plan task, so a hand-built one that does
+            // not is not the measured edit.
+            if (plan == nullptr || edit.uid != 0 || !edit.name.empty() ||
+                !calculate_plan_refusal(*plan).empty() ||
+                edit.slack.size() != plan->tasks.size()) {
                 return false;
             }
             edit.anchor_uid = 0;
@@ -4783,6 +4950,37 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
+    // W35-1.3: Calculate Project is exclusive the same way.
+    const StructuralEdit* calculate_edit = nullptr;
+    for (const StructuralEdit& edit : edits.applied()) {
+        if (edit.kind == StructuralKind::calculate_project) {
+            calculate_edit = &edit;
+        }
+    }
+    if (calculate_edit != nullptr) {
+        if (edits.applied().size() != 1) {
+            result.error =
+                "a Calculate Project edit must be the only edit in a save; another "
+                "edit is queued with it, and the measured Project pair is one "
+                "recalculation on an otherwise untouched save";
+            return result;
+        }
+        if (!writable.empty()) {
+            result.error =
+                "a Calculate Project edit cannot be combined with a start-date "
+                "edit; the measured Project pair is one recalculation on an "
+                "otherwise untouched save";
+            return result;
+        }
+        if (document_edits.any()) {
+            result.error =
+                "a Calculate Project edit cannot be combined with a table format "
+                "or custom-field formula edit; the measured Project pair is one "
+                "recalculation on an otherwise untouched save";
+            return result;
+        }
+    }
+
     // W31-0.1 (R30-1, High): a link add and a slack-carrying outline edit in
     // the same save would write the link at step 2 and the UNLINKED slack and
     // late dates at step 5b.  push() and validate_link_add refuse the order the
@@ -5004,6 +5202,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     }
     if (wbs_edit != nullptr) {
         ++write_ops;  // the Task WBS streams, 114/Props and Props14, one file
+    }
+    if (calculate_edit != nullptr) {
+        ++write_ops;  // the recalculated rows, five records, Props and Props14
     }
     const bool finish_with_start_edits = !writable.empty();
     if (finish_with_start_edits) {
@@ -5633,6 +5834,38 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 std::to_string(written.var2_bytes_after) + " bytes)");
         }
 
+        // 5k (wave 35, W35-1.3).  The measured Calculate Project save: the
+        // recalculated project row and leaves, five overtime records, the two
+        // 114/Props records, the summary and the marker (core/mppwrite/
+        // calculate.h).  The edit is exclusive (checked above); a dry run first
+        // proves the file is still the one the edit was built from, then the
+        // writer re-validates and writes the target once.  A refusal is an
+        // exception, reported as the save error.
+        if (calculate_edit != nullptr) {
+            mppwrite::CalculateRequest request;
+            request.project_duration = calculate_edit->summary_duration;
+            request.project_finish = calculate_edit->restored_finish;
+            for (const OutlineSlackEntry& entry : calculate_edit->slack) {
+                mppwrite::CalculateLeaf leaf;
+                leaf.uid = entry.uid;
+                leaf.late_start = entry.late_start;
+                leaf.late_finish = entry.late_finish;
+                leaf.free_slack = static_cast<std::int32_t>(entry.free_slack);
+                leaf.start_slack = static_cast<std::int32_t>(entry.start_slack);
+                leaf.total_slack = static_cast<std::int32_t>(entry.total_slack);
+                request.leaves.push_back(leaf);
+            }
+            mppwrite::validate_calculate(document, request);
+            const mppwrite::CalculateWrite written =
+                mppwrite::save_calculate(document, request, next_write_path());
+            result.calculations_written = 1;
+            result.notes.push_back(
+                "project calculated (" + std::to_string(written.leaves_written) +
+                " tasks recalculated, " +
+                std::to_string(written.var_records_appended) +
+                " project-row records appended)");
+        }
+
         // 6. start dates, through the normal W37 path (one file, last).
         if (finish_with_start_edits) {
             std::vector<mppwrite::DateEdit> date_edits;
@@ -5714,6 +5947,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
         if (result.wbs_codes_written != 0) {
             result.api += " save_wbs_code";
+        }
+        if (result.calculations_written != 0) {
+            result.api += " save_calculate";
         }
         if (finish_with_start_edits) {
             result.api += " save_date_edits";

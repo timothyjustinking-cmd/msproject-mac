@@ -663,6 +663,27 @@ if(APP_BUILD_TESTS)
     add_test(NAME app_edits_wbs COMMAND app_edits_wbs_tests)
     set_tests_properties(app_edits_wbs PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
 
+    # Wave 35 (W35-1.3): Calculate Project through the app's edit model and save
+    # cascade against Project's wave35-calculate-unlinked pair -- the computed
+    # recalculation words equal Project's own, every stream under the null-save
+    # discipline with the eight owned streams declared changed, the plan-side and
+    # file-side refusals (the linked, lag and snet pairs among them), exclusivity
+    # and the single target write.  Writes only under APP_TEST_OUT_DIR.
+    add_executable(app_edits_calculate_tests app_edits_calculate_tests.cpp)
+    target_compile_features(app_edits_calculate_tests PRIVATE cxx_std_20)
+    target_include_directories(app_edits_calculate_tests PRIVATE
+        "${APP_REPO_ROOT}/tests")
+    set_target_properties(app_edits_calculate_tests PROPERTIES CXX_EXTENSIONS OFF)
+    target_link_libraries(app_edits_calculate_tests PRIVATE app_layout)
+    target_compile_definitions(app_edits_calculate_tests PRIVATE
+        APP_TEST_DATA_DIR="${APP_TEST_DATA_DIR_CMAKE}"
+        APP_TEST_OUT_DIR="${APP_TEST_OUT_DIR_CMAKE}"
+    )
+    app_set_warnings(app_edits_calculate_tests)
+
+    add_test(NAME app_edits_calculate COMMAND app_edits_calculate_tests)
+    set_tests_properties(app_edits_calculate PROPERTIES WORKING_DIRECTORY "${APP_REPO_ROOT}")
+
     # Wave 26 (W26-3.1): the file's Gantt style record -- the row -> Text Styles
     # category rule and the headless read seam.  The stock fixture is committed;
     # the PROJECT_A half skips when corpus/ is absent.
