@@ -254,3 +254,63 @@ expanded); that is a read-side gap, not a write-side one.
 Show All comparison, dry run and every writer refusal), `app_edits_show_level` (edit model
 and cascade against the same pairs) and `qt_outline_persist` (the shell). Mutation checks
 and gate logs are recorded in `docs/handoff/wave35-complete.md`.
+
+## 4. Zoom (W35-2.4): DEFERRED with evidence
+
+Pairs (`Application.ZoomTimescale`, each with a null save): `wave35-viewstate-zoom-custom`
+(`ZoomTimescale("2w")`), `-custom-10d` (`"10d"`), `-custom-narrow` (`"2w"` again after the
+Project window was made 900 wide), `-entire` (Entire Project) and `-reset` (Reset).
+Reports: [`evidence/wave35-viewstate-zoom-custom.md`](evidence/wave35-viewstate-zoom-custom.md),
+[`-10d`](evidence/wave35-viewstate-zoom-custom-10d.md),
+[`-narrow`](evidence/wave35-viewstate-zoom-custom-narrow.md),
+[`-entire`](evidence/wave35-viewstate-zoom-entire.md),
+[`-reset`](evidence/wave35-viewstate-zoom-reset.md).
+
+### 4.1 What a zoom changes
+
+Each pair changes `214/CV_iew/Var2Data` (83 to 86 effect bytes in 44 runs between offsets
+44,854 and 85,125 of the 100,178-byte stream) and the edit marker. Entire Project also
+changes eight bytes of `114/TBkndTask/FixedMeta`. `214/CEdl/Var2Data` differs in every
+pair, but the control, null and edit saves there differ by the length of the saving
+file's path record as in 3.3 (570, 590 and 554 bytes for `-custom`), so it is not read as
+an effect of the zoom. No other stream moves.
+
+### 4.2 Why it is not written
+
+The stored words are not a function of the zoom request. The same call, `ZoomTimescale("2w")`,
+saved from two Project window widths (the default window and 900 wide), gives two different
+saves from the SAME control (the null saves are byte-identical):
+
+| bytes at 44,936 (`214/CV_iew/Var2Data`) | value |
+|---|---|
+| null save | `00 00 64 00 00 00 40 38 00 00 64 00 …` |
+| 2 weeks, default window | `00 00 57 02 00 00 00 48 6e 0d b2 00 …` |
+| 2 weeks, window 900 wide | `00 00 ff 01 00 00 40 80 6e 0d 98 00 …` |
+| 10 days, default window | `00 00 57 02 00 00 00 48 6e 0d f9 00 …` |
+| Entire Project, default window | `00 00 57 02 00 00 40 b4 2b 0d b9 00 …` |
+| Reset, default window | `00 00 57 02 00 00 00 48 6e 0d 64 00 …` |
+
+The `u16` at 44,938 (0x0257 = 599 at the default window, 0x01ff = 511 at 900 wide) follows
+the saving window's pane width, and the bytes after it (a scaled date word and a trailing
+byte) change with both the request and the width. The file does not store the pane width, so
+a port cannot derive the value for a given request: it would have to guess the viewport of
+a window the file never recorded. Beyond those words, the bytes at 44,948 to 44,958 and the
+words at 44,968 to 44,988 (`0x16`, `80 80 80`) are the same in all five pairs and at both
+widths, but the five pairs do not cover the rest of the 44 runs, and writing some of the
+words while leaving the width-dependent ones at the control's values would not be a port
+save that matches Project field by field.
+
+Under the standing rules a command is enabled only for a shape a port save reproduces
+field by field. The zoom has one measured value per request at one window width, and the
+second width (the `-narrow` pair) shows the value depends on a quantity the file lacks.
+
+### 4.3 Capability matrix
+
+| shape | state |
+|---|---|
+| any Zoom (Custom, Entire Project, Reset) | **session only**: the shell keeps the timescale zoom for the session; nothing is queued, so File > Save never writes a half-applied zoom |
+
+Pairs still needed to enable it: the pane-width term decoded (several window widths for each
+request, the `u16` and the scaled date word expressed from the width and the zoom), or an
+oracle that saves at a pinned window width together with a rule the port can satisfy from
+the project alone.

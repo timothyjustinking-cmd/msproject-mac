@@ -217,6 +217,7 @@ for _view_pair in ("outline-all", "outline-deep-level1",
                    "sort-name-asc", "sort-name-desc", "sort-two-keys",
                    "table-cost",
                    "table-schedule", "zoom-custom", "zoom-custom-10d",
+                   "zoom-custom-narrow",
                    "zoom-entire", "zoom-reset"):
     PAIRS["wave35-viewstate-" + _view_pair] = (
         "wave35-viewstate-%s-control.mpp" % _view_pair,
