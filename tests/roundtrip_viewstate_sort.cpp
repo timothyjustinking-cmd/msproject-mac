@@ -451,9 +451,28 @@ void test_refusals(TestContext& t) {
         refuses(control, make_edit(SortField::name, false, {1, 2, 3, 4, 5}),
                 "the sorted order does not match the order the file's own outline",
                 "R35G2-2: an unsorted order for Name descending refused");
+
+        /* W35b-1.4 (R35G2-4): the pairs measure Name in both directions, Duration
+         * descending only, and the one ascending pair moves no row. */
         refuses(control, make_edit(SortField::name, true, {5, 4, 1, 3, 2}),
-                "the sorted order does not match the order the file's own outline",
-                "R35G2-2: the descending order for Name ascending refused");
+                "an ascending sort that moves rows is unmeasured",
+                "R35G2-4: the descending order for Name ascending refused");
+        refuses(control, make_edit(SortField::duration, true, kBase),
+                "Duration ascending is unmeasured (the pairs sort Duration descending only)",
+                "R35G2-4: Duration ascending refused");
+        refuses(control, make_edit(SortField::duration, true, {3, 2, 1, 5, 4}),
+                "Duration ascending is unmeasured (the pairs sort Duration descending only)",
+                "R35G2-4: Duration ascending with its own order refused");
+        refuses(duration_control, make_edit(SortField::duration, true, {3, 2, 1, 5, 4}),
+                "Duration ascending is unmeasured (the pairs sort Duration descending only)",
+                "R35G2-4: Duration ascending on the Duration control refused");
+        {
+            CfbDocument reordered = control;
+            mppwrite::replace_task_name(reordered, 1, "Task Z");
+            refuses(reordered, make_edit(SortField::name, true, kBase),
+                    "an ascending sort that reorders rows is unmeasured",
+                    "R35G2-4: an ascending sort the file's names would reorder refused");
+        }
 
         /* The durations. */
         refuses(edited(duration_control,

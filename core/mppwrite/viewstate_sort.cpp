@@ -148,6 +148,18 @@ void validate_edit(ViewSortEdit const& edit, std::string const& function,
         throw Error(function + ": Renumber = True is unmeasured (the pairs "
                     "leave the IDs alone), so this sort is refused");
     }
+    /* W35b-1.4 (R35G2-4): the pairs measure Name in both directions and Duration
+     * descending only, and the one ascending pair (Name) leaves the rows in the
+     * order they were already in. */
+    if (edit.keys.front().field == SortField::duration && edit.keys.front().ascending) {
+        throw Error(function + ": Duration ascending is unmeasured (the pairs sort "
+                    "Duration descending only), so this sort is refused");
+    }
+    if (edit.keys.front().ascending && edit.sorted_order != edit.base_order) {
+        throw Error(function + ": an ascending sort that moves rows is unmeasured "
+                    "(the one ascending pair leaves the rows in order), so this "
+                    "sort is refused");
+    }
     if (edit.base_order.size() != kSortMeasuredRows) {
         throw Error(function + ": " + number(edit.base_order.size()) +
                     " rows were requested; the order records are measured at " +
@@ -392,6 +404,10 @@ std::string sorted_order_of(std::vector<SortRow> const& rows, std::uint32_t fiel
     if (!by_name && field_id != kSortFieldDuration) {
         return "the measured Project pairs sort by Name or by Duration";
     }
+    if (!by_name && ascending) {
+        return "ascending Duration sorts are unmeasured: the measured Project pairs "
+               "sort Duration descending only";
+    }
     struct Node {
         SortRow const* row = nullptr;
         std::vector<std::size_t> children;
@@ -476,6 +492,19 @@ std::string sorted_order_of(std::vector<SortRow> const& rows, std::uint32_t fiel
         for (auto child = nodes[at].children.rbegin(); child != nodes[at].children.rend();
              ++child) {
             walk.push_back(*child);
+        }
+    }
+    /* W35b-1.4 (R35G2-4): the one ascending pair (Name) moves no row. */
+    if (ascending) {
+        for (std::size_t index = 0; index < rows.size(); ++index) {
+            if (sorted[index] != rows[index].uid) {
+                sorted.clear();
+                return "an ascending sort that reorders rows is unmeasured: the "
+                       "measured Project pair for an ascending key leaves the rows in "
+                       "the order they were in, and this one would put UniqueID " +
+                       number(sorted[index]) + " at row " + number(index + 1) +
+                       " where the file has UniqueID " + number(rows[index].uid);
+            }
         }
     }
     return {};
