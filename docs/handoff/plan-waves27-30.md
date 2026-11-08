@@ -273,6 +273,63 @@ G4).  Wave 35 takes, in order, subject to the operator's word:
   RC-R2) and the Lows (RC-W9, RC-W10, RC-R4..R8, R34G3-5..R34G3-9) are queued
   here for wave 35 with the directions in that file.
 
+### Added at the wave 34b CLOSE (8 November 2026)
+
+Wave 34b is fix-only and closed no item below; each is queued for wave 35 with its
+location at `980ce9d` (the line numbers of the review at `8400c2c` have moved; grep the
+symbol).  The reviews hold the full rows.
+
+- **RC-W1, RC-W2** (`core/mppwrite/assignment_growth.cpp`, the settled and first-assignment
+  adds: the placeholder-count constants near the FixedMeta rewrite, and the sorted
+  resource-uid leaf insertion near `std::sort(assigned...)`, line 1431): unmeasured count
+  and ordering; wave 34b 1.2 tests the count refusals, not the ordering.
+- **RC-W6** (`core/mppwrite/varmeta_edit.cpp:921` `save_var_record`): accepts any field id,
+  payload and presence bits for the Task table; safety rests on the callers.
+- **RC-W7** (`core/mppwrite/props_edit.cpp:273` `save_props_edit`): any existing record id
+  with an equal-or-larger payload; four record ids are measured.
+- **RC-W8** (`core/mppwrite/viewstream_edit.cpp`, the bold row uid and field id; the view uid
+  is now pinned at :569 by W34b-0.4): the row uid and field id are stored verbatim.
+- **R34G4-10** (`core/mppwrite/resource_growth.cpp` new resource uid; `assignment_growth.cpp:1481`
+  and `:1799` `new_uid = max_uid + 1`): Project takes the next UniqueID from its own counter,
+  which a compacted file can hold above max + 1; unmeasured, not refused.
+- **R34G4-11 = RC-W9** (`core/mppwrite/wbs_code.cpp:230`): the WBS dry run writes a full project
+  copy to `temp_directory_path()/w34-wbs-dry-<n>.mpp`, a predictable shared-temp name.
+- **R34G3-6, R34G3-7, R34G3-8** (Lows of `review-g3.md`: the DSI test outside the save-pair
+  harness, a declared tail range skipping the length check, the W34-B5 leftovers) and
+  **RC-R6, RC-R7, RC-R8** (Lows of `close-review.md`: shell-level tests, the prompt before
+  the builder, record wording); R34G3-5 and R34G3-9 and RC-W10, RC-R4, RC-R5 were queued
+  above.
+- The brief section 4(e) Project-reopen check of the five enabled saves is the
+  coordinator's and is still open.
+- **The wave 34b CLOSE review** (two read-only passes over `git diff wave34..wave34b`, one
+  on the writers and one on the refusals; 0 Critical, 0 High).  Mediums:
+  - **RW34b-1** (`core/mppwrite/assignment_growth.cpp`, `check_measured_shape`, base-calendar
+    check): the resource's "own base calendar" test is only that resource word 154 equals
+    `uid + 2`; the calendar's content (hours, exceptions) is not compared with the pair's.
+    Partly mitigated by the 40 h work pin.  Direction: compare the calendar record bytes or
+    refuse any file whose calendar table differs from the pair's.
+  - **RW34b-2** (Qt gate tests with a generic needle, lines not touched by wave 34b):
+    `app_qt/tests/cell_bold_gate_test.cpp:193,214,277`, `wbs_code_gate_test.cpp:173,224`,
+    `assign_resources_gate_test.cpp:321`, `resource_add_gate_test.cpp:288,334`,
+    `resource_information_gate_test.cpp:281,292` still accept "not implemented in this
+    port"; the app-level needles were sharpened in 1.2.
+  - **RW34b-3** (no Qt gate test for the new refusals): the Add Resources template refusals,
+    the assignment shape refusals, the Bold applied-view refusal, the WBS ID/row-order
+    refusal and the 1.3 pending-document-edit combination are covered at app and core level
+    only.
+  Lows: **RW34b-4** the task-row masks `{0,32}` (bytes 16..23) and `{96,120}` and the
+  FixedMeta/Fixed2Data masks in `assignment_growth.cpp` carry no stated reason;
+  **RW34b-5** `tests/roundtrip_resource_growth.cpp` ~668 uses an empty needle
+  ("a resource row without its meta entry"); **RW34b-6** `viewstream_edit.cpp`
+  `applied_view_name` (~460) walks items without the odd-length pad byte that `load_view`
+  has, so it fails closed on an odd item; **RW34b-7** `resource_growth.cpp` ~653 template
+  mask `{154,158}` skips the calendar-reference word (confirm the writer rewrites it);
+  **RW34b-8** `app/edit_model.cpp:2889-2954` and `:3069-3100`: the type, effort-driven,
+  base-calendar and applied-view refusals exist only through the writer dry run (the plan
+  cannot carry those fields, so `push()` has no plan-side equivalent); **RW34b-9**
+  `add_resource_template_refusal` (`edit_model.cpp:2744-2761`) checks only the last
+  resource and its assignments at plan level, with the row fields left to the writer.
+
 ## After wave 30 (not planned in detail)
 
 Team Planner, Network Diagram, Calendar and Report views; the constraint-mso engine

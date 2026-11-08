@@ -1,13 +1,27 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-11-08, wave 34 complete on branch `wave34` (cut from `main` =
-`4fd9b90`; `WAVE-34-COMPLETE` appended after G4 and CLOSE, not pushed -- the
-coordinator pushes and dispatches both CI workflows, and a fix-only `wave34b`
-runs before any merge).  Keep this file current at every wave close; it is the
-only file a new session must read first._
+_Updated 2026-11-08, wave 34b complete on branch `wave34b` (cut from `wave34`, which
+was cut from `main` = `4fd9b90`; `WAVE-34-COMPLETE` and `WAVE-34b-COMPLETE` are
+appended, nothing is pushed -- the coordinator pushes `wave34b`, dispatches both CI
+workflows and runs the brief section 4(e) Project-reopen check).  Waves 34 and 34b
+are NOT merged until CI is green and that check passes.  Keep this file current at
+every wave close; it is the only file a new session must read first._
 
 ## The 30-second state
 
+* **Wave 34b (fix-only: no writer added, no refusal lifted, no Project pair
+  measured) is closed on branch `wave34b`** (`docs/handoff/wave34b-complete.md`).
+  It closed both wave-34 Highs (R34G3-1 / RC-R1: Assign Resources and its removal
+  now refuse every shape but the four measured pairs; R34G3-2: the identity
+  references are compared, not masked), the other writer Highs (Add Resources
+  template row, Font Bold applied view, Define WBS Code IDs and nesting), the CI
+  compile failures (unused functions for gcc and clang; the gcc 15 array-bounds
+  warning in `core/gantt`) and the Mediums R34G3-3, R34G3-4 / R34G4-9, RC-R3 /
+  R34G4-8, R34G4-6 and R34G4-7.  Fresh-tree gates at `980ce9d`
+  (`build/w34b/close-gates/`) are green.  The CLOSE review (two passes over
+  `git diff wave34..wave34b`) found **0 Critical, 0 High** and three Mediums
+  (RW34b-1..3, queued in `plan-waves27-30.md`).  The gcc, clang, AppleClang and
+  asan jobs cannot run here: the coordinator's CI run is their gate.
 * **Wave 34 (parity: decode Project's save shapes, build the shared writers, enable
   the measured commands) is closed on branch `wave34`** (cut from `main` = `4fd9b90`,
   the merge of waves 33 and 33b; `WAVE-34-COMPLETE` is in
@@ -62,7 +76,11 @@ only file a new session must read first._
 
 ## Still open
 
-* **The wave-34 CLOSE review** (`docs/handoff/wave34-verification/close-review.md`):
+* **Before any merge of wave 34 / 34b:** push `wave34b`, dispatch `qt.yml` and
+  `ci.yml`, triage any red job, and run the brief section 4(e) Project-reopen check
+  of the five enabled saves (COM, coordinator-only).
+* **The wave-34 CLOSE review** (`docs/handoff/wave34-verification/close-review.md`;
+  the two Highs are closed by `wave34b`, see its dated errata):
   the two Highs R34G3-1 / RC-R1 and R34G3-2 and the Mediums R34G3-3, R34G3-4,
   RC-W5 and RC-R3 go to `wave34b`; the other Mediums and the Lows are queued in
   `plan-waves27-30.md` ("Queued from wave 34") with G5 and G6 as wave 35.  Also
@@ -225,8 +243,11 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, docs/handoff/wave34-complete.md and
-docs/handoff/wave34-verification/close-review.md.  Waves 23-32 are merged into
+Read docs/START-HERE.md, docs/handoff/wave34b-complete.md,
+docs/handoff/wave34-complete.md and
+docs/handoff/wave34-verification/close-review.md.  Wave 34b (fix-only) is COMPLETE
+on branch wave34b and closes both Highs below; the next step is the coordinator's
+push, both CI dispatches and the brief-4(e) reopen check.  Waves 23-32 are merged into
 main as 17f5782 (27 Oct 2026, after a history rewrite; ids in the wave 23-32
 records are pre-rewrite and map through
 docs/handoff/wave32-verification/rewrite-sha-map.txt); waves 33 and 33b are

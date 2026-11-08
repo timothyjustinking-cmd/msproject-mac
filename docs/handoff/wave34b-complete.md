@@ -262,3 +262,55 @@ run on this machine; the coordinator's CI run is their gate.  The brief 4(e) Pro
 reopen check is the coordinator's.  Nothing is pushed.
 
 WAVE-34b-G1-COMPLETE
+
+## CLOSE
+
+### CLOSE gates
+
+Fresh trees `build/w34b-close-fresh`, `-qt` and `-app` at `980ce9d` (the last code change
+is `7b4c68b`; `a5c35c3` and `980ce9d` are records), all configured with
+`CORE_WARNINGS_AS_ERRORS=ON`; script `build/w34b/run-close-gates.cmd`, logs in
+`build/w34b/close-gates/`.  Core build 0 warnings, `ctest -E plan_recalc` 62/62;
+`plan_recalc_tests` with `MPP_NO_CORPUS=1` 266 checks and with the corpus 512 checks; M2
+`recalc --compare` 332 of 332 fields; engine self-test 265 checks, 0 failures; engine suite
+8 scenarios, 7 pass and the expected `constraint-mso` failure; `check_fixtures.py` and
+`check_markers.py --range main..HEAD` exit 0; app_qt build and ctest 47/47; app build and
+ctest 31/31.  `guard_names.py main..HEAD` and `scan_client_names.py HEAD` print 0 hits.
+The gcc, clang and AppleClang jobs (0.6, 0.7) cannot run on this machine; the coordinator's
+CI run is their gate.
+
+### CLOSE review
+
+Two read-only passes over `git diff wave34..wave34b`, one on the writers
+(`core/mppwrite/*`, `core/gantt/gantt.cpp` and their tests) and one on the refusals
+(`app/`, `app_qt/`).  Neither ran builds; the gates above are the evidence that the
+measured pairs still write.  **0 Critical, 0 High.**  Both confirmed the new bounds checks
+use the overflow-free `size_t` form, the gantt change is a mechanical bounded insertion sort
+with unchanged ordering (no other bounded-prefix `std::sort` in `core/`, `app/` or
+`app_qt/`), the 1.3 refusals run before the hook and any write and leave the queue
+untouched, and the name caps match the pairs.  Findings, all queued in
+`plan-waves27-30.md` ("Added at the wave 34b CLOSE") because only Critical and High go to
+the front of the next wave:
+
+- Mediums: RW34b-1 (the assignment shape gate's base-calendar check is word 154 only, not
+  the calendar's content); RW34b-2 (Qt gate tests still accepting "not implemented in this
+  port" on lines wave 34b did not touch); RW34b-3 (no Qt gate test for the new refusals,
+  which are covered at app and core level).
+- Lows: RW34b-4 to RW34b-9 (unexplained masks, an empty needle, an odd-length item walk
+  that fails closed, the calendar-reference template mask, writer-only type, effort,
+  calendar and applied-view refusals, the plan-level Add Resources template check).
+
+### Queue and docs
+
+The items the brief section 3 lists (RC-W1, RC-W2, RC-W6 to RC-W8, R34G4-10, R34G4-11,
+R34G3-5 to R34G3-9 and the CLOSE review's Lows) are in `plan-waves27-30.md` with file and
+line at `980ce9d`; R34G4-10 and R34G4-11 were missing and are added.  `docs/START-HERE.md`
+and `memory/coordinator.md` now say that waves 34 and 34b are not merged until CI is green
+and the brief section 4(e) Project reopen check passes.
+
+### Push and CI
+
+Push and CI: by the coordinator.  Nothing is pushed.  No COM and no `oracle_*` script was
+run in this wave.
+
+WAVE-34b-COMPLETE

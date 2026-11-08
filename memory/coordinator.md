@@ -5,7 +5,22 @@
 `WAVE-34-COMPLETE`); review `docs/handoff/wave34-verification/close-review.md`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
 
-## Wave 34 state (parity writers; closed, NOT mergeable) — 8 November 2026
+## Wave 34b state (fix-only; closed on `wave34b`, NOT merged) — 8 November 2026
+
+`wave34b` is cut from `wave34`, local only (`WAVE-34b-COMPLETE` in
+`docs/handoff/wave34b-complete.md`).  It closed both Highs below (R34G3-1 / RC-R1:
+Assign refuses all but the four measured pair shapes; R34G3-2: identity refs
+compared), the Add Resources / Bold / Define Code writer Highs, the CI compile
+failures (unused functions; gcc 15 array-bounds in `core/gantt`), and the Mediums
+R34G3-3/4, RC-R3, R34G4-6/8/9.  Added no writer, lifted no refusal.  Fresh-tree
+gates at `980ce9d` green (`build/w34b/close-gates/`); CLOSE review (writers +
+refusals) 0 Critical, 0 High, three Mediums RW34b-1..3 queued in
+`plan-waves27-30.md`.  **Merge only after:** coordinator pushes, both CI workflows
+green (gcc, clang, AppleClang, asan are only checked there), and the brief-4(e)
+Project reopen check of the five enabled saves (COM) passes.  Wave 35 = G5, G6 and
+the queued Mediums/Lows.
+
+## Wave 34 state (parity writers; closed on `wave34`; Highs below closed by 34b) — 8 November 2026
 
 `main` = `origin/main` = **`4fd9b90`** (waves 33 and 33b merged, green on all three
 platforms).  `wave34` is cut from it and is local only; push, both CI dispatches
