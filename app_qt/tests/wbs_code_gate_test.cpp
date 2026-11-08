@@ -30,12 +30,14 @@
 #include <fstream>
 #include <iterator>
 #include <string>
+#include <utility>
 #include <system_error>
 #include <vector>
 
 #include "edit_model.h"
 #include "gate_util.h"
 #include "main_window.h"
+#include "mpp_mutate.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 
@@ -170,7 +172,8 @@ int main(int argc, char** argv) {
         gate::check(window.pending_edits().empty(), "another shape queues nothing");
         gate::check(!window.document_dirty(), "the refusal leaves the document clean");
         gate::check(window.status_left_text().contains(
-                        QStringLiteral("is not implemented in this port")),
+                        QStringLiteral("Define WBS Code is not implemented in this port for "
+                                       "a project with")),
                     "the status line names the refusal");
     }
 
@@ -221,8 +224,55 @@ int main(int argc, char** argv) {
                     "a second definition on the saved file queues nothing (the file stores one)");
         gate::check(!window.document_dirty(), "the refused definition leaves the file clean");
         gate::check(window.status_left_text().contains(
-                        QStringLiteral("is not implemented in this port")),
+                        QStringLiteral("redefining a code is not implemented in this port")),
                     "the status line names the refusal on the reopened file");
+    }
+
+    // --- 4. W35-0.2 (R34G4-5) / RW34b-3: the ID and the row are the UniqueID ---
+    // The control with the ID words of tasks 1 and 2 swapped (an ID differs from
+    // its UniqueID), and with the two whole rows swapped (the tasks are stored out
+    // of UniqueID order): each is refused with its own text before the writer is
+    // asked, and nothing is queued.
+    {
+        struct Shape {
+            const char* label;
+            std::size_t words;  // bytes swapped between rows 1 and 2 (row 0 is the summary):
+                                // 4 = the ID word, 202 = the whole row
+            const char* needle;
+        };
+        const Shape shapes[] = {
+            {"a task whose ID differs from its UniqueID", 4, "ID differs from its UniqueID"},
+            {"tasks stored out of UniqueID order", 202, "stored out of UniqueID order"},
+        };
+        for (const Shape& shape : shapes) {
+            const QString changed = out_dir + QStringLiteral("/w35-wbs-shape.mpp");
+            const std::size_t swap_bytes = shape.words;
+            const bool made = mppmutate::write_edited_copy(
+                fixture.toStdString(), changed.toStdString(),
+                [swap_bytes](mppwrite::CfbDocument& doc) {
+                    const char* const path = "114/TBkndTask/FixedData";
+                    mppmutate::Bytes rows = doc.read_stream(path);
+                    for (std::size_t i = 0; i < swap_bytes; ++i) {
+                        std::swap(rows[48 + 202 + i], rows[48 + 404 + i]);
+                    }
+                    doc.replace_stream(path, rows);
+                });
+            gate::check(made, shape.label);
+            msqt::MainWindow window;
+            window.resize(msqt::kParityWidth, 800);
+            QString error;
+            if (made && window.open_file(changed, &error)) {
+                window.show();
+                QApplication::processEvents();
+                gate::check(trigger_define_code(window), shape.label);
+                gate::check(window.pending_edits().empty(), "the refused shape queues nothing");
+                gate::check(!window.document_dirty(), "the refused shape leaves the file clean");
+                gate::check(window.status_left_text().contains(QString::fromUtf8(shape.needle)),
+                            shape.label);
+            } else {
+                gate::check(false, shape.label);
+            }
+        }
     }
     return gate::finish();
 }

@@ -278,7 +278,8 @@ int main(int argc, char** argv) {
         gate::check(window.pending_edits().empty(), "a shorter name queues nothing");
         gate::check(!window.document_dirty(), "the refused shorter name leaves the document clean");
         gate::check(window.status_left_text().contains(
-                        QStringLiteral("is not implemented in this port")),
+                        QStringLiteral("Resource Information rename to a name that is not longer "
+                                       "than the current one")),
                     "the status line names the shorter-name refusal");
     }
     {
@@ -289,7 +290,8 @@ int main(int argc, char** argv) {
         gate::check(click_information(window, &prompt, true, same), "Information clicks");
         gate::check(window.pending_edits().empty(), "a same-size name queues nothing");
         gate::check(window.status_left_text().contains(
-                        QStringLiteral("is not implemented in this port")),
+                        QStringLiteral("Resource Information rename to a name that is not longer "
+                                       "than the current one")),
                     "the status line names the same-size refusal");
     }
     {
