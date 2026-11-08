@@ -549,9 +549,16 @@ bool ask_new_resource_name(QWidget* parent, QString* name);
 // Resource tab > Assign Resources (W34-4.3).  The resource to assign to the
 // selected task, chosen from `names` (the plan's resources, in order); *index is
 // the chosen position.  Returns false on Cancel.  The shared builder
-// (app::make_assignment_edit) owns every refusal.
+// (app::make_assignment_edit) owns every refusal.  A blank or repeated name is
+// shown with its position (assignment_resource_labels) so each item is distinct
+// and *index is the item chosen, not the first of that name (W35b-1.7).
 bool ask_assignment_resource(QWidget* parent, const QString& task_name,
                              const QStringList& names, int* index);
+
+// The combo labels ask_assignment_resource shows for `names`: a unique name is its
+// own label; a blank or repeated one reads "<name> (resource N)" (N the 1-based
+// position), and any label still colliding gets a trailing apostrophe.
+QStringList assignment_resource_labels(const QStringList& names);
 
 // The removal of the task's one assignment: a Yes / No question.
 bool confirm_remove_assignment(QWidget* parent, const QString& task_name,
