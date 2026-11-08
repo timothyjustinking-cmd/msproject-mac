@@ -174,6 +174,9 @@ def measure(app, pair, entry):
         copy = os.path.join(WORK, f"{pair}-base.mpp")
         shutil.copyfile(source, copy)
         app.FileOpen(copy)
+        # The opened file carries the session's real identity until a save;
+        # neutralise it before ANY save (W35-3.3 first run leaked LastAuthor).
+        neutralise(app, app.ActiveProject, "Synthetic G3 Fixture")
         entry["base"] = kind
         entry["pending_facts"] = facts(app, app.ActiveProject)
     else:
