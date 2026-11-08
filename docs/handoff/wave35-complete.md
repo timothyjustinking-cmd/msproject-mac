@@ -197,3 +197,120 @@ cannot reproduce the words.  Section 4 of the spec has the table; zoom stays ses
   untouched.  Nothing is pushed.
 
 WAVE-35-G2-COMPLETE
+
+## Group G3
+
+The wave-34 deferrals, decoded first.  One finding id per commit, in the brief's order.  G3 did
+run COM: `scripts/oracle_w35_g3.py` (through `scripts/oracle_lock.py`, neutral root `C:/w35`)
+produced every pair, each with a null save.  Only one thing was built: Bold off (W35-3.4).
+Everything else is deferred again, each with new evidence.
+
+**DEFECT FOR THE COORDINATOR OR OPERATOR: `guard_names main..HEAD` is red, and only a history
+rewrite fixes it.**  Commit 9fa599b (W35-3.3) added two fixtures,
+`tests/data/wave35-g3-notes-generator-control.mpp` and `tests/data/wave35-g3-notes-generator.mpp`,
+whose LastAuthor carried the operator's real name, because the notes pair opened a committed file
+and saved before `neutralise()` ran.  It was caught and fixed forward in 9564ddd (the pair was
+regenerated with the neutral identity), but the two old blobs remain in the history.  Every G3
+gate run since reports `guard_names=1` for exactly those two blobs and nothing else
+(`build/w35/639638c-W35-3.5-scans.log` lines 6 and 7).  The tip of the branch is clean:
+`scan_client_names HEAD` is 0 and `check_fixtures` is 0.  I did not rewrite history and did not
+bypass the pre-push guard, so **the branch cannot be pushed as it stands**.  The coordinator or
+operator has to rewrite 9fa599b (drop or neutralise those two blobs in that commit and rebase the
+commits after it) before pushing.  The generator now neutralises before any save
+(`scripts/oracle_w35_g3.py`, `measure`), and the port-saved path sets `UserName` only on a file
+that is already neutral.
+
+| Item | Commit(s) | State |
+|---|---|---|
+| W35-3.1 fixtures | 2bd0bb0 | done: four Insert Summary / Insert Milestone pairs and their null saves |
+| W35-3.1 Insert | b3f5452 | deferred with evidence (`spec/writers/insert.md`) |
+| W35-3.2 fixtures | d1c0d5c | done: the Set Baseline 0 pair on a three-level outline and its null save |
+| W35-3.2 Baseline | 569667b | deferred with evidence (`spec/writers/baseline.md`) |
+| W35-3.3 fixtures | 9fa599b, 9564ddd | done; 9fa599b carries the leak above, 9564ddd regenerates the pair |
+| W35-3.3 Notes | f6a0c11 | deferred with evidence (`spec/writers/note-richtext.md`) |
+| W35-3.4 oracle | 0289424 | done: nine Font pairs and the WBS Renumber pairs in the generator |
+| W35-3.4 fixtures | ebefba3 | done: ten pairs, 30 files |
+| W35-3.4 Font and Renumber | fe27cba | Bold off built in the view writer and tested; the other font appends and Renumber deferred with evidence (`spec/writers/view-stream-214.md`) |
+| W35-3.5 oracle and fixtures | 9b33d6d, 2634bb0, a46d9f9, ee4826f | done: the port-saved remove pair (the first fixtures carried a revision-counter artefact of the generator; regenerated) |
+| W35-3.5 Removal | 639638c | deferred with evidence; the removal stays refused (`spec/writers/table-growth.md`) |
+
+Gates.  No-source commits (3.1 to 3.3, the 3.4 and 3.5 oracle and fixture commits) ran
+`check_fixtures`, `check_markers --range main..HEAD`, `guard_names` and `scan_client_names`
+(`build/w35/<hash>-W35-3.x-fixtures.log` and `-scans.log`).  The two source-touching commits ran
+the full set: `build/w35/fe27cba-W35-3.4-*` and `build/w35/639638c-W35-3.5-*`.  At each, core
+build, core ctest, app build, app ctest, Qt build, Qt ctest, `check_fixtures`, `check_markers`
+and `scan_client_names` report 0; `guard_names` reports 1 for the two 9fa599b blobs only.
+
+### Built
+
+**Bold off (W35-3.4).**  `mppwrite::unbold_cell` in `core/mppwrite/viewstream_edit.cpp` rewrites
+the one cell-format item in place (flags 0x01000003 to 0x00000003, font word to 0x90000000, the
+control's top byte kept), proves that only those eight bytes changed, and requires the VarMeta
+and Props streams unchanged.  Tested by `test_bold_off_pair` in
+`tests/roundtrip_viewstream.cpp` with zero KnownGaps.  **Found, not fixed: it is not wired to
+either shell.**  G3's item was the writer and its pair; I did not touch the edit model or the
+Qt and app shells, so Bold off stays a session-only edit there.  Wiring it, with its own gate
+and Project reopen check, is a coordinator decision.
+
+### Deferred, with evidence of the attempt
+
+**Insert Summary and Insert Milestone (W35-3.1).**  Four committed pairs.  An insert changes
+about 22 streams (rows, assignments, edit list, the FixedMeta mask), and two things stay
+unclosed: the FixedMeta mask rule and the `Props14` tail.  The decoded row, assignment and edit
+list changes are in `spec/writers/insert.md`; they stay session-only.
+
+**Set Baseline 0 (W35-3.2).**  Two sessions, two shapes.  The baseline var blocks decode, but the
+`0x0b4000ae` block holds process addresses that differ per session, and no port can reproduce
+them.  `spec/writers/baseline.md`.
+
+**Resource Notes and Task Notes (W35-3.3).**  A note added to a file holding an older RichEdit
+build's note carries the machine's current build in its generator string, not the file's, so no
+rule derives from the file alone.  `spec/writers/note-richtext.md`.
+
+**Font controls beyond one Bold cell (W35-3.4).**  Ten pairs: Bold on row 2, on the first row and
+on a range, Bold off, Italic, Underline, size, name and colour.  The flags, colour words and
+pattern decode (0x01000003 Bold, 0x02000003 Italic, 0x04000003 underline through Font32Ex), but
+the top byte of the font word is uninitialised noise: it differs between sessions that make the
+same call, so no append can match byte for byte, and it could only sit as a KnownGap that must
+not enable.  Font32Ex stores no name or size in the item.  The two-row range stored one item.
+Toolbar Underline was not measured: `FontUnderline(True)` raises "'bool' object is not
+callable" in this COM session.  The existing enabled Bold on one cell matched wave 30 only
+because that session stored 0x90 in the top byte; the spec records it.
+
+**WBS Renumber (W35-3.4).**  Unavailable in Project without a code definition ("The method is
+not available in this situation", kept as evidence).  On a defined three-task file it is a no-op:
+the save differs from its null save by the `Props14` marker alone, so there is nothing to
+reproduce.  `spec/writers/evidence/wave35-g3-wbs-renumber-defined.md`.
+
+**Removing an assignment from a port-saved file (W35-3.5).**  Project's null save settles the
+port's append shape (Assn FixedMeta and Fixed2Meta, two Rsc FixedMeta bytes, the 114/Props
+scalars), so the writer's existing settled-shape check refuses the raw file.  With those streams
+copied from the null into the control the writer accepts it, and the output differs from
+Project's edit in four streams, now named KnownGaps (Assn Fixed2Data, Assn Var2Data, Rsc
+Fixed2Meta, CEdl Var2Data); `Props14` is not vouched for.  The refusal is pinned by test.
+Enabling needs the settle transform, the identity-counter rule, the Rsc Fixed2Meta flag rule and
+the CEdl rebuild, none derivable from one pair.
+
+### Findings
+
+- **The view-block digest has a per-session noise byte.**  Payload byte 42678 of the uid-2
+  view block differs between sessions.  `kViewBlockNoiseAt` masks it and the pinned digest is now
+  0xd2f37d751e6e8333; the first `test_bold_off_pair` run failed on it ("differs from the measured
+  control's") and that is how it was found.
+- **The generator can add a revision bump of its own.**  `neutralise()` in an edit session that
+  the null session does not repeat moves the revision counter (SummaryInformation byte 155,
+  114/Props 472, Task Var2Data 490) one past the null's.  The port-saved pair set `UserName`
+  only after the first generation showed it.
+- **The harness's `Props14` declared-effect check fails for the port-saved pair** (effects = 0).
+  The 3.5 test leaves `Props14` out of its declared list and says so; it does not vouch for it.
+
+### Notes on tests and process
+
+- No mutation runs: brief section 4 gives them to the coordinator.  G3 added one writer
+  (`unbold_cell`) and its test, and one pinned refusal; both need a mutation pass and the
+  independent read-only review that section 4 asks for a group that adds a writer.
+- Scratch tools used for the pair analysis live in git-ignored `build/w35/ins/`; nothing in them
+  is needed to reproduce a committed result.
+- No amend and no history rewrite.  Nothing is pushed.
+
+WAVE-35-G3-COMPLETE
