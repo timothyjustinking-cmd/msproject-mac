@@ -20,7 +20,9 @@
 #include <cstdint>
 #include <cstring>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
+#include <iterator>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -164,6 +166,35 @@ void add_var_key(CfbDocument& doc, std::string const& table, std::uint32_t uid,
     put(at + 4, 0);
     put(at + 8, key);
     doc.replace_stream(stream, meta);
+}
+
+/* Rename a 114/Props record's id (the third byte stays 0x40), which removes the record for
+ * every reader that looks it up by id.  Chain: [u32 length][u32 id][u32 kind][payload]. */
+void rename_props_record(CfbDocument& doc, std::uint32_t id, std::uint32_t renamed) {
+    Bytes props = doc.read_stream("114/Props");
+    auto const get = [&props](std::size_t at) {
+        return static_cast<std::uint32_t>(props[at]) |
+               (static_cast<std::uint32_t>(props[at + 1]) << 8) |
+               (static_cast<std::uint32_t>(props[at + 2]) << 16) |
+               (static_cast<std::uint32_t>(props[at + 3]) << 24);
+    };
+    bool found = false;
+    for (std::size_t at = 16; at + 12 <= props.size() && (get(at + 4) & 0x00FF0000u) == 0x00400000u;
+         at += 12 + get(at)) {
+        if (get(at + 4) == id) {
+            for (std::size_t i = 0; i < 4; ++i) {
+                props[at + 4 + i] = static_cast<std::uint8_t>((renamed >> (8 * i)) & 0xFFu);
+            }
+            found = true;
+        }
+    }
+    check(found, "the Props record to rename exists");
+    doc.replace_stream("114/Props", props);
+}
+
+Bytes file_bytes(std::string const& path) {
+    std::ifstream in(path, std::ios::binary);
+    return Bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
 
 template <typename Fn>
@@ -504,6 +535,46 @@ void refused_requests() {
         rows.store_into(doc);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
                 "uses a task calendar", "task calendar");
+    }
+    {
+        /* W35b-2.1 (R35G1-4): a Props record the save needs after its appends is missing.  The
+         * target already exists (Save over the open file); it must be left byte-identical. */
+        CfbDocument doc = control;
+        rename_props_record(doc, 0x02400003u, 0x02400FF3u);
+        std::string const target = out_path("w35-calculate-atomic-target.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        Bytes const before = file_bytes(target);
+        refuses([&] { mppwrite::save_calculate(doc, good, target); }, "(0x02400003)",
+                "project finish record missing");
+        check(file_bytes(target) == before, "project finish record missing: target unchanged");
+        check(!std::filesystem::exists(target + ".calculate.tmp"),
+              "project finish record missing: no scratch file left");
+        std::filesystem::remove(target);
+    }
+    {
+        /* The same for a missing project start, which the write needs for Fixed2Data +46. */
+        CfbDocument doc = control;
+        rename_props_record(doc, 0x02400002u, 0x02400FF2u);
+        std::string const target = out_path("w35-calculate-atomic-target2.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        Bytes const before = file_bytes(target);
+        refuses([&] { mppwrite::save_calculate(doc, good, target); }, "(0x02400002)",
+                "project start record missing");
+        check(file_bytes(target) == before, "project start record missing: target unchanged");
+        std::filesystem::remove(target);
+    }
+    {
+        /* A success over an existing target replaces it and leaves no scratch file. */
+        CfbDocument doc = control;
+        std::string const target = out_path("w35-calculate-atomic-target3.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        mppwrite::save_calculate(doc, good, target);
+        check(file_bytes(target) == doc.to_bytes(), "success over an existing target writes it");
+        check(!std::filesystem::exists(target + ".calculate.tmp"), "success leaves no scratch");
+        std::filesystem::remove(target);
     }
     {
         CfbDocument doc = control;

@@ -38,9 +38,12 @@
  * writer does not model (the F9 stamps in Fixed2Data differ per row and per
  * shape), so each is refused with the first difference named.
  *
- * ALL-OR-NOTHING.  The shape and the request are validated before the first
- * mutation, the result is written to `path`, re-opened and compared with the
- * bytes built, and the caller's document is replaced only on success.
+ * ALL-OR-NOTHING.  The shape and the request (every record the save touches,
+ * the 114/Props project start and finish included) are validated before the
+ * first mutation.  The chain of appends and Props edits runs against a private
+ * `path + ".calculate.tmp"` that is re-opened and compared with the bytes built;
+ * `path` itself is written once, atomically, at the end, and the caller's
+ * document is replaced only on success (W35b-2.1).
  */
 
 #ifndef MPPWRITE_CALCULATE_H
