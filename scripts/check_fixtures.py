@@ -621,6 +621,37 @@ DOCUMENTED = {
         "39FCBD668AE0B98D59AD6D15410512980CE98E8C2858C9A07D2296B14B8C83FD",
     "tests/data/wave35-calculate-unlinked.mpp":
         "61B9B02AEA0D8C7A125DB287DFD60EF06F8FBCF7A9F58F276E2DD764F776F7E1",
+    # Wave 35 (W35-2.1): the Sort pairs, one factor each.
+    "tests/data/wave35-viewstate-sort-duration-desc-control-null.mpp":
+        "A517B46CC0A4FD0673BE2CC75BE329498D47ADFC5D6D2D7ABFF57A39A2F49D96",
+    "tests/data/wave35-viewstate-sort-duration-desc-control.mpp":
+        "09772916229CC93B3C113434C1B40CF19D61A89074D2C47CAF4FF938D43C27AC",
+    "tests/data/wave35-viewstate-sort-duration-desc.mpp":
+        "725A211D7CD4AD9272F5F2A159CB797AECDEF22731CBE4C10BC537DE26397682",
+    "tests/data/wave35-viewstate-sort-flat-name-desc-control-null.mpp":
+        "278F89C2B76EBF87AC150C3657B97755EC2795F0AB43E6EEF86E209F0B058017",
+    "tests/data/wave35-viewstate-sort-flat-name-desc-control.mpp":
+        "896234F2BD8F90F0A97FE68961970F174D72D5DCE32C818CE43A6525A94C33F0",
+    "tests/data/wave35-viewstate-sort-flat-name-desc.mpp":
+        "68CC7954FB91CB7D6557D78BBF67640DD2B15FB62EB3EEFD291D411089221602",
+    "tests/data/wave35-viewstate-sort-name-asc-control-null.mpp":
+        "B85A3FA82467D529524B0DF08C89A0AEAB0FB6F5A2271A18E4DC82FC41E71CA6",
+    "tests/data/wave35-viewstate-sort-name-asc-control.mpp":
+        "3F19CFDE563AE796648DB8FF2E56B9E74672A131249033D5CC0E43CE7F94150F",
+    "tests/data/wave35-viewstate-sort-name-asc.mpp":
+        "440168CBEEBA1158EC5E508771B4B9C3974DB27E731F9178C138945D9E0A8A8E",
+    "tests/data/wave35-viewstate-sort-name-desc-control-null.mpp":
+        "0DC1D465DA386C3789C21E2E8C794599C3993D87B866F73234744EB8C4979678",
+    "tests/data/wave35-viewstate-sort-name-desc-control.mpp":
+        "E901ECADD6B7DF7DDDA30CE888FF44FACF96EA86704D2D82BD1C59FEC19C512F",
+    "tests/data/wave35-viewstate-sort-name-desc.mpp":
+        "2473BAFB24C4E1500D2C11A73773DFBB64E1E8220FF759CF0B0462D73707E58E",
+    "tests/data/wave35-viewstate-sort-two-keys-control-null.mpp":
+        "FEE481AF9A2118A2FEA2D63A8C9097CCA70314E58C3F77BFE3EE6A1521C91952",
+    "tests/data/wave35-viewstate-sort-two-keys-control.mpp":
+        "2AB28E72F9C7DA7A31555275572EF1C798A7F9ED29DCEAB676F876E2C6745A68",
+    "tests/data/wave35-viewstate-sort-two-keys.mpp":
+        "79DCF0B490EEA25B0E5D13D260D2472D60597758EEDE1BEC9F11BB9A4B21CBE0",
     "tests/data/wave34-resource-add-third-control.mpp":
         "F9DD625CFD94FD6A29B616F102EB005B637409662F0C2465C0ADEA4FCBC759F4",
     "tests/data/wave34-resource-add-third.mpp":
