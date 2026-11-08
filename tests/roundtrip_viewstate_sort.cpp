@@ -32,6 +32,7 @@
  */
 
 #include <array>
+#include <exception>
 #include <cstdint>
 #include <filesystem>
 #include <iostream>
@@ -369,6 +370,104 @@ void test_refusals(TestContext& t) {
                 "a base order that is not the control's refused");
     }
 
+    /* W35b-1.2 (R35G2-2): the request is the file's own.  Each request below is a
+     * well-formed one (a permutation of the file's UniqueIDs in the control's
+     * order); the file's outline, names or durations disagree with it, or the
+     * sorted order is not the one the pinned rules give. */
+    {
+        auto edited = [&](CfbDocument const& source, auto&& mutate) {
+            CfbDocument doc = source;
+            mppwrite::TaskTable table = mppwrite::TaskTable::from_document(doc);
+            mutate(doc, table);
+            table.store_into(doc);
+            return doc;
+        };
+        auto by_duration = [&](std::vector<std::uint32_t> const& sorted) {
+            return make_edit(SortField::duration, false, sorted);
+        };
+        Pair const duration = pairs().back();
+        CfbDocument const duration_control = doc_from_data(control_of(duration));
+        t.check(mppwrite::read_task_name(control, 5) == "Task E" &&
+                    mppwrite::read_task_name(control, 1) == "Task A",
+                "R35G2-2: the control's names are Task A to Task E");
+
+        /* The outline. */
+        refuses(edited(control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u16(3, 172, 1);
+                       }),
+                measured_edit(),
+                "the sorted order does not match the order the file's own outline",
+                "R35G2-2: a file whose outline is not the request's order refused");
+        refuses(edited(control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u16(1, 172, 0);
+                       }),
+                measured_edit(), "levels are 1-based", "R35G2-2: a level word of 0 refused");
+        refuses(edited(control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u16(2, 172, 3);
+                           table.set_u16(3, 172, 3);
+                       }),
+                measured_edit(), "deeper than its parent allows",
+                "R35G2-2: a row deeper than its parent refused");
+
+        /* The names. */
+        {
+            CfbDocument renamed = control;
+            mppwrite::replace_task_name(renamed, 5, "Task C");
+            refuses(renamed, measured_edit(),
+                    "the sorted order does not match the order the file's own outline",
+                    "R35G2-2: a file whose names give another order refused");
+            CfbDocument digit = control;
+            mppwrite::replace_task_name(digit, 5, "Task 5");
+            refuses(digit, measured_edit(), "differ at a letter of the same case",
+                    "R35G2-2: a file with an unmeasured name collation refused");
+        }
+
+        /* The sorted order itself. */
+        refuses(control, make_edit(SortField::name, false, {2, 1, 3, 4, 5}),
+                "the sorted order does not match the order the file's own outline",
+                "R35G2-2: a permutation that is not the sort refused");
+        refuses(control, make_edit(SortField::name, false, {1, 2, 3, 4, 5}),
+                "the sorted order does not match the order the file's own outline",
+                "R35G2-2: an unsorted order for Name descending refused");
+        refuses(control, make_edit(SortField::name, true, {5, 4, 1, 3, 2}),
+                "the sorted order does not match the order the file's own outline",
+                "R35G2-2: the descending order for Name ascending refused");
+
+        /* The durations. */
+        refuses(edited(duration_control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u32(3, mppwrite::task_row::kDuration, 30000);
+                       }),
+                by_duration(duration.sorted),
+                "the sorted order does not match the order the file's own outline",
+                "R35G2-2: a file whose durations give another order refused");
+        refuses(edited(duration_control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u32(5, mppwrite::task_row::kDuration, 24000);
+                       }),
+                by_duration(duration.sorted), "equal durations among siblings",
+                "R35G2-2: equal sibling durations in the file refused");
+
+        /* The rows. */
+        refuses(edited(control,
+                       [](CfbDocument&, mppwrite::TaskTable& table) {
+                           table.set_u32(2, mppwrite::task_row::kUniqueId, 9);
+                       }),
+                measured_edit(), "the request is not the file's row order",
+                "R35G2-2: file rows that are not the request's refused");
+
+        /* The measured shapes still write (the pair tests prove them against
+         * Project's saves; this is the same recompute on the three controls). */
+        for (Pair const& p : pairs()) {
+            CfbDocument doc = doc_from_data(control_of(p));
+            (void)mppwrite::save_view_sort(doc, make_edit(p.field, p.ascending, p.sorted), "",
+                                           true);
+        }
+    }
+
     /* The output path. */
     {
         CfbDocument doc = control;
@@ -488,10 +587,14 @@ void test_refusals(TestContext& t) {
 
 int main() {
     TestContext t;
-    for (Pair const& p : pairs()) {
-        test_pair(t, p);
+    try {
+        for (Pair const& p : pairs()) {
+            test_pair(t, p);
+        }
+        test_dry_run(t);
+        test_refusals(t);
+    } catch (std::exception const& error) {
+        t.check(false, std::string("an exception escaped a test: ") + error.what());
     }
-    test_dry_run(t);
-    test_refusals(t);
     return t.report();
 }

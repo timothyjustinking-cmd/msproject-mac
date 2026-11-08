@@ -140,6 +140,29 @@ struct ViewSortWrite {
 std::uint64_t sort_block_digest(std::vector<std::uint8_t> const& var2,
                                 std::size_t block_offset);
 
+/* One task row as a sort sees it, in file order. */
+struct SortRow {
+    std::uint32_t uid = 0;
+    int level = 0;                /* 0-based outline level */
+    std::string name;             /* UTF-8 */
+    std::uint32_t duration = 0;   /* ticks (FixedData +84) */
+};
+
+/* W35b-1.2: whether Name comparison of two sibling names is one the pairs
+ * measure.  Project's collation of case, punctuation, digits and accents is not
+ * measured, so two names are ordered only where the first differing position
+ * holds two ASCII letters of the same case (neither name a prefix of the other). */
+bool sort_name_pinned(std::string const& left, std::string const& right);
+
+/* W35b-1.2: the displayed order a sort of `rows` (file order) produces under the
+ * pinned rules, computed from the rows alone: siblings are ordered by the key
+ * (stable), each subtree follows its parent.  Shared by the edit model (rows from
+ * the plan) and by `save_view_sort` (rows from the file), so a caller's order is
+ * checked against the file's own names, durations and outline.  Returns an empty
+ * string and fills `sorted`, or the reason the order is unmeasured. */
+std::string sorted_order_of(std::vector<SortRow> const& rows, std::uint32_t field_id,
+                            bool ascending, std::vector<std::uint32_t>& sorted);
+
 /* W35b-1.1: the uid-2 view-state block must be one of the two measured
  * controls' (digest with both sort-spec copies zeroed) and carry the default
  * spec in both copies.  Shared by the other view-state writers; `refused` names

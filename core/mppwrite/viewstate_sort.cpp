@@ -341,7 +341,123 @@ void write_order(Bytes& edl, EdlRecords const& records,
     }
 }
 
+/* The task rows' OutlineLevel word (FixedData +172, 1-based in the file). */
+constexpr std::size_t kTaskOutlineLevel = 172;
+
+/* The rows 1..N of the file's task table as the sort sees them.  The project row
+ * (row 0) is never sorted. */
+std::vector<SortRow> read_sort_rows(CfbDocument const& doc, TaskTable const& table,
+                                    std::string const& function) {
+    std::vector<SortRow> rows;
+    for (std::size_t row = 1; row < table.rows(); ++row) {
+        SortRow out;
+        out.uid = table.uid(row);
+        std::uint16_t const level = table.u16(row, kTaskOutlineLevel);
+        if (level < 1) {
+            throw Error(function + ": task row " + number(row) + " stores outline "
+                        "level " + number(level) + "; levels are 1-based in the "
+                        "file");
+        }
+        out.level = static_cast<int>(level) - 1;
+        out.duration = table.u32(row, task_row::kDuration);
+        out.name = read_task_name(doc, out.uid);
+        rows.push_back(std::move(out));
+    }
+    return rows;
+}
+
 } /* namespace */
+
+bool sort_name_pinned(std::string const& left, std::string const& right) {
+    std::size_t const shared = std::min(left.size(), right.size());
+    auto letter = [](char c) {
+        return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');
+    };
+    for (std::size_t at = 0; at < shared; ++at) {
+        if (left[at] == right[at]) {
+            continue;
+        }
+        bool const left_lower = left[at] >= 'a' && left[at] <= 'z';
+        bool const right_lower = right[at] >= 'a' && right[at] <= 'z';
+        return letter(left[at]) && letter(right[at]) && left_lower == right_lower;
+    }
+    return false; /* equal, or one a prefix of the other */
+}
+
+std::string sorted_order_of(std::vector<SortRow> const& rows, std::uint32_t field_id,
+                            bool ascending, std::vector<std::uint32_t>& sorted) {
+    sorted.clear();
+    bool const by_name = field_id == kSortFieldName;
+    if (!by_name && field_id != kSortFieldDuration) {
+        return "the measured Project pairs sort by Name or by Duration";
+    }
+    struct Node {
+        SortRow const* row = nullptr;
+        std::vector<std::size_t> children;
+    };
+    std::vector<Node> nodes(rows.size());
+    std::vector<std::size_t> roots;
+    std::vector<std::size_t> stack; /* the open ancestors */
+    for (std::size_t index = 0; index < rows.size(); ++index) {
+        nodes[index].row = &rows[index];
+        int const level = rows[index].level;
+        if (level < 0 || (level > 0 && static_cast<std::size_t>(level) > stack.size())) {
+            return "this outline has a row deeper than its parent allows";
+        }
+        stack.resize(static_cast<std::size_t>(level));
+        if (stack.empty()) {
+            roots.push_back(index);
+        } else {
+            nodes[stack.back()].children.push_back(index);
+        }
+        stack.push_back(index);
+    }
+    std::string refusal;
+    auto order_group = [&](std::vector<std::size_t>& group) {
+        for (std::size_t a = 0; a < group.size() && refusal.empty(); ++a) {
+            for (std::size_t b = a + 1; b < group.size() && refusal.empty(); ++b) {
+                SortRow const& left = *nodes[group[a]].row;
+                SortRow const& right = *nodes[group[b]].row;
+                if (by_name) {
+                    if (!sort_name_pinned(left.name, right.name)) {
+                        refusal = "the measured Project pairs order sibling names that "
+                                  "differ at a letter of the same case, and \"" +
+                                  left.name + "\" / \"" + right.name + "\" do not";
+                    }
+                } else if (left.duration == right.duration) {
+                    refusal = "equal durations among siblings: the measured Project "
+                              "pairs have distinct sibling durations";
+                }
+            }
+        }
+        std::stable_sort(group.begin(), group.end(), [&](std::size_t a, std::size_t b) {
+            SortRow const& left = *nodes[a].row;
+            SortRow const& right = *nodes[b].row;
+            bool const less = by_name ? left.name < right.name : left.duration < right.duration;
+            bool const greater =
+                by_name ? right.name < left.name : right.duration < left.duration;
+            return ascending ? less : greater;
+        });
+    };
+    order_group(roots);
+    for (Node& node : nodes) {
+        order_group(node.children);
+    }
+    if (!refusal.empty()) {
+        return refusal;
+    }
+    std::vector<std::size_t> walk(roots.rbegin(), roots.rend());
+    while (!walk.empty()) {
+        std::size_t const at = walk.back();
+        walk.pop_back();
+        sorted.push_back(nodes[at].row->uid);
+        for (auto child = nodes[at].children.rbegin(); child != nodes[at].children.rend();
+             ++child) {
+            walk.push_back(*child);
+        }
+    }
+    return {};
+}
 
 std::uint64_t sort_block_digest(Bytes const& var2, std::size_t block_offset) {
     if (block_offset + 4 + kMeasuredBlockPayload > var2.size()) {
@@ -404,6 +520,34 @@ ViewSortWrite save_view_sort(CfbDocument& doc, ViewSortEdit const& edit,
     Bytes const edl = doc.read_stream(edl_path);
     EdlRecords const records = locate_edl(edl, function);
     require_edl_state(edl, records, edit.base_order, function, "control's");
+
+    /* W35b-1.2 (R35G2-2): the request is the file's own.  The rows are the task
+     * rows 1..N in order, and the sorted order is the one the file's outline, names
+     * and durations give under the pinned rules, not whatever the caller holds. */
+    TaskTable const table = TaskTable::from_document(doc);
+    if (table.rows() != edit.base_order.size() + 1) {
+        throw Error(function + ": the file holds " + number(table.rows()) +
+                    " task rows (with the project row), not the " +
+                    number(edit.base_order.size() + 1) + " the request describes");
+    }
+    for (std::size_t i = 0; i < edit.base_order.size(); ++i) {
+        if (table.uid(i + 1) != edit.base_order[i]) {
+            throw Error(function + ": task row " + number(i + 1) + " is UniqueID " +
+                        number(table.uid(i + 1)) + ", not " +
+                        number(edit.base_order[i]) + "; the request is not the "
+                        "file's row order");
+        }
+    }
+    std::vector<SortRow> const file_rows = read_sort_rows(doc, table, function);
+    std::vector<std::uint32_t> from_file;
+    if (std::string const reason = sorted_order_of(file_rows, field_id, ascending, from_file);
+        !reason.empty()) {
+        throw Error(function + ": " + reason + ", so this sort is refused");
+    }
+    if (from_file != edit.sorted_order) {
+        throw Error(function + ": the sorted order does not match the order the file's "
+                    "own outline, names and durations give, so this sort is refused");
+    }
 
     Bytes const slot = slot_bytes(field_id, ascending);
     Bytes new_var2 = var2;

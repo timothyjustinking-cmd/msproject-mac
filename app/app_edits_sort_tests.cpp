@@ -413,6 +413,51 @@ void check_refusals() {
                        "equal durations", "equal sibling durations");
     }
 
+    /* W35b-1.2 (R35G2-2): a plan that is not the file's (an unsaved rename, or an
+     * outline the file does not store) gives an order the file's own rows do not,
+     * and the writer's dry run refuses it when the edit is built. */
+    {
+        app::PlanInput renamed = plan;
+        task_by_uid(renamed, 5)->name = "Task C";
+        expect_refused(renamed, source, name_desc, true, false,
+                       "the sorted order does not match the order the file's own outline",
+                       "a plan whose names are not the file's");
+        app::PlanInput reindented = plan;
+        task_by_uid(reindented, 3)->outline_level = 0;
+        expect_refused(reindented, source, name_desc, true, false,
+                       "the sorted order does not match the order the file's own outline",
+                       "a plan whose outline is not the file's");
+        app::PlanInput lengthened = plan;
+        task_by_uid(lengthened, 5)->duration_ticks = 100;
+        task_by_uid(lengthened, 4)->duration_ticks = 200;
+        task_by_uid(lengthened, 1)->duration_ticks = 300;
+        expect_refused(lengthened, source, one_key(app::SortKeyKind::duration, false), true, false,
+                       "the sorted order does not match the order the file's own outline",
+                       "a plan whose durations are not the file's");
+
+        /* The same hand-built edit passes push() (the plan gives it) and the save
+         * refuses it from the file before anything is written. */
+        app::StructuralEdit hand;
+        hand.kind = app::StructuralKind::sort_view;
+        hand.field_id = named.field_id;
+        hand.ascending = named.ascending;
+        hand.sort_base_order = kBase;
+        hand.sort_order = {4, 5, 1, 3, 2};
+        app::StructuralEdits edits;
+        check(edits.push(std::move(hand), &renamed),
+              "push() accepts the order the renamed plan gives");
+        const std::filesystem::path out = out_path("app-sort-plan-not-file.mpp");
+        std::error_code fs_error;
+        std::filesystem::remove(out, fs_error);
+        const app::StructuralSaveResult saved =
+            app::save_structural_edits(edits, {}, source, out.string(), false);
+        check(!saved.ok, "the save refuses an order the file's own names do not give");
+        check(saved.error.find("the sorted order does not match the order the file's own "
+                               "outline") != std::string::npos,
+              "the save's refusal names the file's order (got \"" + saved.error + "\")");
+        check(!std::filesystem::exists(out), "the refused save writes no target file");
+    }
+
     /* The file decides the rest (the writer's dry run). */
     expect_refused(plan, sorted_path.string(), name_desc, true, false, "already carries a sort",
                    "a file that already carries a sort");
