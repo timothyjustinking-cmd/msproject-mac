@@ -232,7 +232,7 @@ for _g3_pair in ("baseline-set-nested",
                  "font-bold-row2", "font-bold-start", "font-bold-range",
                  "font-bold-off", "font-italic", "font-underline",
                  "font-size", "font-name", "font-colour",
-                 "wbs-renumber-defined"):
+                 "wbs-renumber-defined", "assign-remove-port-saved"):
     PAIRS["wave35-g3-" + _g3_pair] = (
         "wave35-g3-%s-control.mpp" % _g3_pair,
         "wave35-g3-%s-control-null.mpp" % _g3_pair,
