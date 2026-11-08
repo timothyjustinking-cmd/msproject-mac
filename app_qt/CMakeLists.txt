@@ -334,6 +334,19 @@ add_test(NAME qt_assign_resources_gate
                  "${QT_TEST_DATA_DIR_CMAKE}/wave30-assign-delete-control.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
+# W35-0.2 (R34b-6, RW34b-3): a Manually Schedule edit and a pending Table / Date
+# Format edit are refused together at save, in both queue orders, with both edits
+# kept and no file written.
+add_executable(qt_task_mode_document_edit_gate_tests tests/task_mode_document_edit_gate_test.cpp)
+target_link_libraries(qt_task_mode_document_edit_gate_tests PRIVATE qt_shell)
+qt_set_warnings(qt_task_mode_document_edit_gate_tests)
+
+add_test(NAME qt_task_mode_document_edit_gate
+         COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
+                 $<TARGET_FILE:qt_task_mode_document_edit_gate_tests>
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave30-task-mode-auto-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}")
+
 # W34-4.5: Task > Font > B is live for the one measured cell (the Task Name cell
 # of UniqueID 1) and refuses every other cell with the reason and an empty queue;
 # the measured cell queues one edit, a second click is refused, the real save

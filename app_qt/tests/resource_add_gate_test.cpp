@@ -44,6 +44,7 @@
 #include "gate_util.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "mpp_mutate.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 
@@ -285,7 +286,7 @@ int main(int argc, char** argv) {
                         "Add clicks");
             gate::check(window.pending_edits().empty(), "a non-ASCII name queues nothing");
             gate::check(window.status_left_text().contains(
-                            QStringLiteral("is not implemented in this port")),
+                            QStringLiteral("Add Resources with a name that has non-ASCII characters")),
                         "the status line names the non-ASCII refusal");
         }
 
@@ -331,9 +332,43 @@ int main(int argc, char** argv) {
         gate::check(window.pending_edits().empty(), "a fourth resource queues nothing");
         gate::check(!window.document_dirty(), "the refused fourth resource leaves the file clean");
         gate::check(window.status_left_text().contains(
-                        QStringLiteral("is not implemented in this port")),
+                        QStringLiteral("Add Resources is not implemented in this port "
+                                       "for this project")),
                     "the status line names the unmeasured-count refusal");
         gate::check(window.plan().resources.size() == 3, "the display still shows three resources");
+    }
+
+    // --- 5. W35-0.2 (R34b-5) / RW34b-3: the calendar word is not the highest --
+    // The control with its last resource's calendar word (row offset 154) moved
+    // off the highest calendar uid: the writer's dry run refuses, the refusal
+    // reaches the status line, and nothing is queued.
+    {
+        const QString moved = out_dir + QStringLiteral("/w35-resource-add-calendar-word.mpp");
+        const bool made = mppmutate::write_edited_copy(
+            fixture.toStdString(), moved.toStdString(), [](mppwrite::CfbDocument& doc) {
+                const char* const path = "114/TBkndRsc/FixedData";
+                mppmutate::Bytes rows = doc.read_stream(path);
+                const std::size_t last_row = 48 + 172 * ((rows.size() - 48) / 172 - 1);
+                mppmutate::put_u32(rows, last_row + 154, 99);
+                doc.replace_stream(path, rows);
+            });
+        gate::check(made, "the moved-calendar-word control is written");
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        if (made && window.open_file(moved, &error)) {
+            window.show();
+            QApplication::processEvents();
+            Prompt prompt;
+            gate::check(click_add(window, &prompt, true, QStringLiteral("R2")), "Add clicks");
+            gate::check(window.pending_edits().empty(), "a moved calendar word queues nothing");
+            gate::check(!window.document_dirty(), "the refusal leaves the file clean");
+            gate::check(window.status_left_text().contains(
+                            QStringLiteral("the last resource's calendar word (row offset 154)")),
+                        "the status line names the calendar-word refusal");
+        } else {
+            gate::check(false, "the moved-calendar-word control opens");
+        }
     }
     return gate::finish();
 }

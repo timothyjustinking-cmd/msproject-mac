@@ -38,13 +38,16 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <system_error>
+#include <vector>
 
 #include "edit_model.h"
 #include "gate_util.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "mpp_mutate.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 
@@ -318,7 +321,8 @@ int main(int argc, char** argv) {
                     "the removal on the port's own save queues nothing");
         gate::check(!window.document_dirty(), "the refused removal leaves the document clean");
         gate::check(window.status_left_text().contains(
-                        QStringLiteral("is not implemented in this port")),
+                        QStringLiteral("Removing an assignment is not implemented in this port "
+                                       "for this project")),
                     "the status line names the refusal");
         gate::check(task_assignment(window.plan(), task, true) != nullptr,
                     "the display still shows the assignment");
@@ -378,6 +382,66 @@ int main(int argc, char** argv) {
             gate::check(task_assignment(window.plan(), task, true) == nullptr &&
                             task_assignment(window.plan(), task, false) != nullptr,
                         "the reopened file holds only the placeholder again");
+        }
+    }
+
+    // --- 5. W35-0.1 / RW34b-3: a resource calendar the writer would not copy --
+    // Each shape is Project's own control with one calendar edit; the click is
+    // refused with the shape's own text, nothing is queued, and the file stays
+    // clean.  Add runs on the add control, removal on the delete control.
+    {
+        struct Shape {
+            const char* label;
+            std::function<void(mppwrite::CfbDocument&)> edit;
+            const char* needle;
+        };
+        const std::vector<Shape> shapes = {
+            {"a resource calendar based on another calendar",
+             [](mppwrite::CfbDocument& doc) {
+                 const char* const path = "114/TBkndCal/FixedData";
+                 mppmutate::Bytes rows = doc.read_stream(path);
+                 for (std::size_t at = 64; at + 12 <= rows.size(); at += 12) {
+                     if (mppmutate::get_u32(rows, at + 4) == 2u) {
+                         mppmutate::put_u32(rows, at, 3);
+                     }
+                 }
+                 doc.replace_stream(path, rows);
+             },
+             "whose calendar is based on another calendar"},
+            {"a resource calendar with an exception",
+             [](mppwrite::CfbDocument& doc) {
+                 mppmutate::add_calendar_block(doc, 4, 0x0D400008u, 540);
+             },
+             "has working-time changes or exceptions"},
+        };
+        for (const Shape& shape : shapes) {
+            for (const bool add : {true, false}) {
+                const QString source = add ? copy : remove_copy;
+                const QString target = out_dir + QStringLiteral("/w35-assign-shape.mpp");
+                const std::string what = std::string(shape.label) + (add ? " (add)" : " (remove)");
+                const bool made = mppmutate::write_edited_copy(source.toStdString(),
+                                                               target.toStdString(), shape.edit);
+                gate::check(made, ("the mutated control is written: " + what).c_str());
+                msqt::MainWindow window;
+                window.resize(msqt::kParityWidth, 800);
+                QString error;
+                if (!made || !window.open_file(target, &error)) {
+                    gate::check(false, ("the mutated control opens: " + what).c_str());
+                    continue;
+                }
+                window.show();
+                QApplication::processEvents();
+                select_task(window, task);
+                Prompt prompt;
+                gate::check(click_assign(window, &prompt, true, QString::fromStdString(name)),
+                            ("the click runs: " + what).c_str());
+                gate::check(window.pending_edits().empty(),
+                            ("the refusal queues nothing: " + what).c_str());
+                gate::check(!window.document_dirty(),
+                            ("the refusal leaves the file clean: " + what).c_str());
+                gate::check(window.status_left_text().contains(QString::fromUtf8(shape.needle)),
+                            ("the status line names the shape: " + what).c_str());
+            }
         }
     }
     return gate::finish();

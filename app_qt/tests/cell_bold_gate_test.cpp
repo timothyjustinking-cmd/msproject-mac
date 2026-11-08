@@ -36,6 +36,7 @@
 #include "gate_util.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "mpp_mutate.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 
@@ -190,7 +191,7 @@ int main(int argc, char** argv) {
             gate::check(window.pending_edits().empty(), "another row's Name cell queues nothing");
             gate::check(!window.document_dirty(), "the refusal leaves the document clean");
             gate::check(window.status_left_text().contains(
-                            QStringLiteral("is not implemented in this port")),
+                            QStringLiteral("Font Bold on this row is not implemented in this port")),
                         "the status line names the other-row refusal");
         } else {
             gate::check(false, "another row's Name cell can be selected");
@@ -211,7 +212,7 @@ int main(int argc, char** argv) {
             gate::check(window.pending_edits().empty(),
                         "another column of the measured row queues nothing");
             gate::check(window.status_left_text().contains(
-                            QStringLiteral("is not implemented in this port")),
+                            QStringLiteral("Font Bold on a cell outside the Task Name column")),
                         "the status line names the other-column refusal");
         } else {
             gate::check(false, "another column of the measured row can be selected");
@@ -274,8 +275,44 @@ int main(int argc, char** argv) {
                     "a second Bold on the saved file queues nothing (the view stores a format)");
         gate::check(!window.document_dirty(), "the refused Bold leaves the reopened file clean");
         gate::check(window.status_left_text().contains(
-                        QStringLiteral("is not implemented in this port")),
+                        QStringLiteral("Font Bold is not implemented in this port for this project")),
                     "the status line names the refusal on the reopened file");
+        gate::check(window.status_left_text().contains(
+                        QStringLiteral("already carries a cell format item")),
+                    "the status line gives the writer's reason on the reopened file");
+    }
+
+    // --- 3. W35-0.2 (R34G4-4) / RW34b-3: the applied view is not the measured one
+    // The control with one byte of the applied view's main block flipped: the
+    // writer's dry run refuses ("differs from the measured control's"), the
+    // refusal reaches the status line and nothing is queued.
+    {
+        const QString changed = out_dir + QStringLiteral("/w35-cell-bold-changed-view.mpp");
+        const bool made = mppmutate::write_edited_copy(
+            fixture.toStdString(), changed.toStdString(), [](mppwrite::CfbDocument& doc) {
+                const char* const path = "214/CV_iew/Var2Data";
+                mppmutate::Bytes var2 = doc.read_stream(path);
+                var2[42576 + 4 + 20000] ^= 0x01;
+                doc.replace_stream(path, var2);
+            });
+        gate::check(made, "the changed-view control is written");
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        if (made && window.open_file(changed, &error)) {
+            window.show();
+            QApplication::processEvents();
+            gate::check(select_cell(window, measured_uid, name_field),
+                        "the measured cell can be selected on the changed-view file");
+            gate::check(click_bold(window), "Bold clicks on the changed-view file");
+            gate::check(window.pending_edits().empty(), "a changed applied view queues nothing");
+            gate::check(!window.document_dirty(), "the refusal leaves the file clean");
+            gate::check(window.status_left_text().contains(
+                            QStringLiteral("differs from the measured control's")),
+                        "the status line names the changed-view refusal");
+        } else {
+            gate::check(false, "the changed-view control opens");
+        }
     }
     return gate::finish();
 }
