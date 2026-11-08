@@ -111,6 +111,49 @@ TableShape const& shape_for(std::string const& table,
                 "and the project row are refused");
 }
 
+/* The (table, shape, field key) triples a committed pair measured end to end
+ * (W35-0.4, RC-W6).  The callers each pass one of these; the writer used to
+ * take any key, so a caller that drifted would have written an unmeasured
+ * field. */
+struct MeasuredKey {
+    char const* table;
+    VarRecordShape shape;
+    std::uint32_t field_id;
+    char const* pair;
+};
+
+MeasuredKey const kMeasuredKeys[] = {
+    {kVarTaskTable, VarRecordShape::append, kTaskNotesFieldId, "wave30-notes"},
+    {kVarTaskTable, VarRecordShape::append, kTaskWbsFieldId, "wave30-wbs-code"},
+    {kVarTaskTable, VarRecordShape::append, kTaskProjectWbsFieldId,
+     "wave30-wbs-code"},
+    {kVarTaskTable, VarRecordShape::repoint, kTaskNotesFieldId,
+     "wave34-note-replace"},
+    {kVarTaskTable, VarRecordShape::remove, kTaskNotesFieldId,
+     "wave34-note-clear"},
+    {kVarTaskTable, VarRecordShape::remove, kTaskText1FieldId,
+     "wave34-field-clear"},
+    {kVarResourceTable, VarRecordShape::repoint, kResourceNameFieldId,
+     "wave30-resource-rename"},
+};
+
+void check_measured_key(TableShape const& shape, VarRecordEdit const& edit,
+                        std::string const& function) {
+    for (MeasuredKey const& measured : kMeasuredKeys) {
+        if (std::string_view(measured.table) == shape.table &&
+            measured.shape == edit.shape && measured.field_id == edit.field_id) {
+            return;
+        }
+    }
+    char hex[16];
+    std::snprintf(hex, sizeof hex, "0x%08X", edit.field_id);
+    throw Error(function + ": field key " + hex + " is not one a committed pair "
+                "measured for this shape on the " + std::string(shape.table) +
+                " table (Task: notes 0x0B40000F, WBS 0x0B40018D, project WBS "
+                "0x0B40019F, Text1 removal 0x0B400033; Resource: name "
+                "0x0C400001); refused");
+}
+
 /* '114/TBkndTask' -> '114/Props' (the directory stream, not the per-table
  * registry). */
 std::string props_path_for(std::string const& table) {
@@ -961,6 +1004,7 @@ VarRecordWrite save_var_record(CfbDocument& doc, std::string_view table,
                     " table is not measured (no committed pair removes a "
                     "resource value); refused");
     }
+    check_measured_key(shape, edit, function);
 
     CfbDocument const opened = doc;
     TableState state = load_table(doc, table_path, function);
