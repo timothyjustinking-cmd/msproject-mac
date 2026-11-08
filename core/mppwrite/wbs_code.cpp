@@ -30,6 +30,22 @@ constexpr char const* kTaskVar2 = "114/TBkndTask/Var2Data";
 constexpr char const* kDirectoryProps = "114/Props";
 constexpr std::size_t kFixedHeader = 48;
 constexpr std::size_t kFixedStride = 202;
+/* Task FixedData row words (core/mpp/reader.cpp kRowId/kRowUid; outline.h +140
+ * has-children, +172 OutlineLevel). */
+constexpr std::size_t kRowId = 0;
+constexpr std::size_t kRowUid = 4;
+constexpr std::size_t kRowHasChildren = 140;
+constexpr std::size_t kRowOutlineLevel = 172;
+/* Task FixedMeta: 16-byte header, 47-byte entries, the entry for FixedData row
+ * r at index r + 3, whose +4 word is the row's FixedData offset; +0 is the state
+ * (0x02 = deleted) and +26 bit 0x80 the stored summary flag. */
+constexpr std::size_t kMetaHeader = 16;
+constexpr std::size_t kMetaEntry = 47;
+constexpr std::size_t kMetaFirstRow = 3;
+constexpr std::size_t kMetaState = 0;
+constexpr std::size_t kMetaRowWord = 4;
+constexpr std::size_t kMetaSummaryByte = 26;
+constexpr std::uint8_t kMetaSummaryBit = 0x80;
 
 /* The measured Props records. */
 constexpr std::uint32_t kMaskRecordId = 0x0240138Bu;
@@ -62,6 +78,15 @@ std::uint32_t get_u32(Bytes const& bytes, std::size_t at) {
            (static_cast<std::uint32_t>(bytes[at + 3]) << 24);
 }
 
+std::uint16_t get_u16(Bytes const& bytes, std::size_t at) {
+    return static_cast<std::uint16_t>(bytes[at] | (bytes[at + 1] << 8));
+}
+
+std::string hex_byte(std::uint8_t value) {
+    constexpr char digits[] = "0123456789abcdef";
+    return std::string{digits[value >> 4], digits[value & 0x0F]};
+}
+
 /* The Task table's physical rows must be exactly the project row and the three
  * measured tasks, in uid order, with no tombstone. */
 void check_population(CfbDocument const& doc) {
@@ -86,14 +111,58 @@ void check_population(CfbDocument const& doc) {
                     std::to_string(kWbsMeasuredTaskCount) + " tasks, and another "
                     "count is not implemented in this port");
     }
+    Bytes const meta = doc.read_stream(kTaskMeta);
     for (std::size_t row = 0; row < rows; ++row) {
-        std::uint32_t const uid =
-            get_u32(fixed, kFixedHeader + kFixedStride * row + 4);
+        std::size_t const base = kFixedHeader + kFixedStride * row;
+        std::uint32_t const uid = get_u32(fixed, base + kRowUid);
         if (uid != row) {
             throw Error(std::string(kFunction) + ": task row " +
                         std::to_string(row) + " has UniqueID " +
                         std::to_string(uid) + "; the measured pair has the "
                         "project row and tasks 1 to 3 in order");
+        }
+        /* R34G4-5: the writer numbers by UniqueID, so the task's ID must be
+         * its UniqueID (Project numbers an ordered code by position). */
+        std::uint32_t const id = get_u32(fixed, base + kRowId);
+        if (id != uid) {
+            throw Error(std::string(kFunction) + ": task row " +
+                        std::to_string(row) + " has ID " + std::to_string(id) +
+                        " but UniqueID " + std::to_string(uid) + "; the "
+                        "measured pair numbers the tasks 1, 2 and 3 where ID "
+                        "equals UniqueID, and another order is not measured");
+        }
+        if (row == 0) {
+            continue;
+        }
+        /* The measured tasks are flat, unsummarised and live. */
+        std::size_t const entry = kMetaHeader + kMetaEntry * (row + kMetaFirstRow);
+        if (meta.size() < entry + kMetaEntry ||
+            get_u32(meta, entry + kMetaRowWord) != base) {
+            throw Error(std::string(kFunction) + ": task row " +
+                        std::to_string(row) + " has no FixedMeta entry at the "
+                        "measured slot; the FixedMeta state is not the "
+                        "measured one");
+        }
+        if (meta[entry + kMetaState] != 0) {
+            throw Error(std::string(kFunction) + ": task row " +
+                        std::to_string(row) + " has FixedMeta state 0x" +
+                        hex_byte(meta[entry + kMetaState]) + "; the measured "
+                        "pair has live rows (state 0)");
+        }
+        unsigned const level = fixed[base + kRowOutlineLevel];
+        if (level != 1 || fixed[base + kRowOutlineLevel + 1] != 0) {
+            throw Error(std::string(kFunction) + ": task row " +
+                        std::to_string(row) + " has outline level " +
+                        std::to_string(get_u16(fixed, base + kRowOutlineLevel)) +
+                        "; the measured pair has three top-level tasks, and a "
+                        "nested outline's generated numbers are not measured");
+        }
+        if ((meta[entry + kMetaSummaryByte] & kMetaSummaryBit) != 0 ||
+            get_u16(fixed, base + kRowHasChildren) != 0) {
+            throw Error(std::string(kFunction) + ": task row " +
+                        std::to_string(row) + " is a summary; the measured "
+                        "pair has no summary task, and a nested outline's "
+                        "generated numbers are not measured");
         }
     }
     for (VarEntry const& entry : read_var_entries(doc.read_stream(kTaskVarMeta))) {

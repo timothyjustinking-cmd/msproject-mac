@@ -359,6 +359,11 @@ app::StructuralEdit hand_edit() {
     return hand;
 }
 
+bool edits_accept(const app::PlanInput& plan_in) {
+    app::StructuralEdits edits;
+    return edits.push(hand_edit(), &plan_in);
+}
+
 void check_refusals() {
     const std::filesystem::path control_path = data_path(kControl);
     const std::filesystem::path coded_path = data_path(kProject);
@@ -412,7 +417,46 @@ void check_refusals() {
         expect_refused(changed, source, "UniqueIDs 1, 2 and 3", "a repeated UniqueID");
     }
 
-    /* The file decides the rest (the writer's dry run). */
+    /* R34G4-5: the numbers follow the UniqueID, so the ID and the stored row
+     * order must be the UniqueID order too. */
+    {
+        app::PlanInput changed = plan;
+        std::swap(changed.tasks[0].id, changed.tasks[1].id);
+        expect_refused(changed, source, "ID differs from its UniqueID",
+                       "tasks whose IDs are not their UniqueIDs");
+        check(!edits_accept(changed), "push() refuses tasks whose IDs are not their UniqueIDs");
+    }
+    {
+        app::PlanInput changed = plan;
+        std::swap(changed.tasks[0].file_row, changed.tasks[1].file_row);
+        expect_refused(changed, source, "stored out of UniqueID order",
+                       "tasks stored in another row order");
+        check(!edits_accept(changed), "push() refuses tasks stored in another row order");
+    }
+
+    /* The file decides the rest (the writer's dry run).  A plan that agrees with
+     * the three flat tasks but a file that is a nested outline, or whose row
+     * words differ, is refused by the writer. */
+    {
+        const std::filesystem::path nested_path = data_path("wave28-outline-indent.mpp");
+        expect_refused(plan, nested_path.string(), "is a summary",
+                       "a file that holds a nested three-task outline");
+    }
+    {
+        mppwrite::CfbDocument reordered = mppwrite::CfbDocument::from_file(source);
+        Bytes fixed = reordered.read_stream(kTaskFixed);
+        for (int i = 0; i < 4; ++i) {
+            fixed[48 + 202 * 1 + static_cast<std::size_t>(i)] =
+                static_cast<std::uint8_t>(i == 0 ? 2 : 0);
+            fixed[48 + 202 * 2 + static_cast<std::size_t>(i)] =
+                static_cast<std::uint8_t>(i == 0 ? 1 : 0);
+        }
+        reordered.replace_stream(kTaskFixed, fixed);
+        const std::filesystem::path reordered_path = out_path("app-wbs-reordered-ids.mpp");
+        reordered.save(reordered_path.string());
+        expect_refused(plan, reordered_path.string(), "has ID 2 but UniqueID 1",
+                       "a file whose IDs are not its UniqueIDs");
+    }
     expect_refused(coded_plan, coded_path.string(), not_implemented,
                    "a file that already stores WBS text and a code definition");
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),

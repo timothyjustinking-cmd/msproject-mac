@@ -36,6 +36,14 @@
  * `0x0240138b` growth for another length are all undecoded).  The plan side of
  * the command (app/edit_model) refuses the same shapes before this runs.
  *
+ * R34G4-5 (RC-W5).  The writer stamps "01" "02" "03" from the row's UNIQUEID,
+ * but an ordered code numbers a task by its POSITION; the two coincide only in
+ * the pair, so the writer also refuses a task whose ID differs from its
+ * UniqueID, a task whose outline level (FixedData +172) is not 1, a task that
+ * is a summary (FixedMeta +26 bit 0x80, FixedData +140 has-children) and a
+ * FixedMeta state other than live (0), so a nested or reordered three-task file
+ * is never numbered by a rule only the flat, in-order pair proves.
+ *
  * `dry_run` runs the whole chain against a scratch file next to nothing the
  * caller owns (the system temporary directory), removes it, and reports what a
  * real write would do; `doc` and `path` are untouched.

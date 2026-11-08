@@ -88,3 +88,26 @@ failures of 477 checks to 0 of 477 (`build/w34b/f8452b4-W34b-0.4-red.log`,
 `-green.log`); shell `app_edits_cell_bold_tests` 3 failures (373 passed), all UNEXPECTED
 ACCEPT, to 0 of 382 (`-app-red.log`, `-app-green.log`).  The measured cell still
 writes and matches Project's pair (the pair test is inside the 477 and the 382).
+
+### W34b-0.5 (R34G4-5, RC-W5)
+
+Define WBS Code stamped "01" "02" "03" from each row's UniqueID, but an ordered code
+numbers a task by position, and the writer accepted any three-task file.  The writer
+(`save_wbs_code`, so the dry run in `make_wbs_code_edit` too) now also refuses a task
+whose ID is not its UniqueID, a task whose outline level (FixedData +172) is not 1, a
+task that is a summary (FixedMeta +26 bit 0x80, or the FixedData +140 has-children word)
+and a FixedMeta state other than live, each with its own needle ("has ID 2 but UniqueID
+1", "has outline level 2", "is a summary", "FixedMeta state").  The edit model
+(`wbs_code_plan_refusal`, shared by the builder and `push()`) refuses a plan whose task
+ID differs from its UniqueID or whose stored row differs from its UniqueID.
+
+Reproductions: three tasks with IDs 2, 1, 3 against UniqueIDs 1, 2, 3 (rows reordered),
+one ID that is not its UniqueID, the nested `wave28-outline-indent.mpp`, and the level,
+summary-bit, has-children and deleted-state words changed alone on the measured control.
+RED then GREEN (fix reverted, tests kept): writer `mppwrite_roundtrip_wbs` 24 FAIL lines
+to 0 of 368 checks (`build/w34b/dee4998-W34b-0.5-red.log`, `-green.log`); shell
+`app_edits_wbs_tests` 6 failures to 0 of 383 (`-red-app.log`, `-green-app.log`).  The
+nested file and the deleted state were refused before only by an unrelated downstream
+VarMeta message; the new needles prove the refusal now comes from the numbering rule.
+The measured pair still writes and matches Project's pair field by field (the
+`wbs-code` pair totals, noise=149 effects=216, are unchanged and inside the 368).

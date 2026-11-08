@@ -3107,6 +3107,18 @@ std::string wbs_code_plan_refusal(const PlanInput& plan) {
                    "the measured Project pair has the tasks with UniqueIDs 1, 2 and 3";
         }
         seen[task.uid] = true;
+        // R34G4-5: the writer numbers by UniqueID, so the task's ID and its
+        // stored row must be its UniqueID (the pair is 1, 2, 3 in that order).
+        if (task.id != task.uid) {
+            return "Define WBS Code is not implemented in this port when a task's ID differs "
+                   "from its UniqueID: the measured Project pair numbers tasks 1, 2 and 3 "
+                   "where the ID is the UniqueID";
+        }
+        if (task.file_row != task.uid) {
+            return "Define WBS Code is not implemented in this port for tasks stored out of "
+                   "UniqueID order: the measured Project pair stores tasks 1, 2 and 3 in rows "
+                   "1, 2 and 3";
+        }
         if (task.summary || task.outline_level != 0) {
             return "Define WBS Code is not implemented in this port for an outline: "
                    "the measured Project pair has three top-level tasks and no summary";

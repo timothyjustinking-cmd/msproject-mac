@@ -327,6 +327,97 @@ void test_wbs_pair(TestContext& t) {
         declared.data(), declared.size());
 }
 
+/* R34G4-5 (RC-W5).  The measured numbers "01" "02" "03" are written from the
+ * row's UniqueID, but Project numbers an ordered code by the task's position:
+ * the pair is only proven where ID == UniqueID == row, every task is top-level
+ * (OutlineLevel 1) and none is a summary or a deleted slot.  Each mutation
+ * below starts from Project's own control, so everything else is the measured
+ * shape and only the named word differs. */
+constexpr std::size_t kTaskFixedHeader = 48;
+constexpr std::size_t kTaskFixedStride = 202;
+constexpr std::size_t kTaskMetaHeader = 16;
+constexpr std::size_t kTaskMetaEntry = 47;
+constexpr std::size_t kTaskMetaFirstRowEntry = 3; /* entry index = row + 3 */
+
+void put_u32(std::vector<std::uint8_t>& b, std::size_t at, std::uint32_t v) {
+    for (int i = 0; i < 4; ++i) {
+        b[at + i] = static_cast<std::uint8_t>(v >> (8 * i));
+    }
+}
+
+void test_numbering_refusals(TestContext& t, std::string const& refused) {
+    char const* const fixed = "114/TBkndTask/FixedData";
+    auto run = [&](CfbDocument doc, std::string_view needle,
+                   std::string const& what) {
+        CfbDocument const before = doc;
+        std::filesystem::remove(refused);
+        expect_error(t, [&] { (void)mppwrite::save_wbs_code(doc, refused); },
+                     needle, what);
+        t.check(doc.to_bytes() == before.to_bytes(), what + ": doc untouched");
+        t.check(!file_exists(refused), what + ": no output file");
+        CfbDocument dry = before;
+        expect_error(t, [&] { (void)mppwrite::save_wbs_code(dry, refused, true); },
+                     needle, what + " (dry run)");
+    };
+    auto row_at = [](std::size_t row) {
+        return kTaskFixedHeader + kTaskFixedStride * row;
+    };
+
+    /* IDs 2, 1, 3 against UniqueIDs 1, 2, 3: the row order is not the ID order. */
+    {
+        CfbDocument doc = doc_from_data(kControl);
+        std::vector<std::uint8_t> bytes = doc.read_stream(fixed);
+        put_u32(bytes, row_at(1), 2);
+        put_u32(bytes, row_at(2), 1);
+        doc.replace_stream(fixed, bytes);
+        run(std::move(doc), "has ID 2 but UniqueID 1", "rows reordered (ID != UniqueID)");
+    }
+    /* One task whose ID is not its UniqueID. */
+    {
+        CfbDocument doc = doc_from_data(kControl);
+        std::vector<std::uint8_t> bytes = doc.read_stream(fixed);
+        put_u32(bytes, row_at(3), 9);
+        doc.replace_stream(fixed, bytes);
+        run(std::move(doc), "has ID 9 but UniqueID 3", "one ID that is not its UniqueID");
+    }
+    /* A nested file: Project's own outline pair (task 1 summarises task 2). */
+    run(doc_from_data("wave28-outline-indent.mpp"), "is a summary",
+        "a nested three-task file");
+    /* The level word alone (the summary byte stays clear). */
+    {
+        CfbDocument doc = doc_from_data(kControl);
+        std::vector<std::uint8_t> bytes = doc.read_stream(fixed);
+        bytes[row_at(2) + 172] = 2;
+        doc.replace_stream(fixed, bytes);
+        run(std::move(doc), "has outline level 2", "a task below the top level");
+    }
+    /* The stored summary bit alone. */
+    {
+        CfbDocument doc = doc_from_data(kControl);
+        std::vector<std::uint8_t> meta = doc.read_stream(kTaskMeta);
+        meta[kTaskMetaHeader + kTaskMetaEntry * (kTaskMetaFirstRowEntry + 2) + 26] |=
+            0x80;
+        doc.replace_stream(kTaskMeta, meta);
+        run(std::move(doc), "is a summary", "the stored summary bit alone");
+    }
+    /* The has-children word alone. */
+    {
+        CfbDocument doc = doc_from_data(kControl);
+        std::vector<std::uint8_t> bytes = doc.read_stream(fixed);
+        bytes[row_at(1) + 140] = 1;
+        doc.replace_stream(fixed, bytes);
+        run(std::move(doc), "is a summary", "the has-children word alone");
+    }
+    /* A FixedMeta state other than the pair's (the deleted-row flag). */
+    {
+        CfbDocument doc = doc_from_data(kControl);
+        std::vector<std::uint8_t> meta = doc.read_stream(kTaskMeta);
+        meta[kTaskMetaHeader + kTaskMetaEntry * (kTaskMetaFirstRowEntry + 3)] = 0x02;
+        doc.replace_stream(kTaskMeta, meta);
+        run(std::move(doc), "FixedMeta state", "a task with the deleted-row state");
+    }
+}
+
 void test_refusals(TestContext& t) {
     std::string const refused = out_path("w34-wbs-refused.mpp");
     std::filesystem::remove(refused);
@@ -357,6 +448,7 @@ void test_refusals(TestContext& t) {
                      "output path is empty", "an empty output path");
         t.check(doc.to_bytes() == before.to_bytes(), "empty path: doc untouched");
     }
+    test_numbering_refusals(t, refused);
 }
 
 void test_dry_run(TestContext& t) {
