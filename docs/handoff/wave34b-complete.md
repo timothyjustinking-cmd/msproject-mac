@@ -157,3 +157,21 @@ insertion sort (`-new.log`, 776 checks passed), so the sort still sorts.  Sweep 
 `app` and `app_qt` for `std::sort`, `stable_sort` or `partial_sort` over `begin()/data() +
 count`: this is the only match (the other `begin() + n` uses are `std::vector` ranges, not a
 fixed array).
+
+### W34b-0.8 (CI-n)
+
+None.  The coordinator listed no further red job for G0.
+
+### G0 gates
+
+Fresh trees `build/w34b-g0-fresh`, `-qt` and `-app`, configured with
+`CORE_WARNINGS_AS_ERRORS=ON`, on commit `80862de` (logs in `build/w34b/g0-gates/`, script
+`build/w34b/run-g0-gates.cmd`): core `ctest -E plan_recalc` 62/62; `plan_recalc_tests` with
+`MPP_NO_CORPUS=1` 266 checks passed (512 with the corpus); M2 `recalc --compare` 332/332
+fields match; engine self-test 265 checks, 0 failures; engine suite 8 scenarios, 7 pass and
+the expected `constraint-mso` failure; `check_fixtures.py` and `check_markers.py --range
+main..HEAD` exit 0; app_qt build and ctest 47/47; app build and ctest 31/31.  Both name
+scans are clean.  The gcc, clang and AppleClang jobs and the gcc 15 warning (0.6, 0.7) can
+not run on this machine; the coordinator's CI run is their gate.
+
+WAVE-34b-G0-COMPLETE
