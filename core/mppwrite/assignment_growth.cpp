@@ -930,11 +930,20 @@ void check_measured_shape(CfbDocument const& doc, Bytes const& task_fixed,
         task_image, measured_task_row(),
         {{0, 32}, {74, 78}, {96, 120}, {174, 178}, {186, 194}});
     if (at >= 0) {
+        /* W35-0.2 (R34b-3): the word at +128 is a per-task stamp (0x3d141482 in the
+         * assign pairs).  It is NOT per-save noise: it is identical between
+         * every control and its no-edit save and between a pair's two files, and
+         * differs only between fixture families (0x3d182d28, 0x3d182bac), so it is
+         * compared and the refusal names it. */
         std::string const detail =
             at == 84 || at == 88
                 ? "the task's duration is not the measured 24000 ticks (5 days)"
-                : "a duration, constraint, calendar, percent or other word "
-                  "differs from the measured task";
+                : (at >= 128 && at < 132)
+                      ? "the task's stamp word at +128 differs from the measured "
+                        "0x3d141482; it is not per-save noise (it is unchanged by a "
+                        "no-edit save), and no pair measured another value"
+                      : "a duration, constraint, calendar, percent or other word "
+                        "differs from the measured task";
         fail(function + ": the target task's FixedData row differs from the "
              "measured task row at byte " + std::to_string(at) + "; " + detail);
     }
