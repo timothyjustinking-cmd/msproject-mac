@@ -36,6 +36,7 @@ add_library(core_mppwrite STATIC
     actuals.cpp
     outline.cpp
     task_mode.cpp
+    calculate.cpp
     project_props.cpp
     summary_info.cpp
     edit_marker.cpp
@@ -152,6 +153,7 @@ if(MPPWRITE_BUILD_TESTS)
                       roundtrip_assignment_growth.cpp)
     mppwrite_add_test(mppwrite_roundtrip_resource_growth
                       roundtrip_resource_growth.cpp)
+    mppwrite_add_test(mppwrite_roundtrip_calculate roundtrip_calculate.cpp)
     mppwrite_add_test(mppwrite_roundtrip_summary_info
                       roundtrip_summary_info.cpp)
     # W45/W48/W52/W54's tests also round-trip their own output through the

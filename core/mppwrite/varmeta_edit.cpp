@@ -133,9 +133,36 @@ MeasuredKey const kMeasuredKeys[] = {
      "wave34-note-clear"},
     {kVarTaskTable, VarRecordShape::remove, kTaskText1FieldId,
      "wave34-field-clear"},
+    {kVarTaskTable, VarRecordShape::append, kTaskActualOvertimeWorkFieldId,
+     "wave35-calculate-unlinked"},
+    {kVarTaskTable, VarRecordShape::append, kTaskRemainingOvertimeWorkFieldId,
+     "wave35-calculate-unlinked"},
+    {kVarTaskTable, VarRecordShape::append, kTaskOvertimeCostFieldId,
+     "wave35-calculate-unlinked"},
+    {kVarTaskTable, VarRecordShape::append, kTaskActualOvertimeCostFieldId,
+     "wave35-calculate-unlinked"},
+    {kVarTaskTable, VarRecordShape::append, kTaskRemainingOvertimeCostFieldId,
+     "wave35-calculate-unlinked"},
     {kVarResourceTable, VarRecordShape::repoint, kResourceNameFieldId,
      "wave30-resource-rename"},
 };
+
+/* The project-row (uid 0) appends a committed pair measured: the last-issued
+ * WBS number (wave30-wbs-code) and Calculate Project's five overtime records
+ * (wave35-calculate-unlinked). */
+bool project_row_append_measured(std::string const& table,
+                                 VarRecordEdit const& edit) {
+    if (edit.uid != 0 || table != kVarTaskTable ||
+        edit.shape != VarRecordShape::append) {
+        return false;
+    }
+    return edit.field_id == kTaskProjectWbsFieldId ||
+           edit.field_id == kTaskActualOvertimeWorkFieldId ||
+           edit.field_id == kTaskRemainingOvertimeWorkFieldId ||
+           edit.field_id == kTaskOvertimeCostFieldId ||
+           edit.field_id == kTaskActualOvertimeCostFieldId ||
+           edit.field_id == kTaskRemainingOvertimeCostFieldId;
+}
 
 void check_measured_key(TableShape const& shape, VarRecordEdit const& edit,
                         std::string const& function) {
@@ -150,7 +177,8 @@ void check_measured_key(TableShape const& shape, VarRecordEdit const& edit,
     throw Error(function + ": field key " + hex + " is not one a committed pair "
                 "measured for this shape on the " + std::string(shape.table) +
                 " table (Task: notes 0x0B40000F, WBS 0x0B40018D, project WBS "
-                "0x0B40019F, Text1 removal 0x0B400033; Resource: name "
+                "0x0B40019F, project-row overtime 0x0B4000A4/A5/A8/A9/AA, "
+                "Text1 removal 0x0B400033; Resource: name "
                 "0x0C400001); refused");
 }
 
@@ -977,10 +1005,9 @@ VarRecordWrite save_var_record(CfbDocument& doc, std::string_view table,
     /* W34-4.6: wave30-wbs-code appends ONE record to the Task table's project
      * row (uid 0, key 0x0B40019F, the last-issued WBS number); that append is
      * the only measured edit of the row's var records. */
-    bool const wbs_project_row = edit.uid == 0 && table_path == kVarTaskTable &&
-                                 edit.shape == VarRecordShape::append &&
-                                 edit.field_id == kTaskProjectWbsFieldId;
-    if (edit.uid == 0 && !wbs_project_row) {
+    bool const measured_project_row =
+        project_row_append_measured(table_path, edit);
+    if (edit.uid == 0 && !measured_project_row) {
         throw Error(function + ": uid 0 is the project row (the Resource "
                     "placeholder row in TBkndRsc); editing its var records is "
                     "not measured");
