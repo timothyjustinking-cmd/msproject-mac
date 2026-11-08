@@ -242,6 +242,37 @@ The wave-33b fix-only wave closed R33-1..R33-3; these five stay queued.
 - RF-4 Low: `static_cast<int>(std::floor(number / 10.0))` before the 0..10 clamp
   (`core/view/group.cpp:155`); NaN or > 2.1e10 is undefined behaviour.
 
+## Queued from wave 34 (CLOSE): wave 35 and the wave-34 review findings
+
+Wave 34 stopped after G4 (the brief's stop rule: the 12-hour point passed during
+G4).  Wave 35 takes, in order, subject to the operator's word:
+
+- **G5, the scheduler save path, stage 1** (brief section 2, W34-5.1..5.3): the
+  decode note for Calculate Project from `wave30-calculate-*` and
+  `wave34-calculate-second`, `mppwrite::save_plan` as a measured writer for one
+  shape (a pending Duration change on an unlinked automatic leaf, F9, save),
+  two more pairs before linked files, then Calculate Project enabled for the
+  measured shapes only.  Respect Links, Move, Auto Schedule and Level All stay
+  disabled until their own pairs match.
+- **G6, view-state persistence** (brief section 2): sort order, applied table,
+  outline level and zoom, one pair each; the Zoom Custom span measured first.
+- **The deferrals from G4** with the pairs they still need, each in the
+  `wave34-complete.md` "Found, not fixed (G4)" list: Insert Summary and Insert
+  Milestone (4.4: renumbering, reparenting, the 2.5 ordinal, assignment
+  placeholder rows, CEdl and Props changes), Set Baseline 0 (4.7: 94 new var
+  blocks, 26 undecoded), Resource and Task Notes (4.1: the RichEdit generator
+  string), Font controls other than one Bold cell, WBS Renumber, port-saved
+  assignment removal.
+- **The macOS shell** (`app/main.mm`) wires only Add Resources (4.2, read not run)
+  of the wave-34 items; it builds no UI for rename, assign, bold or Define Code
+  (RC-R4, RC-R5).  Wire them or record why they stay unwired; no refusal exists
+  in one shell only.
+- **The wave-34 CLOSE review** (`wave34-verification/close-review.md`): the two
+  Highs (R34G3-1 / RC-R1, R34G3-2) and the Mediums R34G3-3, R34G3-4, RC-W5 and
+  RC-R3 go to the fix-only `wave34b`; the other Mediums (RC-W1..W4, RC-W6..W8,
+  RC-R2) and the Lows (RC-W9, RC-W10, RC-R4..R8, R34G3-5..R34G3-9) are queued
+  here for wave 35 with the directions in that file.
+
 ## After wave 30 (not planned in detail)
 
 Team Planner, Network Diagram, Calendar and Report views; the constraint-mso engine
