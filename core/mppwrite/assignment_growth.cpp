@@ -642,6 +642,11 @@ TaskLeaf find_task_leaf(std::vector<VarEntryView> const& entries,
  * every pair, checked below). */
 constexpr double kMeasuredAssignmentWork = 2400000.0;
 constexpr std::uint32_t kMeasuredTaskDuration = 24000;
+/* The first-assignment add (count 0 -> 1) is measured on one pair only, whose
+ * assignment table holds three unassigned placeholder rows going to four; the
+ * constants it writes (FixedMeta header +4 := 6, the 396 -> 520 size, the
+ * scalar 120) belong to that count (W35-0.4, RC-W1). */
+constexpr std::size_t kFirstAddMeasuredRows = 3;
 
 struct SkipRange {
     std::size_t first;
@@ -1850,6 +1855,12 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
     /* The measured placeholder-only add shape (count 0 -> 1): every row an
      * unassigned placeholder, one FixedMeta and one Fixed2Meta entry per row,
      * no spare. */
+    if (rows != kFirstAddMeasuredRows) {
+        fail(function + ": the assignment table has " + std::to_string(rows) +
+             " rows; the first-assignment add is measured only on a table of " +
+             std::to_string(kFirstAddMeasuredRows) +
+             " unassigned placeholder rows (wave30-assign-add)");
+    }
     if (fm.flag != 4 || fm.count != rows || fm.entries != rows) {
         fail(function + ": the assignment FixedMeta is not the measured "
              "rows / rows / flag 4 shape of a task with no real assignment");
