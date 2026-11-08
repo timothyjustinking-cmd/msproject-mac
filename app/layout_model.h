@@ -142,6 +142,11 @@ struct TaskRow {
     // W35-0.2 (R34b-2): the task stores a Type block (VarMeta 0x0b400080).  The
     // measured assignment fixtures store none, so Assign Resources refuses it.
     bool type_block_stored = false;
+    // W35b-0.5 (R35G1-3): Task.Active (Fixed2Meta flags bit 0x40, core/mpp Task::active)
+    // and whether the task stores a Baseline 0 block (core/mpp Task::baseline.stored).
+    // The measured Calculate Project pair has every task active with no baseline.
+    bool active = true;
+    bool baseline_stored = false;
     // W30-C5: the physical TBkndAssn row count naming this task (tombstones
     // included), or kAssignmentRowsUnknown for a plan not loaded from a file.
     std::size_t assignment_rows = kAssignmentRowsUnknown;
@@ -241,6 +246,19 @@ struct AssignmentRow {
     double units_percent = 100.0;
     date32 start = kDateNa;
     date32 finish = kDateNa;
+    // W35b-0.5 (R35G1-3): the assignment stores a Baseline 0 block.
+    bool baseline_stored = false;
+};
+
+// W35b-0.5 (R35G1-3): one row of the calendar table (core/mpp Calendar), so the plan
+// can say which calendar the project uses.  Calculate Project is measured on the
+// Standard calendar alone, with no working-time or exception block of its own.
+struct CalendarRow {
+    std::int32_t uid = 0;
+    std::int32_t base_uid = 0;
+    std::int32_t resource_uid = -1;  // -1 for a base calendar
+    std::string name;
+    std::uint32_t stored_blocks = 0;  // the name, working times, exceptions, any other
 };
 
 struct PlanInput {
@@ -253,6 +271,8 @@ struct PlanInput {
     // the Gantt do not read them).
     std::vector<ResourceRow> resources;
     std::vector<AssignmentRow> assignments;
+    // W35b-0.5: the calendar table, in file order; empty for a producer that has none.
+    std::vector<CalendarRow> calendars;
     date32 project_start = kDateNa;
     date32 project_finish = kDateNa;
     /* Wave 26 (W26-5.1): the project row's Priority word (FixedData +78 of row

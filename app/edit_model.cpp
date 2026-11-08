@@ -3578,9 +3578,47 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
                         "that recalculate a linked schedule write words this port "
                         "does not model";
     }
+    // W35b-0.5 (R35G1-3): the parameters no pair varies.  The pair has no resource on the
+    // Resource Sheet (the assignments name Project's placeholder), the Standard calendar
+    // with no block of its own, active tasks, and no baseline or stored task type.
+    if (!plan.resources.empty()) {
+        return prefix + "for a project with resources on the Resource Sheet: the measured "
+                        "Project pair has only Project's placeholder assignments";
+    }
+    for (const AssignmentRow& assignment : plan.assignments) {
+        if (assignment.resource_uid_raw != 0xFFFF0001u) {
+            return prefix + "for an assignment to a resource: the measured Project pair "
+                            "assigns Project's placeholder only";
+        }
+        if (assignment.baseline_stored) {
+            return prefix + "for an assignment with a baseline: the measured Project pair "
+                            "has none";
+        }
+    }
+    // The control's table is Standard (uid 1, one stored block: its name) and the calendar
+    // Project derives for the null resource (uid 2, based on 1, no stored block).
+    if (plan.calendars.size() != 2 || plan.calendars[0].name != "Standard" ||
+        plan.calendars[0].stored_blocks != 1 || plan.calendars[0].resource_uid != -1 ||
+        plan.calendars[1].base_uid != plan.calendars[0].uid || !plan.calendars[1].name.empty() ||
+        plan.calendars[1].stored_blocks != 0) {
+        return prefix + "for a project whose calendar is not the measured Standard calendar "
+                        "alone (named Standard, with no working-time or exception block of "
+                        "its own)";
+    }
     for (const TaskRow& task : plan.tasks) {
         if (task.file_row == 0) {
             return prefix + "while a task is pending: save the project first";
+        }
+        if (!task.active) {
+            return prefix + "for an inactive task: the measured Project pair has active "
+                            "tasks only";
+        }
+        if (task.baseline_stored) {
+            return prefix + "for a task with a baseline: the measured Project pair has none";
+        }
+        if (task.type_block_stored) {
+            return prefix + "for a task with a stored task type: the measured Project pair "
+                            "stores none";
         }
         if (task.summary || task.outline_level != 0) {
             return prefix + "for an outline: the measured Project pair has two "
