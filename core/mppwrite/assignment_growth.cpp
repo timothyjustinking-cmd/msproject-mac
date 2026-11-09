@@ -1417,6 +1417,10 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
 
 } /* namespace */
 
+std::vector<std::uint8_t> const& measured_default_week_record() {
+    return measured_default_week();
+}
+
 AssignmentGrowthWrite assign_resource(CfbDocument& doc,
                                       AssignmentKey const& key,
                                       std::string const& path, bool dry_run) {

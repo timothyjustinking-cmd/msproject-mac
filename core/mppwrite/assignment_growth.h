@@ -146,6 +146,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include "cfb_writer.h"
 
@@ -160,6 +161,12 @@ struct AssignmentKey {
     std::uint32_t task_uid = 0;
     std::uint32_t resource_uid = 0;
 };
+
+/* The default working week (114/Props 0x02401388) every measured assignment pair
+ * carries: Monday to Friday 08:00-12:00 + 13:00-17:00.  The writer refuses a
+ * project whose record differs; the app's edit model compares the same bytes
+ * (W35b-2.9, R35G0-2) so it refuses up front. */
+std::vector<std::uint8_t> const& measured_default_week_record();
 
 /* What the write proved from the file on disk. */
 struct AssignmentGrowthWrite {

@@ -273,6 +273,14 @@ struct PlanInput {
     std::vector<AssignmentRow> assignments;
     // W35b-0.5: the calendar table, in file order; empty for a producer that has none.
     std::vector<CalendarRow> calendars;
+    // W35b-2.9 (R35G0-2): the project's default calendar (114/Props 0x0240000E name
+    // and 0x02401388 week payload), so Assign Resources can refuse a project on
+    // another calendar or week the way the writer does.  `stored` is false when
+    // the file carries no such record.
+    std::string default_calendar_name;
+    bool default_calendar_name_stored = false;
+    std::vector<std::uint8_t> default_week_record;
+    bool default_week_stored = false;
     date32 project_start = kDateNa;
     date32 project_finish = kDateNa;
     /* Wave 26 (W26-5.1): the project row's Priority word (FixedData +78 of row

@@ -55,6 +55,7 @@
 #include <system_error>
 #include <vector>
 
+#include "assignment_growth.h"
 #include "cfb_writer.h"
 #include "edit_model.h"
 #include "fixture_guard.h"
@@ -658,6 +659,56 @@ void check_refusals() {
                                resource_uid, assign, one.needle,
                                std::string(assign ? "assign: " : "remove: ") + one.label);
                 /* push() backstops a hand-built queue with the same rule. */
+                app::StructuralEdits edits;
+                check(!edits.push(hand_edit(assign, task_uid, resource_uid, kAdd.task_uid + 100),
+                                  &changed),
+                      std::string("push() refuses ") + (assign ? "an assign" : "a removal") +
+                          " on " + one.label);
+                check(edits.empty(), std::string("push(): nothing queued for ") + one.label);
+            }
+        }
+    }
+    /* W35b-2.9 (R35G0-2): the project's default calendar and week, which the
+     * writer's check_project_calendar refuses.  One plan-level change each, for
+     * the add and for the removal, at the builder and in push(). */
+    {
+        struct ProjectCalendarCase {
+            const char* label;
+            const char* needle;
+            std::function<void(app::PlanInput&)> change;
+        };
+        const std::vector<ProjectCalendarCase> project_cases = {
+            {"a default calendar named another calendar",
+             "the project's default calendar is not the Standard base calendar",
+             [](app::PlanInput& changed) { changed.default_calendar_name = "Night Shift"; }},
+            {"a default calendar the file does not store",
+             "the project's default calendar is not the Standard base calendar",
+             [](app::PlanInput& changed) { changed.default_calendar_name_stored = false; }},
+            {"a default week that is not stored",
+             "the project's default working week differs from the measured",
+             [](app::PlanInput& changed) { changed.default_week_stored = false; }},
+            {"a default week with one byte changed",
+             "the project's default working week differs from the measured",
+             [](app::PlanInput& changed) {
+                 changed.default_week_record.at(changed.default_week_record.size() / 2) ^= 0x01;
+             }},
+        };
+        for (const bool assign : {true, false}) {
+            const app::PlanInput& base = assign ? plan : remove_plan;
+            check(base.default_calendar_name_stored && base.default_week_stored &&
+                      base.default_week_record == mppwrite::measured_default_week_record(),
+                  std::string("the measured fixture carries the Standard default calendar and "
+                              "the measured week: ") + (assign ? "assign" : "remove"));
+        }
+        for (const ProjectCalendarCase& one : project_cases) {
+            for (const bool assign : {true, false}) {
+                app::PlanInput changed = assign ? plan : remove_plan;
+                one.change(changed);
+                const std::uint32_t task_uid = assign ? kAdd.task_uid : kRemove.task_uid;
+                const std::uint32_t resource_uid = assign ? kAdd.resource_uid : kRemove.resource_uid;
+                expect_refused(changed, assign ? source : remove_path.string(), task_uid,
+                               resource_uid, assign, one.needle,
+                               std::string(assign ? "assign: " : "remove: ") + one.label);
                 app::StructuralEdits edits;
                 check(!edits.push(hand_edit(assign, task_uid, resource_uid, kAdd.task_uid + 100),
                                   &changed),
