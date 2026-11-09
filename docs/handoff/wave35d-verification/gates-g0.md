@@ -16,8 +16,8 @@ Scans each time: `check_fixtures.py`, `check_markers.py --range main..HEAD`, `gu
 | 0.1 | R35cW-CI1 | `23de6e2` | fixed in source; the GCC compile is CI's (MSVC does not report `-Wmissing-field-initializers`) |
 | 0.2 | R35cW-CI2 | `171831b` | fixed in source; macos-qt is CI's (macOS cannot be run here) |
 | 0.3 | R35cG0-1 (High) | `abc8a60` | fixed: three tests, each branch red when switched off |
-| 0.4 | R35cG1-1 (High) | `61a451b` | fixed, both halves; Show Level checked and does not reproduce |
-| 0.5 | R35cG1-2 (High) | `6458203` | fixed |
+| 0.4 | R35cG1-1 (High) | `61a451b` | fixed, both halves; Show Level was checked and did not reproduce on the routes run (**corrected, W35e-1.3:** the route Undo Level, session-only Sort, Redo does diverge: R35dG1-1(b), closed by W35e-1.1 `39c8e37`) |
+| 0.5 | R35cG1-2 (High) | `6458203` | **partly fixed: Task Information partial apply** (R35dG0-2, R35dG0-1 with R35dW-1); closed by W35e-0.1 `b8ee455`, which clears the structural redo list when any field of the form commits and a later one fails |
 
 ## Gate lines
 
@@ -99,7 +99,8 @@ clears are in; it is defence in depth, shown only by that run.
 
 `cut_selection` clears the structural redo list after its transaction applies, `paste_selection`
 when it changed at least one cell. The other `after_cell_change()` callers are the sheet's own
-Undo and Redo (must not clear) and Task Information (already clears). Tests in `qt_sort_persist` and
+Undo and Redo (must not clear) and Task Information (clears only when every field commits;
+**corrected, W35e-1.3, R35dG0-2:** a partly applied edit kept the list, closed by W35e-0.1 `b8ee455`). Tests in `qt_sort_persist` and
 `qt_outline_persist`: Sort or Level 1, Ctrl+Z, a Cut or a Copy-then-Paste of a Name cell, Ctrl+Y;
 the status line proves the edit applied, Redo is disabled, nothing is re-queued, the names are as
 the edit left them. Red with the two `clear_redo()` calls removed (`0.5-red-run.log`): 11 FAILs
