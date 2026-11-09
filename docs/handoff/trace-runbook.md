@@ -59,7 +59,15 @@ in order:
    - Hash its WINPROJ.EXE and check its section table against `memory.tsv` (script:
      section starts and ends must be equal).
    - Then a trace RVA maps straight onto the model (`FUN_` address = 0x140000000 + RVA).
-   - Unverified: whether Microsoft's content network still serves that build.
+   - **Done, Mon 9 Nov 2026.**  The Current Channel network still serves the build.  The VM
+     `msp-trace` runs ProjectPro2021Retail 16.0.20430.20182 with updates off, installed by the
+     ODT with `Version="16.0.20430.20182"`.
+     - Every section start matches `memory.tsv`, and every end matches once the virtual-size
+       end is rounded up to the 0x200 file alignment Ghidra uses.  For example, `.text` ends
+       at `140f49653` and rounds to `140f497ff`, and `.data` ends at `1415e6a57` exactly.
+     - WINPROJ.EXE SHA-256:
+       `F1A7E52729C01C115535B1277C5553302D15F996FCE8D433DFCE11E0FD7F5F6B`.
+     - So option 2 is not needed.
 2. **Otherwise re-decompile the VM's build.**
    - Run Ghidra headless on the VM's pinned WINPROJ.EXE (`ghidra-project/` is regenerable;
      the auto-analysis of a 32 MB image takes hours).
