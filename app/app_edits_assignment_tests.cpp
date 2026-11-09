@@ -1115,6 +1115,195 @@ void check_refusals() {
     }
 }
 
+/* W35b-2.10 (R35G0-3): the calendar refusals driven from a FILE.  The shape cases
+ * above set ResourceRow fields on the plan directly, so nothing exercised the
+ * reader's derivation of calendar_base_uid, calendar_stored_blocks and
+ * calendar_base_extra_blocks (mutating the extra-block count to 0 left every
+ * test green).  Each case here edits a calendar stream of a measured control,
+ * saves the copy, reads it back through the reader and the adapter, asserts the
+ * reader field the case is about, and expects the edit model's refusal with its
+ * own wording for the add and for the removal. */
+constexpr const char* kCalVar2Path = "114/TBkndCal/Var2Data";
+constexpr const char* kCalVarMetaPath = "114/TBkndCal/VarMeta";
+constexpr const char* kCalFixedPath = "114/TBkndCal/FixedData";
+constexpr std::size_t kCalVarMetaHeader = 24;
+constexpr std::size_t kCalVarMetaEntry = 12;
+constexpr std::size_t kCalFixedHeader = 64;
+constexpr std::size_t kCalFixedRow = 12;
+
+std::uint32_t le32(const Bytes& bytes, std::size_t at) {
+    return static_cast<std::uint32_t>(bytes.at(at)) |
+           (static_cast<std::uint32_t>(bytes.at(at + 1)) << 8) |
+           (static_cast<std::uint32_t>(bytes.at(at + 2)) << 16) |
+           (static_cast<std::uint32_t>(bytes.at(at + 3)) << 24);
+}
+
+void put_le32(Bytes& bytes, std::size_t at, std::uint32_t value) {
+    for (std::size_t index = 0; index < 4; ++index) {
+        bytes.at(at + index) = static_cast<std::uint8_t>(value >> (8 * index));
+    }
+}
+
+/* Append one zero-filled block of `length` bytes for (uid, key) to the calendar
+ * table's Var2Data and index it in VarMeta in (uid, key) order. */
+void add_calendar_block(mppwrite::CfbDocument& document, std::uint32_t uid, std::uint32_t key,
+                        std::size_t length) {
+    Bytes var2 = document.read_stream(kCalVar2Path);
+    Bytes meta = document.read_stream(kCalVarMetaPath);
+    const std::uint32_t offset = static_cast<std::uint32_t>(var2.size());
+    Bytes block(4 + length, 0);
+    put_le32(block, 0, static_cast<std::uint32_t>(length));
+    var2.insert(var2.end(), block.begin(), block.end());
+    const std::size_t count = (meta.size() - kCalVarMetaHeader) / kCalVarMetaEntry;
+    std::size_t at = count;
+    for (std::size_t index = 0; index < count; ++index) {
+        const std::size_t base = kCalVarMetaHeader + kCalVarMetaEntry * index;
+        const std::uint32_t entry_uid = le32(meta, base);
+        const std::uint32_t entry_key = le32(meta, base + 8);
+        if (entry_uid > uid || (entry_uid == uid && entry_key > key)) {
+            at = index;
+            break;
+        }
+    }
+    Bytes entry(kCalVarMetaEntry, 0);
+    put_le32(entry, 0, uid);
+    put_le32(entry, 4, offset);
+    put_le32(entry, 8, key);
+    meta.insert(meta.begin() + static_cast<std::ptrdiff_t>(kCalVarMetaHeader +
+                                                           kCalVarMetaEntry * at),
+                entry.begin(), entry.end());
+    put_le32(meta, 8, static_cast<std::uint32_t>(count + 1));
+    put_le32(meta, 0x14, static_cast<std::uint32_t>(var2.size()));
+    document.replace_stream(kCalVar2Path, var2);
+    document.replace_stream(kCalVarMetaPath, meta);
+}
+
+/* Re-base the resource's own calendar row ({base, resource, calendar}). */
+void set_resource_calendar_base(mppwrite::CfbDocument& document, std::uint32_t resource_uid,
+                                std::uint32_t base_uid) {
+    Bytes fixed = document.read_stream(kCalFixedPath);
+    const std::size_t rows = (fixed.size() - kCalFixedHeader) / kCalFixedRow;
+    std::size_t changed = 0;
+    for (std::size_t row = 0; row < rows; ++row) {
+        const std::size_t at = kCalFixedHeader + row * kCalFixedRow;
+        if (le32(fixed, at + 4) == resource_uid) {
+            put_le32(fixed, at, base_uid);
+            ++changed;
+        }
+    }
+    check(changed == 1, "the calendar table has exactly one row for the resource");
+    document.replace_stream(kCalFixedPath, fixed);
+}
+
+void check_calendar_files() {
+    struct CalendarFileCase {
+        const char* label;
+        const char* needle;
+        std::function<void(mppwrite::CfbDocument&, std::uint32_t, std::uint32_t)> mutate;
+        std::function<bool(const app::ResourceRow&)> reader_field;
+    };
+    const std::vector<CalendarFileCase> cases = {
+        {"a Standard calendar that stores an exception block",
+         "has working-time changes or exceptions",
+         [](mppwrite::CfbDocument& document, std::uint32_t, std::uint32_t) {
+             add_calendar_block(document, 1, 0x0D400008u, 540);
+         },
+         [](const app::ResourceRow& row) {
+             return row.calendar_base_extra_blocks == 1 && row.calendar_stored_blocks == 0 &&
+                    row.calendar_base_uid == 1;
+         }},
+        {"a resource calendar that stores a working-times block",
+         "has working-time changes or exceptions",
+         [](mppwrite::CfbDocument& document, std::uint32_t, std::uint32_t calendar_uid) {
+             add_calendar_block(document, calendar_uid, 0x0D400008u, 540);
+         },
+         [](const app::ResourceRow& row) {
+             return row.calendar_stored_blocks == 1 && row.calendar_base_extra_blocks == 0 &&
+                    row.calendar_base_uid == 1;
+         }},
+        {"a resource calendar based on calendar 3",
+         "whose calendar is based on another calendar",
+         [](mppwrite::CfbDocument& document, std::uint32_t resource_uid, std::uint32_t) {
+             set_resource_calendar_base(document, resource_uid, 3);
+         },
+         [](const app::ResourceRow& row) {
+             return row.calendar_base_uid == 3 && row.calendar_stored_blocks == 0 &&
+                    row.calendar_base_extra_blocks == 0;
+         }},
+    };
+
+    for (const bool assign : {true, false}) {
+        const Pair& pair = assign ? kAdd : kRemove;
+        const std::filesystem::path control = data_path(pair.control);
+        const std::string tag = assign ? "assign" : "remove";
+        app::PlanInput base;
+        try {
+            base = load_plan(control);
+        } catch (const std::exception&) {
+            check(false, "the calendar-file control loads: " + tag);
+            continue;
+        }
+        const app::ResourceRow* resource = nullptr;
+        for (const app::ResourceRow& row : base.resources) {
+            if (row.uid == pair.resource_uid) {
+                resource = &row;
+            }
+        }
+        std::int32_t calendar_uid = -1;
+        for (const app::CalendarRow& row : base.calendars) {
+            if (row.resource_uid == static_cast<std::int32_t>(pair.resource_uid)) {
+                calendar_uid = row.uid;
+            }
+        }
+        check(resource != nullptr && calendar_uid > 1,
+              "the control holds the resource and its own calendar row: " + tag);
+        if (resource == nullptr || calendar_uid <= 1) {
+            continue;
+        }
+        check(resource->calendar_base_uid == 1 && resource->calendar_stored_blocks == 0 &&
+                  resource->calendar_base_extra_blocks == 0,
+              "the unmodified control's resource reads as the measured Standard-derived "
+              "calendar: " + tag);
+        {
+            app::StructuralEdit edit;
+            std::string error;
+            check(app::make_assignment_edit(base, control.string(), pair.task_uid,
+                                            pair.resource_uid, assign, edit, error),
+                  "the unmodified control builds its edit (got \"" + error + "\"): " + tag);
+        }
+
+        std::size_t number = 0;
+        for (const CalendarFileCase& one : cases) {
+            mppwrite::CfbDocument document = mppwrite::CfbDocument::from_file(control.string());
+            one.mutate(document, pair.resource_uid, static_cast<std::uint32_t>(calendar_uid));
+            const std::filesystem::path copy =
+                out_path("app-assign-calendar-" + tag + "-" + std::to_string(number++) + ".mpp");
+            document.save(copy.string());
+            app::PlanInput changed;
+            try {
+                changed = app::plan_input_from_document(mpp::load_file(copy.string()));
+            } catch (const std::exception& read_error) {
+                check(false, std::string("the reader opens ") + one.label + ": " + tag);
+                std::printf("READ ERROR: %s\n", read_error.what());
+                continue;
+            }
+            const app::ResourceRow* read = nullptr;
+            for (const app::ResourceRow& row : changed.resources) {
+                if (row.uid == pair.resource_uid) {
+                    read = &row;
+                }
+            }
+            check(read != nullptr && one.reader_field(*read),
+                  std::string("the reader derives the calendar fields of ") + one.label + ": " +
+                      tag);
+            expect_refused(changed, copy.string(), pair.task_uid, pair.resource_uid, assign,
+                           one.needle, tag + ": " + one.label + " (from a file)");
+            std::error_code ignored;
+            std::filesystem::remove(copy, ignored);
+        }
+    }
+}
+
 // W35-4.1: the lookup both shells use to choose between assigning and removing.
 void check_held_assignment_resource() {
     app::PlanInput plan;
@@ -1140,6 +1329,7 @@ int main() {
     check_pair(kAdd);
     check_pair(kRemove);
     check_refusals();
+    check_calendar_files();
     check_held_assignment_resource();
     std::printf("app_edits_assignment_tests: %d checks passed\n", g_checks - g_failures);
     if (g_failures != 0) {
