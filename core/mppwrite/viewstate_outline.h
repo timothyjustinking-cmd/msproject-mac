@@ -124,6 +124,11 @@ struct ViewOutlineWrite {
 void outline_show_level_sets(std::vector<OutlineViewRow> const& rows, int show_level,
                              std::vector<bool>& hidden, std::vector<bool>& collapsed);
 
+/* True when the rows' levels are one of the two outlines the pairs measure
+ * (0-based 0,1,1,0,0 over five tasks or 0,1,2,2,1,0 over six).  The writer
+ * checks it on every request; the edit model checks it in push() (W35b-3.1). */
+bool outline_shape_measured(std::vector<OutlineViewRow> const& rows);
+
 /*
  * Apply `edit` to `doc`, write the package to `path`, re-open it and prove the
  * state from the bytes.  Throws Error on a refusal or a mismatch; then neither

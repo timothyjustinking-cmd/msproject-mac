@@ -135,8 +135,7 @@ void validate_edit(ViewOutlineEdit const& edit, std::string const& function) {
                     std::to_string(kOutlineMeasuredMaxLevel) + "), so this "
                     "outline level is refused");
     }
-    if (!levels_match(edit.rows, kBaseLevels.data(), kBaseLevels.size()) &&
-        !levels_match(edit.rows, kDeepLevels.data(), kDeepLevels.size())) {
+    if (!outline_shape_measured(edit.rows)) {
         throw Error(function + ": the outline of " + number(edit.rows.size()) +
                     " tasks is not one the pairs measure (levels 1,2,2,1,1 over "
                     "five tasks or 1,2,3,3,2,1 over six), so this outline level "
@@ -464,6 +463,11 @@ std::size_t meta_flag_at(std::size_t row) {
 }
 
 } /* namespace */
+
+bool outline_shape_measured(std::vector<OutlineViewRow> const& rows) {
+    return levels_match(rows, kBaseLevels.data(), kBaseLevels.size()) ||
+           levels_match(rows, kDeepLevels.data(), kDeepLevels.size());
+}
 
 void outline_show_level_sets(std::vector<OutlineViewRow> const& rows, int show_level,
                              std::vector<bool>& hidden, std::vector<bool>& collapsed) {
