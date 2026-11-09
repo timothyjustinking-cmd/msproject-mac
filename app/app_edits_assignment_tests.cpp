@@ -633,7 +633,7 @@ void check_refusals() {
             {"a resource calendar based on another calendar",
              "whose calendar is based on another calendar", nullptr,
              [](app::ResourceRow& row) { row.calendar_base_uid = 3; }},
-            {"a resource with no calendar row", "whose calendar is based on another calendar",
+            {"a resource with no calendar row", "that has no calendar row of its own",
              nullptr, [](app::ResourceRow& row) { row.calendar_base_uid = -1; }},
             {"a resource calendar with an exception", "has working-time changes or exceptions",
              nullptr, [](app::ResourceRow& row) { row.calendar_stored_blocks = 1; }},

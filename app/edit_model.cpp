@@ -2963,6 +2963,12 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
     // is the project calendar's.  A resource on another base calendar, or one
     // with an exception or edited week (its own or the Standard calendar's),
     // moves the work and finish Project would write, and no pair measured it.
+    if (resource->calendar_base_uid < 0) {
+        return what + " with a resource that has no calendar row of its own is "
+                      "not implemented in this port: the measured Project pairs "
+                      "use a resource whose calendar row derives from the Standard "
+                      "base calendar";
+    }
     if (resource->calendar_base_uid != 1) {
         return what + " with a resource whose calendar is based on another "
                       "calendar is not implemented in this port: the measured "
