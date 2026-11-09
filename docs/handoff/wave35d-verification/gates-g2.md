@@ -37,9 +37,9 @@ Source rows (core `-E plan_recalc` 65/65, app 34/34, app_qt 52/52 where built; 0
 every build; fixtures 0, markers 0, guard_names 0, scan_client_names 0, client-string grep none):
 
 - 2.1 (`2ebcfd8-W35d-2.1-*`): core and app built; the change to source is a test comment.
-- 2.3 (`caa6cb1-W35d-2.3-*`), 2.4 (`ec2429c-W35d-2.4-*`; app only), 2.5 (`7d908c6-W35d-2.5-*`),
+- 2.3 (`caa6cb1-W35d-2.3-*`), 2.4 (`ec2429c-W35d-2.4-*`), 2.5 (`7d908c6-W35d-2.5-*`),
   2.6 (`fc12254-W35d-2.6-*`), 2.7 (`f3c38d9-W35d-2.7-*`), 2.8 (`51c474b-W35d-2.8-*`): core 65/65,
-  app 34/34, app_qt 52/52 (the 2.4 row did not build app_qt).
+  app 34/34, app_qt 52/52, except 2.4 (core and app built, no app_qt: a core test only).
 - 2.9 (`492f10c-W35d-2.9-*`): core 65/65, app 34/34.
 - 2.10 (`bb4a398-W35d-2.10-*`), 2.11 (`e415fe2-W35d-2.11-*`), 2.12 (`4dcfcd7-W35d-2.12-*`),
   2.14 (`c250aef-W35d-2.14-*`): core 65/65, app 34/34, app_qt 52/52.

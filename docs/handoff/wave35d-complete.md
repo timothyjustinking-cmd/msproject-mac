@@ -121,7 +121,7 @@ Builder record: `wave35d-verification/gates-g2.md`. Commits: `6f5cc18` (2.1), `c
 `c250aef-W35d-2.14-*`): core build 0 with 0 warnings; `ctest -E plan_recalc` 65/65; app 34/34;
 app_qt 52/52; `check_fixtures` 0; `check_markers --range main..HEAD` 0; `guard_names` 0;
 `scan_client_names` 0; client-string grep none. Rows 2.2, 2.13 and 2.15 are records only and ran
-the scans without a build; 2.4 and 2.9 did not build app_qt (the change is in core and app). The
+the scans without a build; 2.4 (a core test only) and 2.9 built core and app and not app_qt. The
 measured pairs still write and match with effects on.
 
 **Guards seen red:** 2.3 to 2.9, 2.11, 2.12 and 2.14 against the code without the fix, and 2.10 as a
