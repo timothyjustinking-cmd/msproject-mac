@@ -1,32 +1,48 @@
-# memory — coordinator (2026-11-09, wave 35 complete on branch `wave35`)
+# memory — coordinator (2026-11-10, wave 35e in progress on branch `wave35e`)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
 `docs/handoff/wave35-complete.md` (G0-G4 and CLOSE appended; `WAVE-35-COMPLETE`); reviews in
 `docs/handoff/wave35-verification/`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
 
+## Wave 35e state (in progress on `wave35e`, NOT merged, NOT pushed) — 10 November 2026
+
+Fix-only wave cut from `wave35d` at `2ea87e5`; brief `docs/handoff/wave35e-brief.md`, record
+`docs/handoff/wave35e-complete.md`.  It works the queue in
+`docs/handoff/wave35d-verification/coord-gates-close.md`, which this file does not shorten:
+**High** R35dG0-1 (a partly applied Task Information or Task Form edit keeps the structural redo
+list; with R35dW-1 it re-queues a Calculate Project), fixed in source by W35e-0.1 `b8ee455`
+(`WAVE-35e-G0-COMPLETE`) and open until the coordinator's mutations and review; **Mediums**
+R35dG0-2, R35dG1-1, R35dG1-2, R35dG1-3, R35dW-2, R35dW-3 (G1: W35e-1.1 `39c8e37`, 1.2
+`1da3997`, 1.3 the records, awaiting review); **Lows** R35dG0-3 to -5, R35dG1-4 to -7,
+R35dG2-1 to -5, R35dW-4 to -6 (G2 and CLOSE).  R35cW-CI1 and R35cW-CI2 are fixed in source and
+CI is their gate until the coordinator's run is green.  Partly fixed 35c ids: R35cG1-2,
+R35cG1-4, R35cW-1, R35cG0-3, R35cW-4 (each with its R35d remainder), R35cG0-2, R35cG0-4.
+
 ## Wave 35b state (closed on `wave35b`, NOT merged, NOT pushed) — 9 November 2026
 
 Fix-only wave cut from `wave35`; `WAVE-35b-COMPLETE` in `docs/handoff/wave35b-complete.md`.
 Every brief id fixed with a commit or recorded.  Fresh-tree gates at `90d8b4e` green
 (`build/w35b/W35b-CLOSE-fresh-gates.log`) except `guard_names` (the two `9fa599b` blobs).
-**Open Highs:** R35bG0-1 and R35bG0-2 (Calculate Project: Props project start and calculation
-options), queued in `plan-waves27-30.md` ("Queued from wave 35b").  Coordinator still owes the
+**Highs:** R35bG0-1 and R35bG0-2 (Calculate Project: Props project start and calculation
+options) were fixed in wave 35c (`7d923dc`, `743ad8b`) and are NOT open.  Coordinator still owes the
 `9fa599b` decision, push, both CI dispatches (macos-qt proves W35b-0.1; `app/main.mm` compiles
 only in CI), an independent review of `wave35..wave35b`, and the 4(e) reopen check.
-Wave 35c closed the rest of the G4 and CLOSE review queue (`docs/handoff/wave35b-verification/coord-gates-close.md`) except R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth.  What 35c left open is in the wave 35d state below.
+Wave 35c closed the rest of the G4 and CLOSE review queue (`docs/handoff/wave35b-verification/coord-gates-close.md`) except R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth; R35bW-1, R35bW-2, R35bG2-2 and R35bG3-1 were recorded partly fixed by 35c and carry their remainders in the wave 35d and 35e states.  What 35c left open is in the wave 35d state below.
 
 ## Wave 35d state (closed on `wave35d`, `WAVE-35d-COMPLETE`, NOT merged, NOT pushed) — 10 November 2026
 
 Fix-only wave cut from `wave35c`; brief `docs/handoff/wave35d-brief.md`, record
 `docs/handoff/wave35d-complete.md` (`WAVE-35d-G0-COMPLETE` to `-G2-COMPLETE`, then `WAVE-35d-COMPLETE`).  It worked the wave 35c queue
 in `docs/handoff/wave35c-verification/coord-gates-close.md`, Highs first.  State at CLOSE:
-**Highs** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (fixed `6458203`).
-**CI** R35cW-CI1 (fixed `23de6e2`), R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS is the
-only proof of each.  **Mediums fixed** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1
-(`41f7a2c`), R35cG0-3 (`6552f11`), R35cW-2 (`454521d`), R35cW-1 with R35cG2-8 (this list).
+**Highs** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (**partly fixed**
+`6458203`, remainder R35dG0-1).  **CI** R35cW-CI1 (`23de6e2`) and R35cW-CI2 (`171831b`) are fixed
+in source; CI on GCC 13 and macOS is the only proof of each and its gate.  **Mediums:** fixed
+R35cG1-3 (`e967858`), R35cG2-1 (`41f7a2c`), R35cW-2 (`454521d`), R35cG2-8; **partly fixed**
+R35cG1-4 (`e2eca38`, remainder R35dG1-1), R35cG0-3 (`6552f11`, remainder R35dG1-2), R35cW-1
+(`4410935`, remainder R35dG1-3 and R35dW-2).
 **G2 done** (`WAVE-35d-G2-COMPLETE`): the Lows R35cG0-5, -6, R35cG1-5 to -7, R35cG2-2 to -7 and
-R35cW-3 to -5 are fixed or recorded; **partly fixed, still open:** R35cG0-2 (plan reads Start word
+R35cW-3 and -5 are fixed or recorded, R35cW-4 (`4dcfcd7`) is **partly fixed** (remainder R35dW-1); **partly fixed, still open:** R35cG0-2 (plan reads Start word
 +104 only) and R35cG0-4 (no plan-side Props digest).  Every 35d fix awaits an independent review; the coordinator still owes the
 push, both CI dispatches and the mutation runs.
 

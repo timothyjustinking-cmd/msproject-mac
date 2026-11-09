@@ -378,16 +378,17 @@ closed by `513de29`.
 
 Wave 35b closed on branch `wave35b` (`WAVE-35b-COMPLETE`) with its brief done, but the per-group
 reviews (`docs/handoff/wave35b-verification/review-g0.md` to `review-g3.md`) left two Highs on
-Calculate Project.  A fix-only `wave35c` (or the first group of the next wave) takes them first:
+Calculate Project.  **Both were fixed in wave 35c (`7d923dc`, `743ad8b`) and are closed; the
+list below is history (W35e-1.3, R35dG1-3).**  Wave 35c took them first:
 
-- **R35bG0-1 (High)**: read the `114/Props` project start (`0x02400002`) and require every
+- **R35bG0-1 (High; closed by `7d923dc`)**: read the `114/Props` project start (`0x02400002`) and require every
   leaf's Start to equal it in `read_calculate_shape` and `calculate_plan_refusal`, not row 0's
   roll-up (`core/mppwrite/calculate.cpp`, `app/edit_model.cpp`); a test that moves the project
   start under manual calculation.
-- **R35bG0-2 (High)**: pin the `114/Props` calculation options (multiple critical paths, the
+- **R35bG0-2 (High; closed by `743ad8b`)**: pin the `114/Props` calculation options (multiple critical paths, the
   critical-slack limit, minutes per day) to the control's values in both layers.
 
-Then, as `review-g0.md` to `review-g3.md` give them: Mediums R35bG0-3 (two-edit critical-path
+Then, as `review-g0.md` to `review-g3.md` give them (**the Mediums and Lows here that wave 35c fixed are closed; the ones it did not are named in the paragraph below, and wave 35d's open ids are in `wave35d-verification/coord-gates-close.md`**): Mediums R35bG0-3 (two-edit critical-path
 move; record the limit in `spec/writers/calculate.md`), R35bG0-4 (reader tests for the new plan
 fields), R35bG0-5 (plan layer narrower than the writer), R35bG1-1 (`sorted_order_of` reads
 `sorted[index]` after `sorted.clear()`), R35bG1-2 (the 1.6 guard reads FixedMeta byte 12 only),
@@ -407,13 +408,32 @@ Wave 35c closed the G4 and CLOSE review queue (`wave35b-verification/coord-gates
 The complete queue is `wave35c-verification/coord-gates-close.md`, Highs first; `wave35d` (branch
 `wave35d`, brief `wave35d-brief.md`, record `wave35d-complete.md`) worked it and closed (`WAVE-35d-COMPLETE`).  State at CLOSE:
 
-- **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (fixed `6458203`).
-- **CI:** R35cW-CI1 (fixed `23de6e2`), R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS is the
-  only proof of each.
-- **Mediums fixed:** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1 (`41f7a2c`), R35cG0-3
-  (`6552f11`), R35cW-2 (`454521d`), R35cW-1 with R35cG2-8 (this list).
+- **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (**partly fixed**
+  `6458203`; remainder R35dG0-1, fixed in source by W35e-0.1 `b8ee455`, awaiting review).
+- **CI:** R35cW-CI1 (`23de6e2`) and R35cW-CI2 (`171831b`) are fixed in source; CI on GCC 13 and
+  macOS is the only proof of each and its gate, until the coordinator's run is green.
+- **Mediums:** fixed R35cG1-3 (`e967858`), R35cG2-1 (`41f7a2c`), R35cW-2 (`454521d`), R35cG2-8;
+  **partly fixed** R35cG1-4 (`e2eca38`; remainder R35dG1-1), R35cG0-3 (`6552f11`; remainder
+  R35dG1-2 and R35dW-4) and R35cW-1 (`4410935`; remainder R35dG1-3 and R35dW-2).
 - **G2 (the Lows and the Calculate Medium):** fixed R35cG0-5, R35cG0-6, R35cG1-5 to -7, R35cG2-2
-  to -7 and R35cW-3 to -5 (commits in `wave35d-complete.md`).  **Partly fixed, still open:**
+  to -7 and R35cW-3 and -5 (commits in `wave35d-complete.md`); R35cW-4 is **partly fixed**
+  (`4dcfcd7`; remainder R35dW-1).  **Partly fixed, still open:**
   R35cG0-2 (the plan reads Start word +104 only; the writer half is closed) and R35cG0-4 (the plan
   has no Props digest, a recorded gap); both are refused at the writer or the save.
 - Every 35d fix awaits an independent review.
+
+## Queued from wave 35d (CLOSE): the fix-only `wave35e` (10 November 2026)
+
+The complete queue is `wave35d-verification/coord-gates-close.md` (the coordinator's list, High
+first); `wave35e` (branch `wave35e`, brief `wave35e-brief.md`, record `wave35e-complete.md`) works
+it.  The open ids are:
+
+- **High:** R35dG0-1, with R35dW-1 (a partly applied Task Information or Task Form edit keeps the
+  structural redo list).  Fixed in source by W35e-0.1 `b8ee455`; open until the coordinator's
+  review.
+- **Mediums:** R35dG0-2, R35dG1-1, R35dG1-2, R35dG1-3, R35dW-2, R35dW-3 (G1: W35e-1.1
+  `39c8e37`, 1.2 `1da3997`, 1.3 the records).
+- **Lows:** R35dG0-3 to -5, R35dG1-4 to -7, R35dG2-1 to -5, R35dW-4 to -6 (W35e-1.2 covers
+  R35dW-4).
+- **CI:** R35cW-CI1 and R35cW-CI2 stay "fixed in source; CI is its gate" until the coordinator's
+  run is green.
