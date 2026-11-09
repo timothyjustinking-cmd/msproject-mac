@@ -1468,6 +1468,13 @@ void check_refusals() {
         const app::StructuralSaveResult saved = app::save_structural_edits(
             edits, {}, data_path(kProject).string(), out.string(), false);
         check(!saved.ok, "the save fails on a file that is already calculated");
+        /* W35c-2.6 (R35bG2-6): the digest refuses it, and the message must say so; "not
+         * pending" from the writer's dry run would also fail the save, so !saved.ok alone
+         * cannot tell the two guards apart. */
+        check(saved.error.find("has changed since Calculate Project was queued") !=
+                  std::string::npos,
+              "the already-calculated refusal names the changed file (got \"" + saved.error +
+                  "\")");
         check(mppwrite::CfbDocument::from_file(out.string()).to_bytes() == target_before,
               "the refused save leaves the existing target byte-identical");
         check(!std::filesystem::exists(out.string() + ".w51-structural-tmp"),

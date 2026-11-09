@@ -6651,6 +6651,11 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                 leaf.total_slack = static_cast<std::int32_t>(entry.total_slack);
                 request.leaves.push_back(leaf);
             }
+            // W35c-2.6 (R35bG2-6): defence in depth.  The digest above ties the edit to the
+            // file, and push() has already recomputed the edit's finish, duration and slack
+            // (calculate_slack_refusal, tested in app_edits_calculate_tests), and the queue
+            // holds its edits const, so this dry run cannot fire through the public API; it
+            // stays for a caller that builds a StructuralEdits another way.
             mppwrite::validate_calculate(document, request);
             const mppwrite::CalculateWrite written =
                 mppwrite::save_calculate(document, request, next_write_path());
