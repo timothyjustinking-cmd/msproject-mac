@@ -209,6 +209,14 @@ RIBBON_GAPS = {
         "in the save; every other count, outline, prefix, separator or length, a "
         "redefinition, and Renumber... are refused as not implemented in this "
         "port (no Define Code dialog fields are built)",
+    # W35c-2.19 (R35bG1-7): the Edit menu item is the same command as the ribbon's Define
+    # Code, so it carries the same gap text (it read as a full implementation).
+    "define_wbs_code":
+        "gap: Define Code... writes the prefix W with ordered two-digit numbers "
+        "on a project of exactly three flat tasks that stores no WBS text, alone "
+        "in the save; every other count, outline, prefix, separator or length, a "
+        "redefinition, and Renumber... are refused as not implemented in this "
+        "port (no Define Code dialog fields are built)",
     # W35-1.3: Calculate Project for the measured shape.
     "calculate_project":
         "gap: a pending recalculation of the project row and exactly two "
