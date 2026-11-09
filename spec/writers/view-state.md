@@ -358,8 +358,10 @@ File > Save writes the queued Show Level or Sort, so a change the user makes to 
 afterwards would leave the file describing rows the user is no longer looking at.  The shell's
 one guard (`view_change_refusal`, `refuse_view_change`) now covers every such change under
 either kind, and the rule is: **while a Show Level or a Sort is queued, every change to the
-displayed outline or order other than the queued kind's own replacement or withdrawal is
-refused, with the queued edit named and nothing changed.**  The Sort branch's refusals are kept
+displayed outline or order other than the queued kind's own replacement or withdrawal, or
+clearing a session sort (a cleared sort shows the file's own order, which a queued Show Level is
+relative to; see the table), is refused, with the queued edit named and nothing changed.**  The
+Sort branch's refusals are kept
 (the other option, lifting them, would let Save write a Sort over an outline the display no
 longer shows).
 
