@@ -355,6 +355,26 @@ void refused_requests() {
                 "slack the unlinked shape cannot have", "free slack differs");
     }
     {
+        /* W35b-3.7 (RW35-R4): slack that is internally consistent (free, start and total
+         * equal, not negative) but is not the working time to the project finish. */
+        CfbDocument doc = control;
+        CalculateRequest bad = good;
+        bad.leaves[1].free_slack += 4800;
+        bad.leaves[1].start_slack += 4800;
+        bad.leaves[1].total_slack += 4800;
+        refuses([&] { mppwrite::save_calculate(doc, bad, path); },
+                "is not the working time between its finish and the project finish",
+                "slack one day too long");
+    }
+    {
+        CfbDocument doc = control;
+        CalculateRequest bad = good;
+        bad.leaves[1].late_start += 4800;
+        refuses([&] { mppwrite::save_calculate(doc, bad, path); },
+                "is not the working time between its finish and the project finish",
+                "late start that is not the project finish less the duration");
+    }
+    {
         /* W35b-2.2 (R35G1-5): the unlinked backward pass gives every leaf the project finish as
          * its late finish; a request whose late finish is earlier is the caller's engine
          * disagreeing with the rule, and the writer does not trust it. */
