@@ -122,6 +122,10 @@ files were restored after each run. Logs are in `build/w35c/` (git-ignored).
   call the writer again") is wrong: `push()`'s `show_level` case does not call the writer; only
   the save cascade does. The commit message cannot be rewritten (no history rewrite), so the
   correction is recorded here and in the 1.10 message.
+- **Correction to the 1.10 subject (W35d-2.13, R35cG1-5).** `4a2133e`'s subject says Sort, a
+  removal and Show Level "each have a guard in both layers".  That holds for Sort and the
+  removal; Show Level's two layers share one predicate and `push()` has no file, so it is partly
+  fixed, as the table above says.  No history rewrite.
 
 ## Guards seen red
 
