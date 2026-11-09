@@ -433,6 +433,33 @@ int main(int argc, char** argv) {
                         "clearing the sort leaves the queued level in place");
             gate::check(!status_contains(window, "not a session Sort"),
                         "clearing the sort under a queued level is not refused");
+
+            // W35e-2.3 (R35dG1-5): the clear above runs with no sort shown (the Sort just above
+            // was refused), so it proves little.  Both routes the finding names are closed since
+            // W35e-1.1, so a sorted display under a queued level is reached through the session
+            // entry point the gates and the header use (apply_session_sort has no queued-view
+            // guard of its own; apply_sort_choice is the production caller and refuses first).
+            // Clearing that sort must show the file's order again and leave the level, its
+            // rows and its collapse state alone.
+            window.apply_session_sort(by_name, "Name descending");
+            QApplication::processEvents();
+            gate::check(window.sort_active() && queued_level(window) != nullptr,
+                        "a sorted display under a queued level is reached (session entry point)");
+            gate::check(window.sheet_row_count() == queued_rows,
+                        "the sorted display under a queued level keeps the level's rows");
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+            gate::check(!window.sort_active(), "clearing the sort under a queued level clears it");
+            gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                        "clearing a shown sort leaves the queued level in place");
+            gate::check(window.sheet_row_count() == queued_rows,
+                        "clearing a shown sort leaves the queued level's rows");
+            std::vector<QString> names_cleared;
+            for (int row = 0; row < model->rowCount(); ++row) {
+                names_cleared.push_back(model->data(model->index(row, name_column)).toString());
+            }
+            gate::check(names_cleared == names_before,
+                        "clearing a shown sort shows the file's order again");
         }
 
         // Undo in the sheet, then the level, then Ctrl+Y: queueing the level rebuilds the
