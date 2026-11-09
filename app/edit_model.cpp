@@ -2975,6 +2975,28 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
                       "measured Project pairs use a resource calendar that "
                       "inherits the Standard calendar unchanged";
     }
+    // W35b-2.9 (R35G0-2): the Props half of the same measured calendar, as the
+    // writer's check_project_calendar refuses it: the project's default calendar
+    // is the Standard base calendar and its default week is the stock Monday to
+    // Friday week.  A project on another calendar or week schedules the task
+    // differently and no pair measured it.
+    std::string standard_name;
+    for (const CalendarRow& calendar : plan.calendars) {
+        if (calendar.uid == 1) {
+            standard_name = calendar.name;
+        }
+    }
+    if (!plan.default_calendar_name_stored || plan.default_calendar_name != standard_name) {
+        return what + ": the project's default calendar is not the Standard base "
+                      "calendar (114/Props 0x0240000E names another calendar); the "
+                      "measured Project pairs schedule the task on Standard";
+    }
+    if (!plan.default_week_stored ||
+        plan.default_week_record != mppwrite::measured_default_week_record()) {
+        return what + ": the project's default working week differs from the "
+                      "measured Monday to Friday 08:00-12:00 + 13:00-17:00 week "
+                      "(114/Props 0x02401388)";
+    }
     std::size_t real = 0;
     bool names_resource = false;
     const AssignmentRow* removed = nullptr;

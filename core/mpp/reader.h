@@ -997,6 +997,18 @@ struct ProjectRow {
     PackedDate status_date;
     bool status_date_stored = false;
 
+    /* ---- The project's default calendar (W35b-2.9, R35G0-2): the 114/Props
+     * records 0x0240000E (the calendar's name, UTF-16) and 0x02401388 (its
+     * default working week, the raw payload).  Assign Resources is measured on a
+     * project whose default calendar is Standard with the stock Monday to Friday
+     * 08:00-12:00 + 13:00-17:00 week, so the edit model needs both to refuse a
+     * project on another calendar or week before staging an edit.  `*_stored` is
+     * false when the file does not carry the record. */
+    std::string default_calendar_name;
+    bool default_calendar_name_stored = false;
+    std::vector<std::uint8_t> default_week_record;
+    bool default_week_stored = false;
+
     /* ---- The project ROW's own Flag10 (the SUMMARY column the port shows on
      * synthetic row 0).  Same FixedMeta entry byte +25 bit 0x04 that a task
      * row uses (wave 23 W23-6); the project row is FixedMeta row 0.  Wave 24

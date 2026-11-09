@@ -773,6 +773,10 @@ constexpr std::uint32_t kProjectPropsStatusDate = 0x02400045u;
  * says <NewTasksAreManual>0 store 0 and those that say 1 store 1.  See
  * ProjectRow in reader.h for the full evidence. */
 constexpr std::uint32_t kProjectPropsNewTasksManual = 0x024013C8u;
+/* Project props: the default calendar's name and its default working week
+ * (core/cal reads the same two records; see ProjectRow in reader.h). */
+constexpr std::uint32_t kProjectPropsDefaultCalendarName = 0x0240000Eu;
+constexpr std::uint32_t kProjectPropsDefaultWeek = 0x02401388u;
 /* Project VIEW props (214/212/Props) decoded in wave 24.  Both are measured
  * record ids, not names from the decompiled table:
  *   0x03400009  int16   project-summary row shown (1) / hidden (0)
@@ -3995,6 +3999,10 @@ struct ProjectPropsRecords {
     bool timeline_stored = false;
     PackedDate status_date;
     bool status_date_stored = false;
+    std::string default_calendar_name;
+    bool default_calendar_name_stored = false;
+    std::vector<std::uint8_t> default_week_record;
+    bool default_week_stored = false;
 };
 
 std::vector<std::uint8_t> read_props_stream(const CompoundFile& cfb,
@@ -4057,6 +4065,21 @@ ProjectPropsRecords decode_project_props(const CompoundFile& cfb,
             }
             out.status_date.raw = u32_at(table_props, payload);
             out.status_date_stored = true;
+            return;
+        }
+        if (id == kProjectPropsDefaultCalendarName) {
+            out.default_calendar_name = trim_ascii_spaces(decode_utf16_block(
+                std::vector<std::uint8_t>(table_props.begin() + static_cast<std::ptrdiff_t>(payload),
+                                          table_props.begin() +
+                                              static_cast<std::ptrdiff_t>(payload + length))));
+            out.default_calendar_name_stored = true;
+            return;
+        }
+        if (id == kProjectPropsDefaultWeek) {
+            out.default_week_record.assign(
+                table_props.begin() + static_cast<std::ptrdiff_t>(payload),
+                table_props.begin() + static_cast<std::ptrdiff_t>(payload + length));
+            out.default_week_stored = true;
             return;
         }
         if (id != kProjectPropsNewTasksManual) {
@@ -4151,6 +4174,10 @@ Document parse_document(const CompoundFile& cfb) {
     document.project.timeline_stored = project_props.timeline_stored;
     document.project.status_date = project_props.status_date;
     document.project.status_date_stored = project_props.status_date_stored;
+    document.project.default_calendar_name = project_props.default_calendar_name;
+    document.project.default_calendar_name_stored = project_props.default_calendar_name_stored;
+    document.project.default_week_record = project_props.default_week_record;
+    document.project.default_week_stored = project_props.default_week_stored;
     resolve_resource_calendars(document);
     return document;
 }

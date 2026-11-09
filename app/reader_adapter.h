@@ -226,6 +226,10 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     // maps 0xffffffff to kDateNa), never a defaulted date.
     input.status_date = date32_from_packed(document.project.status_date.raw);
     input.status_date_stored = document.project.status_date_stored;
+    input.default_calendar_name = document.project.default_calendar_name;
+    input.default_calendar_name_stored = document.project.default_calendar_name_stored;
+    input.default_week_record = document.project.default_week_record;
+    input.default_week_stored = document.project.default_week_stored;
 
     input.tasks.reserve(document.tasks.size());
     // W30-C5 (R29-8): the shape checks count a task's PHYSICAL assignment rows
