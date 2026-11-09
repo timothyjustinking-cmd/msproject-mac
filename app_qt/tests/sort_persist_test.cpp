@@ -129,6 +129,29 @@ int main(int argc, char** argv) {
     gate::check(window.pending_edits().empty(), "clearing the sort withdraws the queued edit");
     gate::check(!window.sort_active(), "clearing the sort clears the session sort");
 
+    // W35b-4.R7 (RW35-R7): Undo withdraws a queued sort from the file but not the
+    // session sort (the rebuild keeps it), so the status line says the rows stay
+    // sorted and the file keeps its order.
+    window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                             "Name descending", false);
+    QApplication::processEvents();
+    gate::check(queued_sort(window) != nullptr, "Name descending is queued for the Undo case");
+    if (QAction* undo = gate::find_action(window, app::MenuAction::undo)) {
+        undo->trigger();
+        QApplication::processEvents();
+    } else {
+        gate::check(false, "Undo is a menu action");
+    }
+    gate::check(window.pending_edits().empty(), "Undo withdraws the queued sort");
+    gate::check(window.sort_active(), "Undo of a queued sort leaves the session sort applied");
+    gate::check(status_contains(window, "undo the queued Sort; the rows stay in the sorted "
+                                        "order for this session and File > Save will keep the "
+                                        "file's order"),
+                "Undo of a queued sort: the status line says the display keeps the sort");
+    window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+    QApplication::processEvents();
+    gate::check(!window.sort_active(), "the Undo case leaves no session sort");
+
     // Unmeasured shapes stay session only, each with its own reason.
     struct Refused {
         const char* field;

@@ -251,6 +251,13 @@ const ViewButtonSpec kViewButtons[5] = {
     {"Report", app::ViewMode::task_sheet, false},
 };
 
+// W35b-4.R7 (RW35-R7): a queued Show Level or Sort is the edit File > Save writes;
+// the session display must not move away from it unannounced.
+bool queued_edit_is(const std::vector<app::StructuralEdit>& applied,
+                    app::StructuralKind kind) {
+    return !applied.empty() && applied.back().kind == kind;
+}
+
 }  // namespace
 
 QString& ui_font_family() { return font_family_storage(); }
@@ -2177,12 +2184,28 @@ void MainWindow::handle_action(app::MenuAction action) {
             return;
         case app::MenuAction::collapse_all:
             if (doc_.sheet() != nullptr && prefs_.view == app::ViewMode::task_sheet) {
+                if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
+                    set_message("outline: a Show Level is queued and File > Save would write "
+                                "it, not this collapsed state; choose All Subtasks or another "
+                                "level first",
+                                true);
+                    update_status();
+                    return;
+                }
                 doc_.sheet()->collapse_all();
                 after_model_change();
             }
             return;
         case app::MenuAction::expand_all:
             if (doc_.sheet() != nullptr && prefs_.view == app::ViewMode::task_sheet) {
+                if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
+                    set_message("outline: a Show Level is queued and File > Save would write "
+                                "it, not this expanded state; choose All Subtasks or another "
+                                "level first",
+                                true);
+                    update_status();
+                    return;
+                }
                 doc_.sheet()->expand_all();
                 after_model_change();
             }
@@ -2209,9 +2232,18 @@ void MainWindow::handle_action(app::MenuAction action) {
                 set_message("undo " + label, false);
                 update_status();
             } else if (structural_.can_undo()) {
+                const bool was_sort =
+                    queued_edit_is(structural_.applied(), app::StructuralKind::sort_view);
                 structural_.undo();
                 after_structural_change();
-                set_message("undo the last structural edit", false);
+                // The rebuild resets the outline (a queued Show Level's collapse goes
+                // with it) but not the session sort: Undo withdraws the queued Sort
+                // and the rows stay in the sorted order the user is looking at.
+                set_message(was_sort
+                                ? "undo the queued Sort; the rows stay in the sorted order "
+                                  "for this session and File > Save will keep the file's order"
+                                : "undo the last structural edit",
+                            false);
                 update_status();
             } else {
                 set_message("nothing to undo", false);

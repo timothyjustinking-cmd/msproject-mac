@@ -135,6 +135,31 @@ int main(int argc, char** argv) {
                 "a hand toggle with a level queued changes no row");
     gate::check(status_contains(window, "a Show Level is queued and File > Save would write it"),
                 "a hand toggle with a level queued: the status line names the queued level");
+    // W35b-4.R7 (RW35-R7): Expand All is the same kind of change to the rows, so it is
+    // refused with a level queued as well (Collapse All is enabled only while
+    // something is expanded: its case is on the deep outline below).  Undo withdraws
+    // the queued level and the rebuild shows every row again, so the display follows
+    // the file (the session Sort is the one that outlives an Undo: qt_sort_persist).
+    if (QAction* expand = gate::find_action(window, app::MenuAction::expand_all)) {
+        gate::check(expand->isEnabled(), "Expand All is enabled while Level 1 hides rows");
+        expand->trigger();
+        QApplication::processEvents();
+    } else {
+        gate::check(false, "Expand All is a menu action");
+    }
+    gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                "Expand All with a level queued leaves the queued Level 1 in place");
+    gate::check(window.sheet_row_count() == level1_rows,
+                "Expand All with a level queued changes no row");
+    gate::check(status_contains(window, "not this expanded state"),
+                "Expand All with a level queued: the status line names the queued level");
+    if (QAction* undo = gate::find_action(window, app::MenuAction::undo)) {
+        undo->trigger();
+        QApplication::processEvents();
+    }
+    gate::check(window.pending_edits().empty(), "Undo withdraws the queued level");
+    gate::check(window.sheet_row_count() == full_rows,
+                "Undo of a queued level shows every row, as the file will be saved");
     // With nothing queued the same toggle works (All Subtasks first withdraws it).
     window.apply_outline_level(0);
     QApplication::processEvents();
@@ -183,6 +208,23 @@ int main(int argc, char** argv) {
     const app::StructuralEdit* deep2 = queued_level(window);
     gate::check(deep2 != nullptr && deep2->show_level == 2,
                 "Level 2 replaces the queued Level 1 (Show Level is exclusive)");
+
+    // W35b-4.R7 (RW35-R7): Level 2 leaves the level-2 summary expanded, so Collapse All
+    // is enabled; with the level queued it is refused, the rows and the edit stay.
+    const std::size_t deep_level2_rows = window.sheet_row_count();
+    if (QAction* collapse = gate::find_action(window, app::MenuAction::collapse_all)) {
+        gate::check(collapse->isEnabled(), "Collapse All is enabled while Level 2 leaves a row expanded");
+        collapse->trigger();
+        QApplication::processEvents();
+    } else {
+        gate::check(false, "Collapse All is a menu action");
+    }
+    gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 2,
+                "Collapse All with a level queued leaves the queued Level 2 in place");
+    gate::check(window.sheet_row_count() == deep_level2_rows,
+                "Collapse All with a level queued changes no row");
+    gate::check(status_contains(window, "not this collapsed state"),
+                "Collapse All with a level queued: the status line names the queued level");
 
     // W35b-1.5 (RW35-R2): a grid edit that is not saved yet.  Show Level is built
     // from the session plan, which carries the rename; the builder refuses it,
