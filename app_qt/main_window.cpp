@@ -3431,6 +3431,17 @@ void MainWindow::calculate_project() {
         update_status();
         return;
     }
+    // W35e-2.6 (R35dG2-2): a Calculate Project is exclusive in the save, which refuses it beside
+    // a table / date format or a custom-field formula edit.  Say so now, at the moment of the
+    // change, not at File > Save.
+    if (document_ != nullptr && document_->has_pending_edits()) {
+        set_message("Calculate Project: a table / date format or custom-field formula edit is "
+                    "pending and File > Save would refuse the two together; save that edit "
+                    "first",
+                    true);
+        update_status();
+        return;
+    }
     // W35-1.3: the builder owns every refusal (the task count and shape, a link,
     // a file whose recalculation is not pending, a stale file).
     app::StructuralEdit edit;
@@ -4856,6 +4867,12 @@ void MainWindow::show_table_date_format() {
         update_status();
         return;
     }
+    // W35e-2.6 (R35dG2-2): the save refuses this edit beside a queued Calculate Project, so
+    // refuse it now (before the dialog opens), with the Calculate named.
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project) &&
+        refuse_data_change("a table / date format edit")) {
+        return;
+    }
     if (!document_) {
         document_ = std::make_unique<app::Document>(doc_.path());
     }
@@ -4899,6 +4916,11 @@ void MainWindow::show_custom_formula() {
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet) {
         set_message("Custom Field Formula is available in the Task Sheet view", false);
         update_status();
+        return;
+    }
+    // W35e-2.6 (R35dG2-2): as show_table_date_format, before the dialog opens.
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project) &&
+        refuse_data_change("a custom-field formula edit")) {
         return;
     }
     if (!document_) {
