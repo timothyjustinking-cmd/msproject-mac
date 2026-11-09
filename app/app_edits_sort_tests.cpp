@@ -453,19 +453,23 @@ void check_refusals() {
         expect_refused(renamed, source, name_desc, true, false,
                        "carries unsaved edits (UniqueID 5 Name differs from the file)",
                        "a plan whose names are not the file's");
-        /* W35b-1.3 (R35G2-3): the pairs measure one outline (levels 0, 1, 1, 0, 0). */
+        /* W35b-1.3 (R35G2-3): the pairs measure one outline (levels 0, 1, 1, 0, 0).
+         * W35c-1.10 (R35bG1-3): the plan layer refuses it on its own text; the core helper's
+         * text for the same shapes ("and this one has levels ...", "deeper than its parent
+         * allows") is pinned by roundtrip_viewstate_sort, the writer's layer. */
         struct Shape {
             std::array<int, 5> levels;
             const char* needle;
             const char* what;
         };
         const std::vector<Shape> shapes = {
-            {{0, 1, 2, 0, 0}, "and this one has levels 1, 2, 3, 1, 1", "a three-level outline"},
-            {{0, 0, 0, 0, 0}, "and this one has levels 1, 1, 1, 1, 1", "a flat outline"},
-            {{0, 1, 1, 1, 0}, "and this one has levels 1, 2, 2, 2, 1",
+            {{0, 1, 2, 0, 0}, "the plan's outline has levels 1, 2, 3, 1, 1", "a three-level outline"},
+            {{0, 0, 0, 0, 0}, "the plan's outline has levels 1, 1, 1, 1, 1", "a flat outline"},
+            {{0, 1, 1, 1, 0}, "the plan's outline has levels 1, 2, 2, 2, 1",
              "a third child under the summary"},
-            {{0, 1, 0, 1, 0}, "and this one has levels 1, 2, 1, 2, 1", "two summaries"},
-            {{0, 2, 1, 0, 0}, "deeper than its parent allows", "a row deeper than its parent"},
+            {{0, 1, 0, 1, 0}, "the plan's outline has levels 1, 2, 1, 2, 1", "two summaries"},
+            {{0, 2, 1, 0, 0}, "the plan's outline has levels 1, 3, 2, 1, 1",
+             "a row deeper than its parent"},
         };
         for (const Shape& shape : shapes) {
             app::PlanInput reindented = plan;

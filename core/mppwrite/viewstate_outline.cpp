@@ -467,6 +467,13 @@ std::size_t meta_flag_at(std::size_t row) {
 
 } /* namespace */
 
+void require_measured_outline_view(CfbDocument const& doc) {
+    std::string const function = "view outline write";
+    Bytes const edl = doc.read_stream(kEdlVar2);
+    require_applied_view(edl, function);
+    require_measured_view_block(doc, function, "this outline level");
+}
+
 bool outline_shape_measured(std::vector<OutlineViewRow> const& rows) {
     return levels_match(rows, kBaseLevels.data(), kBaseLevels.size()) ||
            levels_match(rows, kDeepLevels.data(), kDeepLevels.size());

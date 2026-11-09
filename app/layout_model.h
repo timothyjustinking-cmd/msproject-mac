@@ -243,6 +243,11 @@ struct ResourceRow {
     std::int32_t calendar_base_uid = -1;
     std::uint32_t calendar_stored_blocks = 0;
     std::uint32_t calendar_base_extra_blocks = 0;
+    // W35c-1.10 (R35bG1-3): FixedMeta byte 12 (the save-session byte) from the reader.  The
+    // default is the refused value (not stored), so a row not built by the reader adapter
+    // fails closed in the removal rule.
+    std::uint8_t fixed_meta_session = 0;
+    bool fixed_meta_session_stored = false;
 };
 
 // One assignment, as the reader exposes it (wave 11).  Work is carried in

@@ -2341,6 +2341,10 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                 resource.uid = uid;
                 resource.max_units_x100 = f64_at(rsc_fixed, base + kRscRowMaxUnits);
                 resource.peak_units_x100 = f64_at(rsc_fixed, base + kRscRowPeakUnits);
+                if (rsc_meta_stream && row < rsc_meta_type.size()) {
+                    resource.fixed_meta_session = rsc_meta_type[row];
+                    resource.fixed_meta_session_stored = true;
+                }
                 const bool work_bit =
                     row < rsc_meta_type.size() &&
                     (rsc_meta_type[row] & kRscFixedMetaWorkFlag) != 0;

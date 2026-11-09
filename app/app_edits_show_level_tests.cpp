@@ -467,9 +467,28 @@ void check_refusals() {
     /* The file decides the rest (the writer's dry run). */
     expect_refused(plan, collapsed_path.string(), 1, "already collapsed or hidden",
                    "a file that already hides rows");
+    /* W35c-1.10: the Resource Sheet file is also a file whose tasks are not the plan's, but the
+     * builder's own view check (the applied view is not the Gantt Chart) now speaks first; the
+     * writer's task-row text is pinned on a file with the measured view and another task count
+     * (a plan of the six-task measured outline over the five-task control). */
     expect_refused(plan, data_path("wave31-resource-sheet.mpp").string(), 1,
-                   "task rows (with the project row)",
-                   "a file whose tasks are not the plan's");
+                   "the view Show Level would persist on is not the measured one",
+                   "a file whose tasks and view are not the plan's");
+    {
+        app::PlanInput six = plan;
+        const int six_levels[] = {0, 1, 2, 2, 1};
+        for (std::uint32_t uid = 1; uid <= 5; ++uid) {
+            task_by_uid(six, uid)->outline_level = six_levels[uid - 1];
+        }
+        app::TaskRow extra = *task_by_uid(six, 5);
+        extra.uid = 6;
+        extra.id = 6;
+        extra.file_row = task_by_uid(six, 5)->file_row + 1;
+        extra.outline_level = 0;
+        six.tasks.push_back(extra);
+        expect_refused(six, source, 1, "task rows (with the project row)",
+                       "a file whose tasks are not the plan's");
+    }
     /* W35b-1.1 (R35G2-1): Project saves that differ from the control only in their
      * view state.  Each has the same five tasks as the plan, so only the writer's
      * view-state pins can refuse it, each with its own reason. */
@@ -485,6 +504,14 @@ void check_refusals() {
     expect_refused(plan, data_path(edit_name("sort-name-asc")).string(), 1,
                    "the file already carries a sort (the spec at block + 40",
                    "R35G2-1: a file with a persisted sort");
+    /* W35c-1.10 (R35bG1-3): the builder refuses the same four files at its own call site
+     * (require_measured_outline_view) with its own prefix, before the writer's dry run, so
+     * removing either check leaves one of these two sets red. */
+    for (const char* name : {"table-cost", "table-schedule", "zoom-entire", "sort-name-asc"}) {
+        expect_refused(plan, data_path(edit_name(name)).string(), 1,
+                       "the view Show Level would persist on is not the measured one",
+                       std::string("the builder's own view check on ") + name);
+    }
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    1, "could not be read", "a missing project file");
 

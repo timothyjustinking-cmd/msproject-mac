@@ -755,6 +755,12 @@ struct Resource {
      * per-row metadata did not supply the value. */
     ResourceType type = ResourceType::work;
     bool type_stored = false;
+    /* W35c-1.10 (R35bG1-3): byte 12 of the resource's FixedMeta entry, the save-session byte
+     * (0x1C until a Project session has saved the file, 0x5C after), and whether the file
+     * supplied it.  The plan layer refuses a removal from a file whose resource rows are not
+     * the measured 0x1C, independently of the writer's own check. */
+    std::uint8_t fixed_meta_session = 0;
+    bool fixed_meta_session_stored = false;
     /* Resource calendar UniqueID, DERIVED from the calendar table -- there is
      * no calendar word in the 172-byte (MPP14) / 188-byte (MPP12) resource row.
      * A TBkndCal/FixedData row names its resource in the +4 column (MPP14) or

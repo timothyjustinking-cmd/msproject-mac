@@ -858,11 +858,38 @@ void check_refusals() {
         }
         const char* const needle =
             "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C";
-        expect_refused(resaved_plan, resaved_path.string(), 1, 2, false, needle,
+        /* W35c-1.10 (R35bG1-3): the plan layer refuses on its own text (the reader's session
+         * byte of each resource row), in the builder and in push(), before the writer's dry
+         * run.  The writer's text is then pinned through the save cascade below, on a plan
+         * whose session bytes are set to the measured value, so neither layer's test can be
+         * satisfied by the other. */
+        const char* const plan_needle = "a Project session has saved";
+        expect_refused(resaved_plan, resaved_path.string(), 1, 2, false, plan_needle,
                        "remove an assignment from a port-saved file Project resaved");
+        check(resaved_plan.resources.size() == 2 && resaved_plan.resources[0].fixed_meta_session_stored &&
+                  resaved_plan.resources[0].fixed_meta_session == 0x5C,
+              "the reader fills the resaved file's resource session byte (0x5C)");
+        {
+            app::StructuralEdits plan_edits;
+            check(!plan_edits.push(hand_edit(false, 1, 2, 99), &resaved_plan),
+                  "push() refuses a removal over a plan whose resource rows are session-saved");
+        }
+        app::PlanInput unmarked = resaved_plan;
+        for (app::ResourceRow& row : unmarked.resources) {
+            row.fixed_meta_session = 0x1C;
+        }
+        {
+            app::PlanInput not_read = unmarked;
+            not_read.resources[1].fixed_meta_session_stored = false;
+            expect_refused(not_read, resaved_path.string(), 1, 2, false, plan_needle,
+                           "remove with a resource row whose session byte was not read (plan)");
+            check(unmarked.resources.size() == 2 && unmarked.resources[0].fixed_meta_session == 0x1C,
+                  "the plan with the measured session bytes carries them");
+        }
 
-        /* A hand-built edit passes push() (the plan shows the assignment) and the
-         * save's own writer refuses it before anything is written. */
+        /* A hand-built edit passes push() (the plan shows the assignment and, as set here, the
+         * measured session bytes) and the save's own writer refuses it before anything is
+         * written. */
         bool shown = false;
         std::uint32_t fresh_uid = 0;
         for (const app::AssignmentRow& row : resaved_plan.assignments) {
@@ -872,7 +899,7 @@ void check_refusals() {
         ++fresh_uid;  // push() wants the uid the writer would append, not one in the plan
         check(shown, "the resaved port file shows task 1's assignment to resource 2");
         app::StructuralEdits hand_edits;
-        check(hand_edits.push(hand_edit(false, 1, 2, fresh_uid), &resaved_plan),
+        check(hand_edits.push(hand_edit(false, 1, 2, fresh_uid), &unmarked),
               "push() accepts the hand-built removal (the plan shows the assignment)");
         const std::filesystem::path out = out_path("app-assign-remove-resaved.mpp");
         std::error_code remove_error;
@@ -1345,8 +1372,7 @@ void check_port_saved_removal() {
     const PortCase cases[] = {
         {&control, "FixedMeta is not the measured (rows - 1) / rows / flag 4 settled shape",
          "the port's own save"},
-        {&resaved, "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C",
-         "the file Project resaved"},
+        {&resaved, "a Project session has saved", "the file Project resaved"},
     };
     /* W35c-1.9 (R35bG1-2): only a NON-target resource row (resource 1, stream byte 176) is
      * marked as Project-saved; the target row (resource 2) is still 0x1C. */
@@ -1363,8 +1389,7 @@ void check_port_saved_removal() {
     }
     const PortCase other_case = {
         &other_row,
-        "the resource table's row 1 FixedMeta byte 12 is 0x5C, not the measured 0x1C",
-        "a file with only another resource row marked"};
+        "resource uid 1 does not", "a file with only another resource row marked"};
     for (const PortCase& one : {cases[0], cases[1], other_case}) {
         app::PlanInput plan;
         try {
@@ -1378,7 +1403,7 @@ void check_port_saved_removal() {
         const bool built = app::make_assignment_edit(plan, one.path->string(), 1, 2, false, edit, error);
         check(!built, std::string("a removal from ") + one.label + " is refused");
         check(error.find(prefix) == 0,
-              std::string("the refusal for ") + one.label + " is the dry-run refusal (got \"" +
+              std::string("the refusal for ") + one.label + " carries the removal prefix (got \"" +
                   error + "\")");
         check(error.find(one.needle) != std::string::npos,
               std::string("the refusal for ") + one.label + " names \"" + one.needle +
@@ -1386,6 +1411,51 @@ void check_port_saved_removal() {
         check(edit.kind == app::StructuralKind::insert_task && edit.uid == 0 &&
                   edit.resource_uid == 0 && edit.assignment_uid == 0,
               std::string("the refused edit for ") + one.label + " is left default-constructed");
+    }
+    /* W35c-1.10 (R35bG1-3), the writer's layer on its own: with the plan's session bytes set to
+     * the measured value the plan layer passes, push() accepts, and the save's writer refuses
+     * both the file Project resaved (the target row) and the file with only another row
+     * marked (R35bG1-2), each on its own text. */
+    struct WriterCase {
+        const std::filesystem::path* path;
+        const char* needle;
+        const char* label;
+    };
+    const WriterCase writer_cases[] = {
+        {&resaved, "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C",
+         "the file Project resaved"},
+        {&other_row, "the resource table's row 1 FixedMeta byte 12 is 0x5C, not the measured 0x1C",
+         "a file with only another resource row marked"},
+    };
+    for (const WriterCase& one : writer_cases) {
+        app::PlanInput plan;
+        try {
+            plan = load_plan(*one.path);
+        } catch (const std::exception&) {
+            check(false, std::string("the fixture loads: ") + one.label);
+            continue;
+        }
+        for (app::ResourceRow& row : plan.resources) {
+            row.fixed_meta_session = 0x1C;
+        }
+        std::uint32_t fresh_uid = 0;
+        for (const app::AssignmentRow& row : plan.assignments) {
+            fresh_uid = std::max(fresh_uid, row.uid);
+        }
+        app::StructuralEdits edits;
+        check(edits.push(hand_edit(false, 1, 2, fresh_uid + 1), &plan),
+              std::string("push() accepts the removal when the plan shows the measured session "
+                          "bytes: ") + one.label);
+        const std::filesystem::path out = out_path("app-assign-remove-writer-layer.mpp");
+        std::error_code remove_error;
+        std::filesystem::remove(out, remove_error);
+        const app::StructuralSaveResult saved =
+            app::save_structural_edits(edits, {}, one.path->string(), out.string(), false);
+        check(!saved.ok, std::string("the save refuses the removal: ") + one.label);
+        check(saved.error.find(one.needle) != std::string::npos,
+              std::string("the writer's refusal names \"") + one.needle + "\" for " + one.label +
+                  " (got \"" + saved.error + "\")");
+        check(!std::filesystem::exists(out), std::string("the refused save writes no file: ") + one.label);
     }
 }
 
