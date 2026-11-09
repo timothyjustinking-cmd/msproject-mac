@@ -133,7 +133,10 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         const std::string label = "Level " + std::to_string(level);
         gate::check(window.pending_edits().empty(), (label + ": nothing is queued").c_str());
-        gate::check(status_contains(window, "is not implemented in this port"),
+        gate::check(status_contains(window, ("Show Level " + std::to_string(level) +
+                                             " is not implemented in this port: the measured "
+                                             "Project pairs show Level 1 and Level 2")
+                                                .c_str()),
                     (label + ": the status line names the reason").c_str());
         gate::check(status_contains(window, "session only"),
                     (label + ": the status line says session only").c_str());

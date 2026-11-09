@@ -40,7 +40,9 @@
 #include <string_view>
 #include <vector>
 
+#include "cfb_stream_removal.h"
 #include "cfb_writer.h"
+#include "edl_damage.h"
 #include "fixture_guard.h"
 #include "save_pair_compare.h"
 #include "table.h"
@@ -528,6 +530,16 @@ void test_refusals(TestContext& t) {
         t.check(doc.to_bytes() == before, "path refusals: the document changed");
     }
 
+    /* W35b-3.3 (R35G2-7): a document that lacks a stream the sort reads. */
+    for (char const* stream : {kViewMeta, kViewVar2}) {
+        refuses(cfb_test::without_stream(control, stream), measured_edit(),
+                "the document has no 214/CV_iew/VarMeta or 214/CV_iew/Var2Data",
+                std::string("a document without ") + stream + " refused");
+    }
+    refuses(cfb_test::without_stream(control, kEdlVar2), measured_edit(),
+            "the document has no 214/CEdl/Var2Data",
+            "a document without the CEdl Var2Data refused");
+
     /* The file. */
     {
         CfbDocument const sorted = doc_from_data(edit_of(named));
@@ -618,6 +630,31 @@ void test_refusals(TestContext& t) {
         refuses(damaged(control, [&](Bytes& e) { put_u32_at(e, copy + 12 + 20, 7); }),
                 measured_edit(), "order copy does not hold the expected dword 5",
                 "an order copy with a stray dword refused");
+
+        /* W35b-3.3 (R35G2-7): a doubled record, each with its own count. */
+        refuses(damaged(control, [&](Bytes& e) { edl_damage::duplicate_item(e, order); }),
+                measured_edit(), "holds 2 order records, 1 first-row records and 1 order copies",
+                "a doubled order record refused");
+        refuses(damaged(control, [&](Bytes& e) { edl_damage::duplicate_item(e, first); }),
+                measured_edit(), "holds 1 order records, 2 first-row records and 1 order copies",
+                "a doubled first-row record refused");
+        refuses(damaged(control, [&](Bytes& e) { edl_damage::duplicate_item(e, copy); }),
+                measured_edit(), "holds 1 order records, 1 first-row records and 2 order copies",
+                "a doubled order copy refused");
+
+        /* An item count that promises one more item than the stream holds (its
+         * header runs past the end), and an item whose length word runs past the
+         * end (its payload does). */
+        std::uint32_t const items = u32_at(named_edl, edl_damage::kCountWord);
+        refuses(damaged(control,
+                        [&](Bytes& e) { put_u32_at(e, edl_damage::kCountWord, items + 1); }),
+                measured_edit(), "item " + std::to_string(items) + " runs past the stream",
+                "an item count past the last item refused");
+        refuses(damaged(control, [&](Bytes& e) { put_u32_at(e, order, 0x7FFFFF00u); }),
+                measured_edit(),
+                "item " + std::to_string(edl_damage::item_index(named_edl, order)) +
+                    " runs past the stream",
+                "an item whose length runs past the stream refused");
     }
 }
 
