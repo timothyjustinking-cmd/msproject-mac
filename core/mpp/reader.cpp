@@ -2076,8 +2076,13 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                     entry.uid != (uid | kSecondaryUidFamily)) {
                     continue;
                 }
-                if (entry.uid == uid && entry.key == kFieldTaskType) {
-                    task.type_block_stored = true;
+                if (entry.uid == uid) {
+                    /* W35d-2.14 (R35cG1-7): the keys for the plan-side Calculate Project pin are
+                     * collected here, in the one walk of the table per task, and sorted below. */
+                    task.var_keys.push_back(entry.key);
+                    if (entry.key == kFieldTaskType) {
+                        task.type_block_stored = true;
+                    }
                 }
                 const FieldKind kind = custom_field_kind(entry.key);
                 if (kind == FieldKind::unknown) {
@@ -2167,11 +2172,6 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
          * Calculate Project pins. */
         if (task_has_fixed_meta && fixed_meta_live[row] && row < task_meta_entries.size()) {
             task.fixed_meta_entry = task_meta_entries[row];
-        }
-        for (const VarEntry& entry : table.entries) {
-            if (entry.uid == uid) {
-                task.var_keys.push_back(entry.key);
-            }
         }
         std::sort(task.var_keys.begin(), task.var_keys.end());
         task.leveling_delay_ticks = u32_at(fixed, base + kRowLevelingDelay);
