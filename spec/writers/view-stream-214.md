@@ -192,12 +192,21 @@ What this settles:
   writes a different entry (zero colour words, pattern 0, flags `0x06` or `0x04`
   and a font word whose low byte is also noise-like: `0xca`, `0xd8`, `0xd8`,
   `0xc8`); the item carries no font name or size, so where the name, size and
-  colour are stored is not in the appended item.  `FontUnderline(True)` could not
-  be called through late binding ("'bool' object is not callable"), so the
-  toolbar Underline shape is unmeasured.
-- **A range** (`SelectTaskField` row 1 extended to row 2, then `FontBold(True)`)
-  stored ONE item, for row 2: the extended selection did not store one item per
-  row, or did not select both rows.  The range shape is unmeasured.
+  colour are stored is not in the appended item.  **Toolbar Underline is not yet
+  measured** (W35b-3.8, R35G3-7).  The `FontUnderline(True)` call raised "'bool'
+  object is not callable", which is a Python `TypeError` from win32com late
+  binding on a method whose arguments it mis-dispatches, a harness error and not
+  a statement about Project; it is not evidence that Project cannot do it.
+  Queued for a measuring wave: call it through `InvokeTypes` or an early-bound
+  (`makepy`) wrapper, and save the pair.
+- **A range is not yet measured** (W35b-3.8, R35G3-7).  The attempt
+  (`SelectTaskField` row 1 extended to row 2, then `FontBold(True)`) stored ONE
+  item, for row 2.  That does not show that Project stores one item for a range:
+  the extended selection may never have covered both rows (the late-bound call
+  may have replaced the first selection), and the run did not check.  Queued for a
+  measuring wave: confirm `ActiveSelection.Tasks.Count == 2` before the font
+  call, then save the pair; only a pair taken with two rows selected says what a
+  range stores.
 - **Bold off** (`wave35-g3-font-bold-off`, from the wave-30 Bold file resaved
   by Project) rewrites the existing item in place: flags `0x01000003` ->
   `0x00000003` and font word `0x90000001` -> `0x90000000`, two bytes in all;
