@@ -75,7 +75,10 @@ so the gate is CI (`ubuntu-gcc`, `linux-qt`), run by the coordinator after CLOSE
 - Plan layer: writer-only, stated in `spec/writers/calculate.md` section 8. `PlanInput` carries
   no Props records and the pin is reached by construction: `make_calculate_edit` runs
   `read_calculate_shape` on the file and the save compares `source_digest`. A hand-built edit
-  is refused at the save, not at `push()`.
+  is refused at the save, not at `push()`.  Correction (W35d-2.2, R35cG0-4): the digest is
+  compared by the edit model's save, not by `mppwrite::save_calculate`, which has no digest; and
+  a plan-side Props digest would be one more refusal at the queue, not something the writer
+  would have to trust over the file.  Writer-only is a recorded gap, not a design.
 
 ## Guards seen red
 
