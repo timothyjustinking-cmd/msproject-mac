@@ -121,7 +121,7 @@ read-side gap, not a write-side one.
 refusal) and `qt_sort_persist` (the shell). Mutation checks and gate logs are recorded
 in `docs/handoff/wave35-complete.md`.
 
-## 2. Applied table (W35-2.2): DEFERRED with evidence
+## 2. Applied table (W35-2.2): NOT ATTEMPTED, a scope decision (R35G2-8)
 
 Pairs: `wave35-viewstate-table-cost`, `-table-schedule` (`Application.TableApply` on the
 five-task base, applied table Entry before). Reports: [`evidence/wave35-viewstate-table-cost.md`](evidence/wave35-viewstate-table-cost.md),
