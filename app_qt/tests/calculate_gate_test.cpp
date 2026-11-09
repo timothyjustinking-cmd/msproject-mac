@@ -39,11 +39,13 @@
 
 #include "cfb_writer.h"
 #include "edit_model.h"
+#include "entry_columns.h"
 #include "fixture_guard.h"
 #include "gate_util.h"
 #include "main_window.h"
 #include "ribbon_bar.h"
 #include "save_pair_compare.h"
+#include "sheet_table_model.h"
 #include "shell_style.h"
 
 namespace {
@@ -196,6 +198,35 @@ int main(int argc, char** argv) {
         // A second click while it is pending: the edit is exclusive.
         gate::check(click_calculate(window), "a second Calculate Project clicks");
         gate::check(window.pending_edits().size() == 1, "a second click keeps the queue at one");
+
+        // W35d-2.11 (R35cW-4): a grid edit made AFTER Calculate Project is queued is refused with
+        // the queued Calculate named, the same guard as a queued Show Level or Sort; the queue
+        // stays at the one Calculate edit and the document keeps its values.
+        {
+            const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+            const int duration_column = msqt::entry_column_index(msqt::EntryCellKind::duration);
+            msqt::SheetTableModel* model = window.sheet_table_model();
+            gate::check(model != nullptr && name_column >= 0 && duration_column >= 0,
+                        "the Entry table has Name and Duration");
+            if (model != nullptr && name_column >= 0 && duration_column >= 0) {
+                const QString name_before = model->data(model->index(1, name_column)).toString();
+                gate::check(!model->setData(model->index(1, name_column),
+                                            QStringLiteral("Renamed after the calculation"),
+                                            Qt::EditRole),
+                            "a rename after a queued Calculate Project is refused");
+                gate::check(model->data(model->index(1, name_column)).toString() == name_before,
+                            "the refused rename leaves the name as it was");
+                gate::check(window.status_left_text().contains(QStringLiteral(
+                                "a Calculate Project is queued and File > Save would write it, "
+                                "not an edited cell")),
+                            "a rename after a queued Calculate Project: the status line names it");
+                gate::check(!model->setData(model->index(1, duration_column),
+                                            QStringLiteral("9d"), Qt::EditRole),
+                            "a Duration edit after a queued Calculate Project is refused");
+                gate::check(window.pending_edits().size() == 1,
+                            "the refused edits leave the one queued Calculate Project");
+            }
+        }
 
         QString save_error;
         const bool ok = window.save_document_path(calculated, &save_error);

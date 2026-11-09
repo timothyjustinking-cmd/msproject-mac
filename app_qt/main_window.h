@@ -453,6 +453,10 @@ class MainWindow final : public QMainWindow {
     // caller can simply return.
     std::string view_change_refusal(const std::string& change) const;
     bool refuse_view_change(const std::string& change);
+    // W35d-2.11 (R35cW-4): the same, for a change to a value (a cell edit, Cut, Paste, Fill, a
+    // task-form edit): it also refuses while a Calculate Project is queued.
+    std::string data_change_refusal(const std::string& change) const;
+    bool refuse_data_change(const std::string& change);
     void handle_action(app::MenuAction action);
     // Wave 26: the ribbon controls that are not menu actions (Link/Unlink in
     // W26-1.2; the view/format toggles arrive with W26-1.3/1.4).  Wave 28
