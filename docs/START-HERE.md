@@ -14,15 +14,19 @@ only file a new session must read first._
 * **Wave 35d (fix-only) is in progress on branch `wave35d`** (cut from `wave35c`;
   `docs/handoff/wave35d-brief.md`, `docs/handoff/wave35d-complete.md`; nothing is pushed).  It
   works the queue wave 35c left (`wave35c-verification/coord-gates-close.md`, Highs first).
-  State after G1:
+  State after G2:
   * **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`) and R35cG1-2 (fixed
     `6458203`).
   * **CI:** R35cW-CI1 (fixed `23de6e2`) and R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS
     is the only proof of each.
   * **Mediums fixed:** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1 (`41f7a2c`),
     R35cG0-3 (`6552f11`), R35cW-2 (`454521d`), and R35cW-1 with R35cG2-8 (this list).
-  * **Still open (G2):** the Medium R35cG0-2; the Lows R35cG0-4 to -6, R35cG1-5 to -7,
-    R35cG2-2 to -7 and R35cW-3 to -5.
+  * **G2 (the Lows and the Calculate Medium):** fixed R35cG0-5 (`ec2429c`), R35cG0-6
+    (`7d908c6`), R35cG1-5 to -7 (`c250aef`, `f9771b6`, `a85d8b3`), R35cG2-2 to -7 (`fc12254`,
+    `f3c38d9`, `bb4a398`, `e415fe2`, `51c474b`, `6652ded`) and R35cW-3 to -5 (`6f5cc18`,
+    `4dcfcd7`, `492f10c`).  **Partly fixed, still open:** R35cG0-2 (the plan reads Start word
+    +104 only; the writer half is closed) and R35cG0-4 (the plan has no Props digest, a recorded
+    gap); both are refused at the writer or the save.
   * Every 35d fix still awaits an independent review, so waves 34 to 35d stay NOT merged.
 
 * **Wave 35c (fix-only) is closed on branch `wave35c`** (cut from `wave35b` at `2a97272`;

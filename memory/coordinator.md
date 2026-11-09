@@ -19,14 +19,15 @@ Wave 35c closed the rest of the G4 and CLOSE review queue (`docs/handoff/wave35b
 ## Wave 35d state (in progress on `wave35d`, NOT merged, NOT pushed) — 10 November 2026
 
 Fix-only wave cut from `wave35c`; brief `docs/handoff/wave35d-brief.md`, record
-`docs/handoff/wave35d-complete.md` (`WAVE-35d-G0-COMPLETE`, then G1).  It works the wave 35c queue
-in `docs/handoff/wave35c-verification/coord-gates-close.md`, Highs first.  State after G1:
+`docs/handoff/wave35d-complete.md` (`WAVE-35d-G0-COMPLETE`, then G1 and G2).  It works the wave 35c queue
+in `docs/handoff/wave35c-verification/coord-gates-close.md`, Highs first.  State after G2:
 **Highs** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (fixed `6458203`).
 **CI** R35cW-CI1 (fixed `23de6e2`), R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS is the
 only proof of each.  **Mediums fixed** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1
 (`41f7a2c`), R35cG0-3 (`6552f11`), R35cW-2 (`454521d`), R35cW-1 with R35cG2-8 (this list).
-**Still open (G2):** the Medium R35cG0-2; the Lows R35cG0-4 to -6, R35cG1-5 to -7, R35cG2-2 to -7
-and R35cW-3 to -5.  Every 35d fix awaits an independent review; the coordinator still owes the
+**G2 done** (`WAVE-35d-G2-COMPLETE`): the Lows R35cG0-5, -6, R35cG1-5 to -7, R35cG2-2 to -7 and
+R35cW-3 to -5 are fixed or recorded; **partly fixed, still open:** R35cG0-2 (plan reads Start word
++104 only) and R35cG0-4 (no plan-side Props digest).  Every 35d fix awaits an independent review; the coordinator still owes the
 push, both CI dispatches and the mutation runs.
 
 ## Wave 35 state (closed on `wave35`, NOT merged, NOT pushed) — 9 November 2026

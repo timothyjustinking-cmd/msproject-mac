@@ -405,13 +405,15 @@ Wave 35c closed the G4 and CLOSE review queue (`wave35b-verification/coord-gates
 ## Queued from wave 35c (CLOSE): the fix-only `wave35d` (10 November 2026)
 
 The complete queue is `wave35c-verification/coord-gates-close.md`, Highs first; `wave35d` (branch
-`wave35d`, brief `wave35d-brief.md`, record `wave35d-complete.md`) works it.  State after G1:
+`wave35d`, brief `wave35d-brief.md`, record `wave35d-complete.md`) works it.  State after G2:
 
 - **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (fixed `6458203`).
 - **CI:** R35cW-CI1 (fixed `23de6e2`), R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS is the
   only proof of each.
 - **Mediums fixed:** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1 (`41f7a2c`), R35cG0-3
   (`6552f11`), R35cW-2 (`454521d`), R35cW-1 with R35cG2-8 (this list).
-- **Still open (G2):** the Medium R35cG0-2; the Lows R35cG0-4 to -6, R35cG1-5 to -7,
-  R35cG2-2 to -7 and R35cW-3 to -5.
+- **G2 (the Lows and the Calculate Medium):** fixed R35cG0-5, R35cG0-6, R35cG1-5 to -7, R35cG2-2
+  to -7 and R35cW-3 to -5 (commits in `wave35d-complete.md`).  **Partly fixed, still open:**
+  R35cG0-2 (the plan reads Start word +104 only; the writer half is closed) and R35cG0-4 (the plan
+  has no Props digest, a recorded gap); both are refused at the writer or the save.
 - Every 35d fix awaits an independent review.
