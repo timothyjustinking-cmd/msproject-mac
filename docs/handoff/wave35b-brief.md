@@ -214,7 +214,11 @@ Queued for the next MEASURING wave, not 35b: R35G0-5 (an effort-driven pair);
 `sort-duration-asc` and an ascending-reorder Sort pair (R35G2-4); an Applied-table writer attempt
 on the Cost and Schedule pairs (R35G2-8); Toolbar Underline (late-bound COM call) and a two-row
 Bold range that really selects two rows (R35G3-7); a tie pair and a swapped-order pair for
-Calculate (RW35-W3); UTC-neutral oracle dates (R35G1-9).
+Calculate (RW35-W3); UTC-neutral oracle dates (R35G1-9); a Bold-on pair (uid 1, Name) taken in
+a second Project session (R35bG3-5: enabled Bold on accepts a block from another session
+because one known byte, the session-date float32 at payload byte 42,678, is masked, not
+because a pair was measured; `spec/writers/view-stream-214.md` says the same).  Added by W35c-2.17
+(R35bG3-5); no pair is taken in wave 35c.
 
 ### G4 - the Lows
 
