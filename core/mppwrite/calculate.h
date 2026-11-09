@@ -157,6 +157,16 @@ void validate_calculate(CfbDocument const& doc, CalculateRequest const& request)
 CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
                               std::string const& path);
 
+/*
+ * TEST ONLY (W35d-1.3, R35cG2-1).  A fault seam for the scratch chain: when `appends` is
+ * non-zero, save_calculate throws Error ("injected fault") right after that many of its five
+ * overtime appends have been written to the scratch file, so a test can prove that a failure
+ * mid-chain leaves an existing target byte-identical and no scratch file behind.  0 (the
+ * default) turns it off; the setting is process-wide and not thread-safe.  Nothing in the
+ * application calls it.
+ */
+void set_calculate_fault_after_appends(std::size_t appends);
+
 } /* namespace mppwrite */
 
 #endif /* MPPWRITE_CALCULATE_H */

@@ -17,7 +17,7 @@ Scans each time: `check_fixtures.py`, `check_markers.py --range main..HEAD`, `gu
 | 2.1 | R35bG0-6 | `4e957ae` | fixed: the push() refusal tests name the guard that fires |
 | 2.2 | R35bG0-7 | `ecc51d1` | fixed: leaf date copies, remaining duration, FixedMeta bytes 8 to 11 pinned |
 | 2.3 | R35bG0-8 | `8e41da3` | fixed in the writer; `push()` has no file, so the save refuses a hand-built edit (recorded) |
-| 2.4 | R35bG2-2 | `21b61d6` | fixed (tests only); had also been closed incidentally earlier |
+| 2.4 | R35bG2-2 | `21b61d6` | partly fixed (tests only); had also been closed incidentally earlier.  Correction (W35d-1.3, R35cG2-1): `d8cfb6c` (2.7) put the up-front scratch refusal ahead of the chain, so no test reached the chain again; the fault-seam test in `roundtrip_calculate` does |
 | 2.5 | R35bG2-5 | `cb40334` | fixed (statements and a comment); no behaviour change |
 | 2.6 | R35bG2-6 | `fc9cae3` | first suggestion fixed (the app test asserts the digest refusal); the second is unreachable and recorded as defence in depth |
 | 2.7 | R35bG2-7 | `d8cfb6c` | fixed: an existing `<target>.calculate.tmp` is refused, not deleted |
