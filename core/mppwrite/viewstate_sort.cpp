@@ -498,12 +498,16 @@ std::string sorted_order_of(std::vector<SortRow> const& rows, std::uint32_t fiel
     if (ascending) {
         for (std::size_t index = 0; index < rows.size(); ++index) {
             if (sorted[index] != rows[index].uid) {
+                /* W35c-1.8 (R35bG1-1): build the reason before clearing `sorted`; it used to
+                 * read `sorted[index]` after the clear. */
+                std::string reason =
+                    "an ascending sort that reorders rows is unmeasured: the "
+                    "measured Project pair for an ascending key leaves the rows in "
+                    "the order they were in, and this one would put UniqueID " +
+                    number(sorted[index]) + " at row " + number(index + 1) +
+                    " where the file has UniqueID " + number(rows[index].uid);
                 sorted.clear();
-                return "an ascending sort that reorders rows is unmeasured: the "
-                       "measured Project pair for an ascending key leaves the rows in "
-                       "the order they were in, and this one would put UniqueID " +
-                       number(sorted[index]) + " at row " + number(index + 1) +
-                       " where the file has UniqueID " + number(rows[index].uid);
+                return reason;
             }
         }
     }

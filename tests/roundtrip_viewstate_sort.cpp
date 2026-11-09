@@ -474,6 +474,12 @@ void test_refusals(TestContext& t) {
             refuses(reordered, make_edit(SortField::name, true, kBase),
                     "an ascending sort that reorders rows is unmeasured",
                     "R35G2-4: an ascending sort the file's names would reorder refused");
+            /* W35c-1.8 (R35bG1-1): the message was built from `sorted[index]` after
+             * `sorted.clear()` (a read of a cleared vector).  It must name the UniqueID the
+             * sort would put first (4: "Task 4" now sorts before "Task Z") and the file's. */
+            refuses(reordered, make_edit(SortField::name, true, kBase),
+                    "would put UniqueID 4 at row 1 where the file has UniqueID 1",
+                    "R35bG1-1: the reorder refusal names the UniqueIDs it computed");
         }
 
         /* The durations. */
