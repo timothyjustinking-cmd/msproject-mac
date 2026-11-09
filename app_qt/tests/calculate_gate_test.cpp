@@ -28,6 +28,7 @@
 #include <QApplication>
 
 #include <array>
+#include <cstddef>
 #include <cstdio>
 #include <exception>
 #include <filesystem>
@@ -226,6 +227,71 @@ int main(int argc, char** argv) {
                             "a Duration edit after a queued Calculate Project is refused");
                 gate::check(window.pending_edits().size() == 1,
                             "the refused edits leave the one queued Calculate Project");
+
+                // W35e-2.5 (R35dG2-1): Task Information, Cut and Paste each have a guard of
+                // their own (refuse_data_change at their entry), which the cell gate above does
+                // not reach: Cut and Paste write the RecordSet directly and the form commits
+                // through apply_task_information.  Each is refused with the Calculate named and
+                // the queue stays at one.  Fill Down's guard is not tested here: the handler is
+                // private and its ribbon and row-menu controls are disabled (W31-0.4), so no
+                // route reaches it (qt_fill_gate pins the disabled control).
+                window.sheet()->select_cell(1, 0);
+                QApplication::processEvents();
+                msqt::TaskInformationValues values;
+                gate::check(window.task_information_values(&values),
+                            "a task is selected for the form");
+                values.name = "Renamed in the form after the calculation";
+                gate::check(!window.apply_task_information(values),
+                            "a task form edit after a queued Calculate Project is refused");
+                gate::check(window.status_left_text().contains(QStringLiteral(
+                                "a Calculate Project is queued and File > Save would write it, "
+                                "not an edited task field")),
+                            "a task form edit after a queued Calculate Project: the status line "
+                            "names it");
+                gate::check(window.pending_edits().size() == 1,
+                            "the refused form edit leaves the one queued Calculate Project");
+
+                if (QAction* cut = gate::find_action(window, app::MenuAction::cut)) {
+                    gate::check(cut->isEnabled(), "Cut is enabled on the selected cell");
+                    cut->trigger();
+                    QApplication::processEvents();
+                    gate::check(window.status_left_text().contains(QStringLiteral(
+                                    "a Calculate Project is queued and File > Save would write "
+                                    "it, not a cut cell")),
+                                "a cut after a queued Calculate Project: the status line names "
+                                "it");
+                } else {
+                    gate::check(false, "Cut is a menu action");
+                }
+                gate::check(window.pending_edits().size() == 1,
+                            "the refused cut leaves the one queued Calculate Project");
+
+                QAction* copy_action = gate::find_action(window, app::MenuAction::copy);
+                QAction* paste = gate::find_action(window, app::MenuAction::paste);
+                gate::check(copy_action != nullptr && paste != nullptr, "Copy and Paste are menu actions");
+                if (copy_action != nullptr && paste != nullptr) {
+                    window.sheet()->select_cell(2, static_cast<std::size_t>(name_column));
+                    window.refresh_menu_state();
+                    QApplication::processEvents();
+                    copy_action->trigger();
+                    QApplication::processEvents();
+                    window.sheet()->select_cell(1, static_cast<std::size_t>(name_column));
+                    window.refresh_menu_state();
+                    QApplication::processEvents();
+                    gate::check(paste->isEnabled(), "Paste is enabled on the selected cell");
+                    paste->trigger();
+                    QApplication::processEvents();
+                    gate::check(window.status_left_text().contains(QStringLiteral(
+                                    "a Calculate Project is queued and File > Save would write "
+                                    "it, not a pasted cell")),
+                                "a paste after a queued Calculate Project: the status line "
+                                "names it");
+                    gate::check(model->data(model->index(1, name_column)).toString() ==
+                                    name_before,
+                                "the refused paste leaves the name as it was");
+                }
+                gate::check(window.pending_edits().size() == 1,
+                            "the refused paste leaves the one queued Calculate Project");
             }
         }
 
