@@ -119,10 +119,13 @@ struct TaskModeShape {
  * live top-level unprogressed leaf with the project calendar, one placeholder
  * assignment per task), for a writer whose row-level precondition differs from
  * the task-mode pair's.  Returns false with `error` naming the first
- * difference.
+ * difference.  `pair` is the measured pair the caller's refusal names (W35b-4.G1-10,
+ * R35G1-10): the checks are shared, but a Calculate Project user must not be told about
+ * "the measured task-mode pair", so the default text's "task-mode pair" is replaced by it.
  */
 bool read_task_file_shape(CfbDocument const& doc, std::string& error,
-                          std::string_view table = "114/TBkndTask");
+                          std::string_view table = "114/TBkndTask",
+                          std::string_view pair = "task-mode pair");
 
 /*
  * Validate the whole-file shape above and the row `uid`, filling `shape`.
