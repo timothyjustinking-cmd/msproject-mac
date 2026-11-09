@@ -411,7 +411,11 @@ grid cell edit, Cut, Paste, Fill and a task-form edit. It is deliberately not pa
 `view_change_refusal`: Calculate writes no view state, so a collapse, an expand or a session
 Sort beside it changes nothing Save writes and stays allowed. The Redo route the finding named
 (a Redo re-queuing a Calculate without `push()`) was closed by W35d-0.5, which makes Cut and
-Paste clear the structural redo list; qt_calculate_gate guards the cell edits.
+Paste clear the structural redo list; qt_calculate_gate guards the cell edits.  *That text is
+the Qt shell's.* W35e-2.7 (R35dW-5) gives the AppKit shell the same refusal at its two cell
+writers, `commit_open_edit` and `paste_from_pasteboard` (`calculate_queued_refusal` in
+`app/main.mm`); its Cut is a disabled stub and it has no Fill or task form. `app/main.mm` cannot be compiled or run here,
+so CI on macos-qt is the gate for it and nothing tests it.
 
 *The two document-edit surfaces (W35e-2.6, R35dG2-2).* Table / Date Format and Custom Field
 Formula were still accepted beside a queued Calculate ("edit pending; File > Save writes it")
