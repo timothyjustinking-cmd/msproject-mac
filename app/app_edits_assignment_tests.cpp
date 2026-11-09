@@ -647,6 +647,20 @@ void check_refusals() {
             {"a Standard calendar with an exception", "has working-time changes or exceptions",
              nullptr, [](app::ResourceRow& row) { row.calendar_base_extra_blocks = 1; }},
         };
+        /* W35b-4.G0-12 (R34b-9, R35G0-12): the positive control for the refusal loops below.  The
+         * same hand-built edit over the UNCHANGED plan is accepted for the add and the removal, so
+         * a push() that refused every assignment or removal cannot satisfy them. */
+        for (const bool assign : {true, false}) {
+            app::StructuralEdits control;
+            check(control.push(hand_edit(assign, assign ? kAdd.task_uid : kRemove.task_uid,
+                                         assign ? kAdd.resource_uid : kRemove.resource_uid,
+                                         kAdd.task_uid + 100),
+                               assign ? &plan : &remove_plan),
+                  std::string("push() accepts the hand-built ") +
+                      (assign ? "assign" : "removal") + " over the unchanged plan");
+            check(!control.empty(), std::string("push(): the accepted ") +
+                                        (assign ? "assign" : "removal") + " is queued");
+        }
         for (const ShapeCase& one : cases) {
             for (const bool assign : {true, false}) {
                 app::PlanInput changed = assign ? plan : remove_plan;
