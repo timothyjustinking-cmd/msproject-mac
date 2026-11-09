@@ -1,11 +1,11 @@
-# memory — coordinator (2026-11-10, wave 35e in progress on branch `wave35e`)
+# memory — coordinator (2026-11-10, wave 35e closed on branch `wave35e`)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
 `docs/handoff/wave35-complete.md` (G0-G4 and CLOSE appended; `WAVE-35-COMPLETE`); reviews in
 `docs/handoff/wave35-verification/`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
 
-## Wave 35e state (in progress on `wave35e`, NOT merged, NOT pushed) — 10 November 2026
+## Wave 35e state (closed on `wave35e`, `WAVE-35e-COMPLETE`, NOT merged, NOT pushed) — 10 November 2026
 
 Fix-only wave cut from `wave35d` at `2ea87e5`; brief `docs/handoff/wave35e-brief.md`, record
 `docs/handoff/wave35e-complete.md`.  It works the queue in
@@ -15,7 +15,8 @@ list; with R35dW-1 it re-queues a Calculate Project), fixed in source by W35e-0.
 (`WAVE-35e-G0-COMPLETE`) and open until the coordinator's mutations and review; **Mediums**
 R35dG0-2, R35dG1-1, R35dG1-2, R35dG1-3, R35dW-2, R35dW-3 (G1: W35e-1.1 `39c8e37`, 1.2
 `1da3997`, 1.3 the records, awaiting review); **Lows** R35dG0-3 to -5, R35dG1-4 to -7,
-R35dG2-1 to -5, R35dW-4 to -6 (G2 and CLOSE).  R35cW-CI1 and R35cW-CI2 are fixed in source and
+R35dG2-1 to -5, R35dW-4 to -6 (G2: all fixed in the builder's tree except R35dG2-1, partly fixed,
+and R35dW-5, fixed in source with CI as its gate; all await review).  R35cW-CI1 and R35cW-CI2 are fixed in source and
 CI is their gate until the coordinator's run is green.  Partly fixed 35c ids: R35cG1-2,
 R35cG1-4, R35cW-1, R35cG0-3, R35cW-4 (each with its R35d remainder), R35cG0-2, R35cG0-4.
 

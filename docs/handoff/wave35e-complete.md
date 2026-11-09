@@ -122,3 +122,79 @@ No writer added, no refusal of a persisted shape lifted, no pair measured, no CO
 no workflow dispatched.
 
 WAVE-35e-G2-COMPLETE
+
+## CLOSE
+
+### CLOSE gates
+
+Fresh trees `build/w35e-close-fresh`, `-app` and `-qt` at `2dbb5d9` (the last code change is
+`aa06507`, 2.9, with `d697a05` and `6fa4c19` tests only; every later commit is a record),
+configured from scratch with `CORE_WARNINGS_AS_ERRORS=ON`; script
+`build/w35e/W35e-CLOSE-fresh-gates.ps1`, log `build/w35e/W35e-CLOSE-fresh-gates.log` (summary:
+`build/w35e/close_log_summary.py`). The START-HERE, `memory/coordinator.md` and
+`plan-waves27-30.md` state lines changed after that run; they are documents and no gate reads
+them.
+
+- core build exit 0 with warnings as errors; `ctest -E plan_recalc` 65/65;
+- `plan_recalc_tests` 512 checks with the corpus, 266 with `MPP_NO_CORPUS=1`;
+- engine self-test 265 checks, 0 failures; `engine_diff.py --selftest` 53 checks; engine suite 8
+  scenarios, 7 pass and the expected `constraint-mso` failure (1 of 247 fields);
+- reader tests 1469 checks with the corpus, 789 without; M2 `recalc --compare` 332 of 332 fields;
+- app build exit 0 and ctest 34/34, with and without `MPP_NO_CORPUS=1`;
+- app_qt build exit 0 and ctest 52/52; no run reported "No tests were found";
+- `check_fixtures.py`, `check_markers.py` (self-test 19 checks, worktree, `main..HEAD`) and
+  `check_command_backlog.py` (114 pins, 114 rows) exit 0; `gen_calculate_props_pin.py --check` up
+  to date; `scan_client_names.py` on the head and on the `main..HEAD` messages 0 hits;
+  `guard_names.py main..HEAD` exit 0; the client-string grep finds none; 0 CR in the LF-pinned
+  types; `git diff --check main..HEAD` exit 0.
+- The gcc, clang and AppleClang jobs cannot run here. **CI is the only proof of W35e-2.7**
+  (`app/main.mm`, the AppKit refusal), and of R35cW-CI1 and R35cW-CI2, which stay "fixed in
+  source; CI is its gate" until the coordinator's run is green.
+- Trailer `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 35e)`: present on all 21 builder
+  commits in `2ea87e5..HEAD` (checked by script at CLOSE). The one commit without it, `43fee2a`,
+  is the coordinator's wave 35e brief.
+
+### Ids, with the commit that closes each
+
+| Group | Ids | Result |
+|---|---|---|
+| G0 | R35dG0-1 (High), R35dW-1 | fixed `b8ee455`; stays open in the coordinator's queue until the coordinator's mutations and independent review of G0 |
+| G1 | R35dG1-1 | fixed `39c8e37`, both bypasses; one route is recorded under "Found, not fixed" |
+| G1 | R35dG1-2, R35dW-4 | fixed `1da3997` |
+| G1 | R35dG1-3, R35dW-2, R35dW-3 | fixed `02f1900` (records) |
+| G1 | R35dG1-7 | fixed `02f1900` (records): R35cW-CI1 and R35cW-CI2 read "fixed in source; CI is its gate" |
+| G1 | R35dG0-2 | fixed `f244d02` (record) |
+| G2 | R35dG0-3, R35dG0-4 | fixed `086e111`, `5f9a5e7` |
+| G2 | R35dG1-5, R35dG1-6 | fixed `4bc2815`, `87afb79` |
+| G2 | R35dG2-1 | **partly fixed** `ae4782a`: Fill Down's Calculate guard has no route to a test |
+| G2 | R35dG2-2 | fixed `c2880d7` |
+| G2 | R35dW-5 | fixed in source; CI is its gate `e03da3e` |
+| G2 | R35dG0-5, R35dG1-4, R35dG2-3, R35dG2-4 | fixed `da5f81d`, `aa06507`, `d697a05`, `6fa4c19` |
+| G2 | R35dG2-5, R35dW-6 | fixed `9f0cb92`, `3946d9a` (records) |
+
+Every id in `wave35d-verification/` appears in this file. Nothing in this wave is deferred. Only
+R35dG2-1 is partly fixed, and R35dW-5 and the two CI ids wait on CI. The wave 35c ids that 35d
+left partly fixed (R35cG1-2, R35cG1-4, R35cW-1, R35cG0-3, R35cW-4) lost their R35d remainders to
+G0 and G1 of this wave; R35cG0-2 and R35cG0-4 keep theirs (the plan half, and the plan-side
+Props digest), both refused at the writer or the save.
+
+**Guards seen red:** per group in the G0, G1 and G2 rows above; the logs are
+`build/w35e/*-red-*.log`. CLOSE adds no guard.
+
+**Found, not fixed** (carried from the group rows; nothing new at CLOSE):
+- A session-only Level chosen while a Sort sits on the redo list leaves that Sort there (G1).
+- Fill Down's Calculate guard has no test and no route to one (2.5).
+- The AppKit refusal (2.7) has no test; CI on `macos-qt` is its only gate.
+- `apply_session_sort` has no queued-view guard (2.3); the shell's menu does not reach it.
+- The plan half of R35cG0-2 and the plan-side Props digest of R35cG0-4.
+
+**For the coordinator, after CLOSE:** push `wave35e` and dispatch `qt.yml` and `ci.yml` (the two CI
+ids and W35e-2.7 are gated there); mutations at each new guard; an independent review of
+`wave35d..wave35e`. The 4(e) reopen check is a rerun only if a writer's output changed; this wave
+adds no writer. Merging waves 34 to 35e waits on CI green on all three OSs and no open Critical
+or High.
+
+No writer added, no refusal of a persisted shape lifted, no pair measured, no COM, nothing pushed,
+no workflow dispatched, no history rewrite.
+
+WAVE-35e-COMPLETE
