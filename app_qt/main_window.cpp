@@ -484,14 +484,7 @@ void MainWindow::build_central_widget() {
             return row != core::sheet::kNoIndex && doc_.sheet() != nullptr &&
                    doc_.sheet()->is_collapsed(row);
         },
-        [this](int display_row) {
-            const std::size_t row = sheet_model_.record_row(display_row);
-            if (row == core::sheet::kNoIndex || doc_.sheet() == nullptr) {
-                return;
-            }
-            doc_.sheet()->toggle_collapsed(row);
-            after_model_change();
-        });
+        [this](int display_row) { toggle_outline_row(display_row); });
     sheet_view_->setItemDelegate(entry_delegate);
     // Wave 31 (W31-4.4): the usage sheet's period columns mix Work/Actual Work
     // (Duration) and Cost sub-rows; the lookup answers per physical row and
@@ -6050,6 +6043,29 @@ void MainWindow::show_outline_menu() {
     QAction* all = menu.addAction(QStringLiteral("All Subtasks"));
     connect(all, &QAction::triggered, this, [this]() { apply_outline_level(0); });
     menu.exec(QCursor::pos());
+}
+
+// W35b-3.2 (R35G2-6): the expand / collapse control on one summary row.  A queued
+// Show Level describes the levels the user chose, and File > Save would write
+// that state, not the rows as the user has since expanded or collapsed them, so
+// the toggle is refused while one is queued (All Subtasks or another level
+// replaces or withdraws it first).
+void MainWindow::toggle_outline_row(int display_row) {
+    const std::size_t row = sheet_model_.record_row(display_row);
+    if (row == core::sheet::kNoIndex || doc_.sheet() == nullptr) {
+        return;
+    }
+    if (!structural_.applied().empty() &&
+        structural_.applied().back().kind == app::StructuralKind::show_level) {
+        set_message("outline: a Show Level is queued and File > Save would write it, not "
+                    "this expanded or collapsed row; choose All Subtasks or another level "
+                    "first",
+                    true);
+        update_status();
+        return;
+    }
+    doc_.sheet()->toggle_collapsed(row);
+    after_model_change();
 }
 
 void MainWindow::apply_outline_level(int level) {

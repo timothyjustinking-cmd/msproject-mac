@@ -278,6 +278,9 @@ class MainWindow final : public QMainWindow {
     // collapse and, where the shape is measured, queues the level as a show_level
     // edit (replacing a queued one); All Subtasks withdraws a queued level.
     void apply_outline_level(int level);
+    // W35b-3.2: the delegate's expand / collapse control on one displayed row;
+    // refused while a show_level edit is queued.
+    void toggle_outline_row(int display_row);
     void apply_session_filter(core::view::FilterDefinition definition, std::string description);
     // The dialogs' Clear paths, exposed for the same gates.
     void clear_session_sort();
