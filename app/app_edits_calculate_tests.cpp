@@ -700,6 +700,37 @@ void check_refusals() {
                        "a file whose recalculation moves the critical path");
     }
     {
+        // W35b-2.7 (RW35-W3): a tie and the swapped order, which no pair measures.
+        mppwrite::CfbDocument tie = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(tie);
+        const std::uint32_t d1 = rows.u32(1, mppwrite::task_row::kDuration);
+        const std::uint32_t f1 = rows.u32(1, mppwrite::task_row::kFinish);
+        const std::uint32_t d2 = rows.u32(2, mppwrite::task_row::kDuration);
+        const std::uint32_t f2 = rows.u32(2, mppwrite::task_row::kFinish);
+        rows.set_u32(2, mppwrite::task_row::kDuration, d1);
+        rows.set_u32(2, mppwrite::task_row::kFinish, f1);
+        rows.store_into(tie);
+        set_planned_work(tie, 2, d1);
+        const std::filesystem::path tie_path = out_path("app-calculate-leaf-tie.mpp");
+        tie.save(tie_path.string());
+        expect_refused(plan, tie_path.string(), "finish together",
+                       "a file whose two leaves finish together");
+
+        mppwrite::CfbDocument swapped = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable swap_rows = mppwrite::TaskTable::from_document(swapped);
+        swap_rows.set_u32(1, mppwrite::task_row::kDuration, d2);
+        swap_rows.set_u32(1, mppwrite::task_row::kFinish, f2);
+        swap_rows.set_u32(2, mppwrite::task_row::kDuration, d1);
+        swap_rows.set_u32(2, mppwrite::task_row::kFinish, f1);
+        swap_rows.store_into(swapped);
+        set_planned_work(swapped, 1, d2);
+        set_planned_work(swapped, 2, d1);
+        const std::filesystem::path swapped_path = out_path("app-calculate-leaf-swapped.mpp");
+        swapped.save(swapped_path.string());
+        expect_refused(plan, swapped_path.string(), "is not the first leaf row",
+                       "a file whose second leaf ends the project");
+    }
+    {
         mppwrite::CfbDocument shorter = mppwrite::CfbDocument::from_file(source);
         mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(shorter);
         rows.set_u32(0, mppwrite::task_row::kFinish, 0x3BFE27D8u);

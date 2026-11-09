@@ -364,6 +364,16 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
             }
             shape.leaf_uids.push_back(rows.uid(row));
         }
+        /* W35b-2.7 (RW35-W3): the leaf stamp is the measured 0x30 only for the measured
+         * arrangement, one leaf ending the project and it the first leaf row.  Equal leaf
+         * finishes are a tie no pair measures (the ordering below would hand it to the later
+         * row), so they are refused before the critical leaf is picked. */
+        if (rows.u32(1, task_row::kFinish) == rows.u32(2, task_row::kFinish)) {
+            return fail(error, "task uid " + std::to_string(rows.uid(1)) + " and task uid " +
+                                   std::to_string(rows.uid(2)) +
+                                   " finish together; the measured Calculate Project save "
+                                   "has one leaf ending the project");
+        }
         std::uint32_t latest = 0;
         for (std::size_t row = 1; row < kRows; ++row) {
             std::uint32_t const finish = rows.u32(row, task_row::kFinish);
@@ -459,6 +469,14 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "measured Calculate Project save leaves the "
                                        "critical flags as they were");
             }
+        }
+        /* W35b-2.7: the leaf that ends the project is the first leaf row in the measured
+         * pair; the stamp it and the other leaf carry is not measured the other way round. */
+        if (shape.critical_uid != rows.uid(1)) {
+            return fail(error, "the leaf that ends the project (task uid " +
+                                   std::to_string(shape.critical_uid) +
+                                   ") is not the first leaf row; the measured Calculate "
+                                   "Project save has the first leaf ending the project");
         }
         /* W35b-0.4 (RW35-W2): the pair changes one Duration, so every leaf's
          * early dates are already final: Finish is Start plus Duration on the

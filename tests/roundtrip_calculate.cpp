@@ -693,6 +693,37 @@ void refused_requests() {
                 "2.4: row count");
     }
     {
+        /* W35b-2.7 (RW35-W3): the leaf stamp is measured for one arrangement only.  A tie (both
+         * leaves finish together) and the swapped order (the second leaf ends the project, the
+         * first finishes before the stored project finish) are no pair's; the request is the
+         * good one, so only the shape guards can refuse. */
+        CfbDocument tie = control;
+        TaskTable rows = TaskTable::from_document(tie);
+        std::uint32_t const d1 = rows.u32(1, mppwrite::task_row::kDuration);
+        std::uint32_t const f1 = rows.u32(1, mppwrite::task_row::kFinish);
+        std::uint32_t const d2 = rows.u32(2, mppwrite::task_row::kDuration);
+        std::uint32_t const f2 = rows.u32(2, mppwrite::task_row::kFinish);
+        check(f1 != f2, "2.7: the control's leaves finish apart");
+        rows.set_u32(2, mppwrite::task_row::kDuration, d1);
+        rows.set_u32(2, mppwrite::task_row::kFinish, f1);
+        rows.store_into(tie);
+        set_planned_work(tie, 2, d1);
+        refuses([&] { mppwrite::save_calculate(tie, good, path); }, "finish together",
+                "2.7: equal leaf finishes");
+
+        CfbDocument swapped = control;
+        TaskTable swap_rows = TaskTable::from_document(swapped);
+        swap_rows.set_u32(1, mppwrite::task_row::kDuration, d2);
+        swap_rows.set_u32(1, mppwrite::task_row::kFinish, f2);
+        swap_rows.set_u32(2, mppwrite::task_row::kDuration, d1);
+        swap_rows.set_u32(2, mppwrite::task_row::kFinish, f1);
+        swap_rows.store_into(swapped);
+        set_planned_work(swapped, 1, d2);
+        set_planned_work(swapped, 2, d1);
+        refuses([&] { mppwrite::save_calculate(swapped, good, path); },
+                "is not the first leaf row", "2.7: the critical leaf in the second row");
+    }
+    {
         /* W35b-2.1 (R35G1-4): a Props record the save needs after its appends is missing.  The
          * target already exists (Save over the open file); it must be left byte-identical. */
         CfbDocument doc = control;
