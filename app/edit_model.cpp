@@ -42,6 +42,7 @@
 #include "table.h"
 #include "task_mode.h"
 #include "varmeta_edit.h"
+#include "view_model.h"
 #include "viewstate_outline.h"
 #include "viewstate_sort.h"
 #include "viewstream_edit.h"
@@ -3498,6 +3499,10 @@ bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, i
     out.outline_uids = std::move(uids);
     out.outline_levels = std::move(levels);
     return true;
+}
+
+core::view::SortKey queued_sort_display_key(const StructuralEdit& edit) {
+    return core::view::SortKey{table_column_field(edit.field_id), edit.ascending};
 }
 
 bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
