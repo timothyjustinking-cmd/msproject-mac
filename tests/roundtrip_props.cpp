@@ -320,6 +320,25 @@ Bytes with_duplicate_record(Bytes bytes, std::uint32_t id,
     return bytes;
 }
 
+/* Resize one record's payload (zero-filled when it grows) and fix the length word and the
+ * stream's size words. */
+Bytes with_resized_record(Bytes bytes, std::uint32_t id, std::size_t new_length,
+                          std::string const& what) {
+    PropsWalk const walk = walk_props(bytes);
+    RecordSpan const& record = walk.records[find_record(walk, id, what)];
+    std::size_t const payload = record.offset + 12;
+    if (new_length < record.length) {
+        bytes.erase(bytes.begin() + static_cast<std::ptrdiff_t>(payload + new_length),
+                    bytes.begin() + static_cast<std::ptrdiff_t>(payload + record.length));
+    } else {
+        bytes.insert(bytes.begin() + static_cast<std::ptrdiff_t>(payload + record.length),
+                     new_length - record.length, 0);
+    }
+    put_u32_at(bytes, record.offset, static_cast<std::uint32_t>(new_length));
+    fix_size_words(bytes);
+    return bytes;
+}
+
 /* ---- the field-wise Project comparison ---------------------------------- */
 
 void compare_field(TestContext& t, std::string const& label,
@@ -893,6 +912,42 @@ void test_edit_refusals(TestContext& t) {
             refuses(control, edit, pin.needle,
                     "a measured record with an unmeasured payload refused: " +
                         std::string(pin.needle));
+        }
+    }
+    {
+        /* W35b-4.G0-10 (R35G0-10): the measured payload (so the size AFTER is the pair's) over a
+         * record that holds a size no pair started from is refused; each record is resized to
+         * one byte under its measured old size, so the update would grow it. */
+        struct OldSize {
+            std::uint32_t id;
+            std::size_t old_length;
+            Bytes payload;
+        };
+        OldSize const cases[] = {
+            {0x0240138Bu, 4,
+             Bytes{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x2E, 0x00, 0x00, 0x00,
+                   0x00, 0x00, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x57, 0x00, 0x00, 0x00}},
+            {0x024013BEu, 2, Bytes{0x57, 0x00, 0x00, 0x00, 0x00, 0x00}},
+            {0x02401392u, 2, Bytes{0x01, 0x00}},
+            {0x024013C5u, 8,
+             Bytes{0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x33, 0x00, 0x40, 0x0B,
+                   0x64, 0x40, 0x40, 0x0F}},
+            {0x02400003u, 4, Bytes(4, 0x11)},
+            {0x02400024u, 2, Bytes{0x00, 0x00}},
+        };
+        for (OldSize const& one : cases) {
+            std::size_t const held = walk.records[find_record(walk, one.id, "old size")].length;
+            t.equal(held, one.old_length, "the control's record is the measured old size");
+            CfbDocument const resized =
+                with_stream("wave30-wbs-control.mpp", mppwrite::kPropsBackEnd,
+                            with_resized_record(bytes, one.id, one.old_length - 1, "old size"));
+            PropsEdit edit;
+            edit.records.push_back(
+                {one.id, walk.records[find_record(walk, one.id, "old size")].kind, one.payload});
+            std::string const needle = "holds " + std::to_string(one.old_length - 1) +
+                                       " payload bytes, not the " +
+                                       std::to_string(one.old_length) + " its pair updated from";
+            refuses(resized, edit, needle, "an unmeasured old record size refused: " + needle);
         }
     }
     {

@@ -114,6 +114,22 @@ bool record_measured(std::uint32_t id) {
            id == 0x024013C5u || id == 0x02400003u || id == 0x02400024u;
 }
 
+/* W35b-4.G0-10 (R35G0-10): the size each measured record had BEFORE its pair's update (the
+ * pairs' "from" side: 4 -> 24 B, 2 -> 6 B, equal 2 B, 8 -> 16 B, 4 B and 2 B in place).  The
+ * payload pin below fixes the size AFTER; without this a record of any other old size grew
+ * (or was rewritten) to the measured one, a transition no pair saw. */
+std::size_t measured_old_length(std::uint32_t id) {
+    switch (id) {
+    case 0x0240138Bu: return 4;
+    case 0x024013BEu: return 2;
+    case 0x02401392u: return 2;
+    case 0x024013C5u: return 8;
+    case 0x02400003u: return 4;
+    case 0x02400024u: return 2;
+    default: return 0;
+    }
+}
+
 /* RW35-W7: the payload each measured record takes.  A pair measured one value
  * per record (the project finish is a date, so only its 4-byte length is
  * measured); any other payload for a measured id is a shape no pair saw.
@@ -424,6 +440,13 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
             record_payload_matches(state, record, edit_record.payload)) {
             throw Error(function + ": record " + hex_u32(edit_record.id) +
                         " would keep its payload; that is not an edit");
+        }
+        if (record.length != measured_old_length(edit_record.id)) {
+            throw Error(function + ": record " + hex_u32(edit_record.id) + " holds " +
+                        std::to_string(record.length) + " payload bytes, not the " +
+                        std::to_string(measured_old_length(edit_record.id)) +
+                        " its pair updated from; that transition is no pair's, so this "
+                        "update is refused");
         }
         std::string const pin =
             payload_pin_clause(edit_record.id, edit_record.payload);
