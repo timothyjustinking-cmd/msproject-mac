@@ -197,6 +197,19 @@ is the writer for the first one; the other three are refused.
   at save, and a different file, or an edit with no digest, is refused ("has changed since
   Calculate Project was queued").
 
+- **The pairs' dates are shifted by the host's UTC offset (W35b-2.8, R35G1-9).**
+  `scripts/oracle_w35_calculate.py` passes naive `datetime` values through pywin32, and COM
+  stored them 11 hours earlier (the host's UTC offset): the script's ProjectStart 2026-01-05
+  08:00 is stored, and Props `0x02400002` holds, 2026-01-04 21:00, and the SNET date set as
+  2026-01-26 08:00 reads back as 2026-01-25 21:00 (`build/w35/W35-1.2-calculate.json`).
+  Every measured shape therefore has a project start in non-working time (a Sunday evening)
+  while the leaves start on Monday 2026-01-05 08:00, so Fixed2Data +46 (the Props project
+  start) differs from the leaves' own start. The pairs, and what the writer reproduces, are
+  exactly these stored values; the `tests/data/README.md` rows now say so. A file whose
+  project start is 08:00 on a working day (the usual user file) is an unmeasured variant of the
+  shape: the writer stamps `+46` with the Props value as the pair does, but no pair shows that
+  Project does the same there. Not re-measured in this wave (no COM); the oracle script is
+  unchanged and would need explicit time-zone-safe dates before a re-run.
 - **One arrangement is measured (W35b-2.7, RW35-W3).** In the unlinked pair the first leaf row
   ends the project and the other leaf finishes before the stored project finish; the leaf stamp
   `0x30` is measured for that arrangement alone (the linked pair stores `0x30` and `0x28`). Two
