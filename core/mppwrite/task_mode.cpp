@@ -272,7 +272,7 @@ State::State(CfbDocument const& document, std::string_view table)
           &assn_meta_path, &assn_fixed2_path, &assn_fixed2_meta_path,
           &assn_var_meta_path, &assn_var2_path}) {
         if (!document.has_stream(*path)) {
-            throw Error("the task-mode save needs " + *path +
+            throw Error("the measured task-mode pair needs " + *path +
                         ", which this file does not have");
         }
     }
@@ -669,6 +669,19 @@ bool State::validate(std::uint32_t uid, TaskModeShape& shape,
 
 } /* namespace */
 
+/* The shared checks word every refusal for the task-mode pair; name the caller's.  Applied
+ * to the texts validate_file returns and to the State constructor's throws (W35c-2.8,
+ * R35bG4-2: a missing stream named the task-mode save to a Calculate Project user). */
+static void name_the_pair(std::string& error, std::string_view pair) {
+    std::string_view const shared = "task-mode pair";
+    if (pair != shared) {
+        for (std::size_t at = error.find(shared); at != std::string::npos;
+             at = error.find(shared, at + pair.size())) {
+            error.replace(at, shared.size(), pair);
+        }
+    }
+}
+
 bool read_task_file_shape(CfbDocument const& doc, std::string& error,
                           std::string_view table, std::string_view pair) {
     error.clear();
@@ -679,16 +692,8 @@ bool read_task_file_shape(CfbDocument const& doc, std::string& error,
         }
     } catch (Error const& caught) {
         error = caught.what();
-        return false;
     }
-    /* The shared checks word every refusal for the task-mode pair; name the caller's. */
-    std::string_view const shared = "task-mode pair";
-    if (pair != shared) {
-        for (std::size_t at = error.find(shared); at != std::string::npos;
-             at = error.find(shared, at + pair.size())) {
-            error.replace(at, shared.size(), pair);
-        }
-    }
+    name_the_pair(error, pair);
     return false;
 }
 
