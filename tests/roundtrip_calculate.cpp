@@ -1481,7 +1481,7 @@ void refused_requests() {
                                    std::filesystem::copy_options::overwrite_existing);
         Bytes const before = file_bytes(target);
         std::error_code const denied = std::make_error_code(std::errc::permission_denied);
-        mppwrite::set_calculate_scratch_probe_fault(denied);
+        mppwrite::set_calculate_scratch_probe_fault(std::filesystem::file_type::none, denied);
         std::string text;
         try {
             mppwrite::save_calculate(doc, good, target);
@@ -1489,7 +1489,8 @@ void refused_requests() {
         } catch (std::exception const& failure) {
             text = failure.what();
         }
-        mppwrite::set_calculate_scratch_probe_fault(std::error_code());
+        mppwrite::set_calculate_scratch_probe_fault(std::filesystem::file_type::none,
+                                                    std::error_code());
         check(text.find("cannot check whether the scratch path") != std::string::npos &&
                   text.find(denied.message()) != std::string::npos,
               "scratch probe failure: the refusal names the OS error (got: " + text + ")");
@@ -1499,6 +1500,35 @@ void refused_requests() {
         check(file_bytes(target) == before, "scratch probe failure: target unchanged");
         check(!std::filesystem::exists(target + ".calculate.tmp"),
               "scratch probe failure: no scratch file left");
+        std::filesystem::remove(target);
+    }
+    {
+        /* W35e-2.11 (R35dG2-4): the other side of the same condition.  A probe that reports
+         * not_found WITH an error code set (the shape some library implementations give a path
+         * that is not there) is a free scratch path, not a failure to look: the save proceeds
+         * and writes the target.  Before the seam took a file type this case could not be built. */
+        CfbDocument doc = control;
+        std::string const target = out_path("w35-calculate-atomic-target7.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        Bytes const before = file_bytes(target);
+        mppwrite::set_calculate_scratch_probe_fault(
+            std::filesystem::file_type::not_found,
+            std::make_error_code(std::errc::no_such_file_or_directory));
+        std::string text = "saved";
+        try {
+            mppwrite::save_calculate(doc, good, target);
+        } catch (std::exception const& failure) {
+            text = failure.what();
+        }
+        mppwrite::set_calculate_scratch_probe_fault(std::filesystem::file_type::none,
+                                                    std::error_code());
+        check(text == "saved", "scratch probe not_found with an error code: the save proceeds (got: " +
+                                   text + ")");
+        check(file_bytes(target) != before,
+              "scratch probe not_found with an error code: the target is written");
+        check(!std::filesystem::exists(target + ".calculate.tmp"),
+              "scratch probe not_found with an error code: no scratch file left");
         std::filesystem::remove(target);
     }
     {
