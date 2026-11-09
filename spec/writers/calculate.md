@@ -347,23 +347,42 @@ value and not per-save noise), three dates (`0x02400006`, `0x02400007`, `0x02401
 tail entry (tail offset 81,824, which also differs between the unlinked control and its linked
 and snet siblings).  So **Calculate Project is enabled for the measured control's values only**:
 in practice the control file and its copies.  Every other project, the user's own pending
-two-task project included, is refused at the pin with "114/Props record 0x........ differs from
-the measured control (an option, a default or a per-file value that no measured Calculate
-Project pair varies; Calculate Project is enabled for the measured control's values only)".  A
+two-task project included, is refused, by the first unvaried-parameter check it fails (the
+resource table, assignments, calendar table, baseline, variable records, Active, FixedMeta,
+start anchor, as the table above lists them; W35e-1.2, R35dW-4: the pin is the last check, so
+a file that differs there gets that check's text), or else by the pin with "114/Props record
+0x........ differs from the measured control (an option, a default or a per-file value that no
+measured Calculate Project pair varies; Calculate Project is enabled for the measured
+control's values only)".  A
 second null save cannot lift this: it shows what changes on a resave, and these records do not.
 What could is a measuring wave that saves a second control with every option at its default,
 under another title and at another time, to separate identity records from options; they could
 then be exempted on that evidence.  Until then nothing is lifted.
 
 **Files the port itself saved that are now refused.** A file the port saved after an edit that
-writes `114/Props` no longer matches the control there, and Calculate Project refuses it: Define
-WBS Code (records `0x0240138b` and `0x024013be`), a custom-field set (`0x02401392`,
-`0x024013c5`), Add Resources (tail scalars Resource count `0x02000001`, Resource size
-`0x02000100` and Calendar count `0x03000001`) and Assign Resources and its removal (the four
-`114/Props` assignment scalars: count, freed, dirty and size).  The pin excludes only the Task
-size scalar (`0x01000100`) from the tail hash, so a save that changes only the Task size, such
-as the var-record writers, still matches.  The 4(e) merge check passes because it uses the
-control itself.
+writes `114/Props` no longer matches the control there, and Calculate Project refuses it.  An
+Add Resources save meets the resource-table check first, and a custom-field set the
+variable-record check, when they come before the pin (W35e-1.2, R35dW-4); the pin's records for
+each are:
+- Define WBS Code (records `0x0240138b` and `0x024013be`);
+- a custom-field set (`0x02401392`, `0x024013c5`);
+- Add Resources (tail scalars Resource count `0x02000001`, Resource size `0x02000100` and
+  Calendar count `0x03000001`);
+- Assign Resources and its removal (the four `114/Props` assignment scalars: count, freed,
+  dirty and size);
+- the Notes and Text1 removals (W35e-1.2, R35dG1-2): a `remove` var edit adds the freed payload
+  to the Task freed scalar `0x01000002` (`core/mppwrite/varmeta_edit.cpp`), which the tail hash
+  holds;
+- the percent-complete saves (`core/mppwrite/actuals.cpp`): they move the Task freed, Assignment
+  freed and Assignment size scalars where bytes are freed or the assignment stream changes size,
+  and they write the status-date record `0x02400045` (the pin holds its payload);
+- outline indent and outdent (`core/mppwrite/outline.cpp`): they move the Task freed and the
+  Assignment row, freed, size and deleted scalars.
+
+The pin excludes only the Task size scalar (`0x01000100`) from the tail hash, so a save that
+changes only the Task size (the var-record appends) still matches the pin's tail hash, though
+the variable-record check above may refuse the file earlier for the record it now stores; the
+Notes and Text1 removals do not match it, since they also move the Task freed scalar.  The 4(e) merge check passes because it uses the control itself.
 
 *The plan layer has no Props pin, and that is a gap that is recorded, not a design (W35d-2.2,
 R35cG0-4).* `PlanInput` carries no `114/Props` records, only the project start 0.2 reads. The
