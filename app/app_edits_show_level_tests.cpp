@@ -512,6 +512,17 @@ void check_refusals() {
                        "the view Show Level would persist on is not the measured one",
                        std::string("the builder's own view check on ") + name);
     }
+    /* W35d-2.9 (R35cG2-4): the five-task outline in a file whose view block carries the second
+     * text style (the flat sort control's) was measured on the first style only.  Only the core
+     * test pinned this; here the builder refuses it at the shell's call, with its own prefix and
+     * the writer's reason.  Level 1 only: Level 2 hides nothing on the five-task outline and is
+     * refused for that before the view is read. */
+    expect_refused(plan, data_path(control_name("sort-flat-name-desc")).string(), 1,
+                   "the view Show Level would persist on is not the measured one",
+                   "the five-task outline on the second text style: the builder's prefix");
+    expect_refused(plan, data_path(control_name("sort-flat-name-desc")).string(), 1,
+                   "digest mismatch for the first text style only",
+                   "the five-task outline on the second text style: the first style only");
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    1, "could not be read", "a missing project file");
 
