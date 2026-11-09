@@ -6625,9 +6625,10 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         // 114/Props records, the summary and the marker (core/mppwrite/
         // calculate.h).  The edit is exclusive (checked above).  The digest of the
         // file the edit was built from must equal the digest of the file in hand
-        // (W35b-2.2: the per-leaf slack is derived from that file's rows and the
-        // writer cannot recompute it), a dry run then validates the request against
-        // the file, and the writer re-validates and writes the target once.  A
+        // (W35b-2.2: the per-leaf slack is derived from that file's rows; the writer
+        // also recomputes it since W35b-3.7, so this is the second guard), a dry run
+        // then validates the request against the file, and the writer re-validates
+        // and writes the target once.  A
         // refusal is an exception, reported as the save error.
         if (calculate_edit != nullptr) {
             if (calculate_edit->source_digest == 0 ||
