@@ -47,7 +47,7 @@ NEUTRAL = r"C:/w35"
 FIXTURE_DIR = os.path.join(NEUTRAL, "fixtures-calculate")
 NULL_DIR = os.path.join(NEUTRAL, "fixtures-calculate-null")
 OUT = os.path.join(ROOT, "build", "w35")
-WORK = os.path.join(OUT, "calculate-work")
+WORK = os.path.join(NEUTRAL, "calculate-work")  # the null-save source copy stays off the repo
 RESULT = os.path.join(OUT, "W35-1.2-calculate.json")
 
 PAIRS = ("unlinked", "linked", "lag", "snet")
@@ -193,11 +193,19 @@ def main():
 
     result = {"version": None, "pairs": {}}
     with oracle_session() as app:
-        with Guard(1800):
-            result["version"] = prop(app, "Version")
-            for pair in PAIRS:
-                entry = result["pairs"].setdefault(pair, {})
-                measure(app, pair, entry)
+        try:
+            with Guard(1800):
+                result["version"] = prop(app, "Version")
+                for pair in PAIRS:
+                    entry = result["pairs"].setdefault(pair, {})
+                    measure(app, pair, entry)
+        finally:
+            # measure() leaves calculation manual; do not leave the operator's
+            # Project that way, whether the run finished or failed.
+            try:
+                app.Calculation = 1  # pjAutomatic
+            except Exception as error:  # noqa: BLE001
+                log(f"could not restore automatic calculation: {error}")
 
     with open(RESULT, "w", encoding="utf-8") as handle:
         json.dump(result, handle, indent=2, sort_keys=True)
