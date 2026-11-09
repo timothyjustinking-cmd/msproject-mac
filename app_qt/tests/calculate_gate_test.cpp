@@ -19,11 +19,17 @@
 //   * the real save writes it (the file differs from the control) and a reopen
 //     of the saved file refuses a second calculation (nothing is pending).
 //
+//   * (W35b-2.6) the saved file equals Project's own save of the pair stream by stream under the
+//     null-save discipline (tests/save_pair_compare.h), not merely "differs from the control".
+//
 // Usage: qt_calculate_gate <unlinked-control.mpp> <linked-control.mpp> <out-dir>
+//                          <project-result.mpp> <control-null-save.mpp>
 #include <QAbstractButton>
 #include <QApplication>
 
+#include <array>
 #include <cstdio>
+#include <exception>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
@@ -31,10 +37,13 @@
 #include <system_error>
 #include <vector>
 
+#include "cfb_writer.h"
 #include "edit_model.h"
+#include "fixture_guard.h"
 #include "gate_util.h"
 #include "main_window.h"
 #include "ribbon_bar.h"
+#include "save_pair_compare.h"
 #include "shell_style.h"
 
 namespace {
@@ -81,6 +90,15 @@ bool click_calculate(msqt::MainWindow& window) {
     return true;
 }
 
+struct PairContext {
+    void check(bool ok, const std::string& what) const { gate::check(ok, what.c_str()); }
+    void expected_failure(bool unexpected_pass, const std::string& what) const {
+        gate::check(false, ("unexpected KnownGap report: " + what +
+                            (unexpected_pass ? " (gap gone)" : ""))
+                               .c_str());
+    }
+};
+
 std::vector<char> read_all(const QString& path) {
     std::ifstream in(path.toStdString(), std::ios::binary);
     return std::vector<char>((std::istreambuf_iterator<char>(in)),
@@ -92,15 +110,17 @@ std::vector<char> read_all(const QString& path) {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     msqt::configure_application();
-    if (argc < 4) {
+    if (argc < 6) {
         std::fprintf(stderr,
                      "usage: qt_calculate_gate <unlinked-control.mpp> <linked-control.mpp> "
-                     "<out-dir>\n");
+                     "<out-dir> <project-result.mpp> <control-null-save.mpp>\n");
         return 2;
     }
     const QString fixture = QString::fromLocal8Bit(argv[1]);
     const QString other_fixture = QString::fromLocal8Bit(argv[2]);
     const QString out_dir = QString::fromLocal8Bit(argv[3]);
+    const std::string project_result = argv[4];
+    const std::string null_save_path = argv[5];
     gate::check(!app::unmeasured_paths_allowed_for_tests(),
                 "the shipped refusal default is on in this program");
     gate::check(std::filesystem::exists(fixture.toStdString()),
@@ -186,6 +206,33 @@ int main(int argc, char** argv) {
         }
         gate::check(read_all(calculated) != read_all(copy),
                     "the saved file differs from the control");
+
+        // W35b-2.6: "differs from the control" holds for any write, so the save is compared
+        // with Project's own pair, every stream under the null-save discipline (as
+        // app_edits_calculate does for the cascade).  A wrong leaf stamp, a missing record or a
+        // stray byte fails here.
+        try {
+            fixture::require_committed(project_result);
+            fixture::require_committed(null_save_path);
+            const mppwrite::CfbDocument control_doc =
+                mppwrite::CfbDocument::from_file(copy.toStdString());
+            const mppwrite::CfbDocument null_doc =
+                mppwrite::CfbDocument::from_file(null_save_path);
+            const mppwrite::CfbDocument project_doc =
+                mppwrite::CfbDocument::from_file(project_result);
+            const mppwrite::CfbDocument saved_doc =
+                mppwrite::CfbDocument::from_file(calculated.toStdString());
+            PairContext context;
+            const std::array<const char*, 8> declared{
+                {"114/Props", "114/TBkndTask/FixedData", "114/TBkndTask/FixedMeta",
+                 "114/TBkndTask/Fixed2Data", "114/TBkndTask/Var2Data", "114/TBkndTask/VarMeta",
+                 "\005DocumentSummaryInformation", "Props14"}};
+            save_pair::compare_all(context, "qt calculate", control_doc, null_doc, project_doc,
+                                   saved_doc, nullptr, 0, declared.data(), declared.size());
+        } catch (const std::exception& pair_error) {
+            std::fprintf(stderr, "note: pair comparison error: %s\n", pair_error.what());
+            gate::check(false, "the saved file is compared with Project's pair");
+        }
     }
 
     // --- 3. reopen: nothing is pending any more ------------------------------
