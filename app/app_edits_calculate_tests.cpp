@@ -621,6 +621,16 @@ void check_refusals() {
         expect_refused(changed, source, "stored task type", "a stored task type (plan)");
     }
     {
+        /* W35c-2.10 (R35bG4-4): a task row the reader did not build keeps the open defaults
+         * (active, no baseline, no type block); it is refused, not read as the measured shape. */
+        app::PlanInput changed = plan;
+        changed.tasks[1].type_block_known = false;
+        expect_refused(changed, source, "task that was not read from the file",
+                       "a task row the reader did not build (plan)");
+        expect_push_refused(changed, "task that was not read from the file",
+                            "push() refuses a Calculate edit over a task the reader did not build");
+    }
+    {
         /* Each calendar variant: a renamed calendar, one with a block of its own (working
          * times or exceptions), an extra calendar, and none at all. */
         app::PlanInput renamed = plan;
