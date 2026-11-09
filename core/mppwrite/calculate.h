@@ -163,8 +163,9 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
  * TEST ONLY (W35d-1.3, R35cG2-1).  A fault seam for the scratch chain: when `appends` is
  * non-zero, save_calculate throws Error ("injected fault") right after that many of its five
  * overtime appends have been written to the scratch file, so a test can prove that a failure
- * mid-chain leaves an existing target byte-identical and no scratch file behind.  0 (the
- * default) turns it off; the setting is process-wide and not thread-safe.  Nothing in the
+ * mid-chain leaves an existing target byte-identical and no scratch file behind.  6 (one past
+ * the last append) throws after the Props edit instead, the last step before the target is
+ * written.  0 (the default) turns it off; the setting is process-wide and not thread-safe.  Nothing in the
  * application calls it.
  */
 void set_calculate_fault_after_appends(std::size_t appends);
