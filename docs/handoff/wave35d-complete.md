@@ -87,3 +87,58 @@ No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no
 dispatched.
 
 WAVE-35d-G1-COMPLETE
+
+## G2: the Lows and the Calculate Medium
+
+Builder record: `wave35d-verification/gates-g2.md`. Commits: `6f5cc18` (2.1), `caa6cb1` (2.2),
+`ec2429c` (2.3), `7d908c6` (2.4), `fc12254` (2.5), `f3c38d9` (2.6), `51c474b` (2.7), `492f10c`
+(2.8), `bb4a398` (2.9), `e415fe2` (2.10), `4dcfcd7` (2.11), `f9771b6` (2.12), `c250aef` (2.13),
+`a85d8b3` (2.14), `6652ded` (2.15). The trailer is on each, checked by script.
+
+| Item | Finding | Status |
+|---|---|---|
+| 2.1 | R35cG0-2 (Medium), R35cW-3 | **partly fixed** `6f5cc18`: the writer half is closed (W35c-2.2's +104 check runs before 0.2) and said so; the plan half is open (the plan reads Start word +104 only); the stale test comment is corrected |
+| 2.2 | R35cG0-4 | **partly fixed** `caa6cb1`: the plan has no Props digest, now a recorded gap; the two wrong sentences that explained it are corrected |
+| 2.3 | R35cG0-5 | fixed `ec2429c` |
+| 2.4 | R35cG0-6 | fixed `7d908c6` |
+| 2.5 | R35cG2-2 | fixed `fc12254`; the refusal is writer-only (the plan holds no project row), recorded |
+| 2.6 | R35cG2-3 | fixed `f3c38d9` |
+| 2.7 | R35cG2-6 | fixed `51c474b`; a test-only seam reaches the unexaminable-path branch |
+| 2.8 | R35cW-5 | fixed `492f10c` |
+| 2.9 | R35cG2-4 | fixed `bb4a398` by the review's own option: the six-task acceptance's inference is stated and the five-task outline is refused by the builder under test |
+| 2.10 | R35cG2-5 | fixed `e415fe2`; a signature guard, red as a compile error |
+| 2.11 | R35cW-4 | fixed `4dcfcd7`; a queued Calculate refuses later cell edits, Cut, Paste, Fill and task-form edits; the Redo route was closed by 0.5 |
+| 2.12 | R35cG1-6 | fixed `f9771b6`; one gap recorded: a row with no FixedMeta entry |
+| 2.13 | R35cG1-5 | fixed `c250aef` (record) |
+| 2.14 | R35cG1-7 | fixed `a85d8b3`; behaviour-preserving, guarded by a mutant, no timing taken |
+| 2.15 | R35cG2-7 | fixed `6652ded` (record); 12 pairs at 13:00 and 5 at 21:00, from a decode |
+
+**Gate line** (Visual Studio 17 2022, Release, `CORE_WARNINGS_AS_ERRORS=ON`; last source row
+`c250aef-W35d-2.14-*`): core build 0 with 0 warnings; `ctest -E plan_recalc` 65/65; app 34/34;
+app_qt 52/52; `check_fixtures` 0; `check_markers --range main..HEAD` 0; `guard_names` 0;
+`scan_client_names` 0; client-string grep none. Rows 2.2, 2.13 and 2.15 are records only and ran
+the scans without a build; 2.4 and 2.9 did not build app_qt (the change is in core and app). The
+measured pairs still write and match with effects on.
+
+**Guards seen red:** 2.3 to 2.9, 2.11, 2.12 and 2.14 against the code without the fix, and 2.10 as a
+compile error (`build/w35d/2.*-red-*.log`). 2.12's red is the plan layer's own text and `push()`:
+the builder still refuses through the writer's dry run. No red run, stated in each commit: 2.1,
+2.2, 2.13 and 2.15 (records; 2.1 also a comment).
+
+**Deferred:** nothing.
+
+**Open after G2:** the plan half of R35cG0-2 (the plan reads Start word +104, never +96) and the
+plan-side Props digest of R35cG0-4; both are refused at the writer or the save, so no wrong file
+is reachable, and both are recorded in `spec/writers/calculate.md`.
+
+**Found, not fixed:**
+- 2.12: a resource row with no FixedMeta entry has no session byte; the plan refuses it and the
+  writer reads that row by entry index.
+- 2.11: Cut, Paste, Fill and the task form share the Calculate guard but only the cell gate has a
+  Calculate-queued test.
+- The G0 question stands: whether Redo should end the list for a Show Level, as it does for a Sort.
+
+No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no workflow
+dispatched. Every 35d fix still awaits an independent review.
+
+WAVE-35d-G2-COMPLETE
