@@ -361,14 +361,24 @@ size scalar (`0x01000100`) from the tail hash, so a save that changes only the T
 as the var-record writers, still matches.  The 4(e) merge check passes because it uses the
 control itself.
 
-*The plan layer has no Props pin, on purpose.* `PlanInput` carries no Props records, only the
-two dates 0.2 reads, and a Props digest on it would be a field filled by the reader that the
-writer would then have to trust over the file it is about to change. The pin is instead
-writer-only and the plan layer reaches it by construction: `make_calculate_edit` runs
-`read_calculate_shape` on the file, and `save_calculate` compares the request's
-`source_digest` with the file it saves, so a plan that was built from a file with other
-options cannot be saved. What that leaves: `push()` on a hand-built plan edit does not see
-the options and the refusal comes at the save, not at the queue.
+*The plan layer has no Props pin, and that is a gap that is recorded, not a design (W35d-2.2,
+R35cG0-4).* `PlanInput` carries no `114/Props` records, only the project start 0.2 reads. The
+pin is writer-only and the plan layer reaches it by construction: `make_calculate_edit` runs
+`read_calculate_shape` on the file, which calls the pin, so the builder refuses. The save then
+ties the queued edit to the file: the edit model's save (`app/edit_model.cpp`, the
+`calculate_edit` branch; not `mppwrite::save_calculate`, which has no digest) compares
+`StructuralEdit::source_digest` with the digest of the file in hand, so a plan built from a
+file with other options cannot be saved. What that leaves: `push()` on a hand-built plan edit
+does not see the options and the refusal comes at the save, not at the queue.
+
+An earlier version of this paragraph said a plan-side Props digest would be a field "the writer
+would then have to trust over the file". It would not: a plan digest is one more refusal at the
+queue, and the writer's pin stays the check over the file. The reader already decodes
+`114/Props` (`core/mpp/reader.cpp`), so carrying a reader-computed digest of the pinned records
+on `PlanInput` (with the same exemptions as the pin) is cheap. It is not built: W35c-1.7
+(R35bG0-5) gave the plan the leaf's FixedMeta entry and VarMeta keys but not the Props records,
+and the writer's pin plus the save's digest stand in for it. It is the next step if a caller
+other than `make_calculate_edit` ever queues a Calculate Project edit.
 
 Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
 FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded
