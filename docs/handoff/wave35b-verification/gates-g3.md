@@ -26,3 +26,31 @@ Left as the row's own text says: Show Level 1 to 3 only, on the two measured sha
 (`kBaseLevels` five rows, `kDeepLevels` six rows).  No new shape is measured in wave 35b.
 
 Status: fixed, with the commits above.  Nothing is deferred for this id.
+
+## RW35-W5: sort persistence checked only that the order was a permutation
+
+Row: `docs/handoff/wave35-verification/close-review-writers.md`, RW35-W5 (any permutation of the
+rows was written the measured sort-spec bytes; Duration ascending was accepted with no pair
+behind it).
+
+Fixed in G2, before G3 began:
+
+- `84a24d1` (W35b-1.2, R35G2-2): `save_view_sort` reads the task row count, the UniqueID order,
+  the OutlineLevel, the names and the durations from the file, recomputes the sorted order under
+  the pinned rules in one shared function (`sorted_order_of`, which the edit model's
+  `sort_plan_order` also calls) and requires the request to equal it.  Needles: "the request is
+  not the file's row order", "the sorted order does not match the order the file's own outline,
+  names and durations give".  That is the "recompute the sorted order from the file's key
+  column and refuse a mismatch" direction of the row.
+- `7bd9c5c` (W35b-1.4, R35G2-4): Duration ascending is refused in the writer ("Duration
+  ascending is unmeasured (the pairs sort Duration descending only)") and in the edit model, and
+  an ascending key whose order differs from the rows' own is refused ("an ascending sort that
+  moves rows is unmeasured").  That is the "refuse Duration until a pair measures it" direction.
+  The review's suspicion that no Duration-ascending pair exists is confirmed by the pair list in
+  the spec's capability matrix, which this commit extended.
+- `d3a9fad` (W35b-3.4) made the Qt sort gate compare its save with Project's pair.
+
+Still queued for the next measuring wave, not here: `sort-duration-asc` and an ascending-reorder
+Sort pair (R35G2-4).
+
+Status: fixed, with the commits above.  Nothing is deferred for this id.
