@@ -495,8 +495,9 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                "lengthens it");
         }
         if (rows.u32(0, task_row::kFinish) == shape.project_finish) {
-            return fail(error, "the project finish already equals the latest "
-                               "task finish; there is nothing to calculate");
+            return fail(error, "the pending change does not move the project "
+                               "finish; that recalculation has no measured "
+                               "pair");
         }
         /* W35b-0.3: the stored project finish is the one before the change, so a
          * leaf that finishes before it had slack and one that finishes at it ended
