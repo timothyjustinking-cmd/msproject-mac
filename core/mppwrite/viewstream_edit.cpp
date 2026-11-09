@@ -610,9 +610,9 @@ void validate_edit(ViewCellStyleEdit const& edit, std::string const& function) {
                     "unmeasured and refused");
     }
     if (edit.field_id != kMeasuredCellFieldId) {
-        throw Error(function + ": field id " + std::to_string(edit.field_id) +
+        throw Error(function + ": field id " + hex_u32(edit.field_id) +
                     " is not the measured field id (" +
-                    std::to_string(kMeasuredCellFieldId) +
+                    hex_u32(kMeasuredCellFieldId) +
                     ", the Task Name cell); every other field is unmeasured "
                     "and refused");
     }

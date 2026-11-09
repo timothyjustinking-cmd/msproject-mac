@@ -47,6 +47,13 @@
 #include "wbs_code.h"
 
 namespace app {
+
+// W35b-4.G0-11 (R35G0-11): the app's copy of the Bold cell pin cannot drift from the writer's.
+static_assert(kBoldMeasuredTaskUid == mppwrite::kMeasuredCellUid,
+              "the edit model's Bold row pin is the writer's");
+static_assert(kBoldMeasuredFieldId == mppwrite::kMeasuredCellFieldId,
+              "the edit model's Bold field pin is the writer's");
+
 namespace {
 
 std::string trim_ascii(std::string text) {
