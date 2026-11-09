@@ -635,7 +635,16 @@ void check_refusals() {
             {"a task whose Type block was never read", "was not read from the file",
              [](app::TaskRow& row) { row.type_block_known = false; }, nullptr},
             {"a default-built resource row", "that has no calendar row of its own", nullptr,
-             [](app::ResourceRow& row) { row = app::ResourceRow{.uid = row.uid, .id = row.id}; }},
+             [](app::ResourceRow& row) {
+                 /* W35d-0.1 (R35cW-CI1): built from the defaults, then the two identity members
+                  * assigned.  A designated initializer naming only some members is an error on
+                  * GCC with -Werror=missing-field-initializers. */
+                 auto const uid = row.uid;
+                 auto const id = row.id;
+                 row = app::ResourceRow{};
+                 row.uid = uid;
+                 row.id = id;
+             }},
             /* W35-0.1 (R34b-1): the resource's calendar row, one test per shape. */
             {"a resource calendar based on another calendar",
              "whose calendar is based on another calendar", nullptr,
