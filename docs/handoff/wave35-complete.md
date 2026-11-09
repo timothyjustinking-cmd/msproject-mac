@@ -189,6 +189,16 @@ cannot reproduce the words.  Section 4 of the spec has the table; zoom stays ses
   cascade's one-edit check) survive and are equivalent through the public API: a level above 2
   never hides a row on a measured shape, and `push()` refuses an exclusive combination before
   the cascade sees it.
+  **Erratum, 9 November 2026 (W35b-3.1, R35G2-5):** the a2 note was wrong in its premise.
+  `push()` had no outline-shape guard, so on an unmeasured outline (for example levels
+  {0,1,2,0,0}) it accepted Level 1 and left the refusal to the writer at Save.  W35b-3.1 adds
+  the shape check (`mppwrite::outline_shape_measured`, both level vectors) to `push()`.  With
+  that check a2 IS equivalent: re-run with the cap changed to `> 99`, the show-level test stays
+  green (`build/w35b/a2-run.log`), because Level 3 on a measured shape hides nothing and on any
+  other shape the shape check refuses first.  The tests added for it (Level 1 on a
+  three-level and a four-level outline, Level 3 on a four-level outline) were red before the
+  shape check for the two Level 1 cases (`build/w35b/red-3.1-run.log`); the Level 3 case does not
+  go red either way, because the cap and the shape check both refuse it.
 - **A test file was overwritten, then restored.**  The Show Level app test was first written
   over `app/app_edits_outline_tests.cpp`, which holds the Indent / Outdent test.  The duplicate
   target showed at configure; the file was restored from HEAD (the backup was identical, so

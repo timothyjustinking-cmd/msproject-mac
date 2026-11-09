@@ -4334,11 +4334,18 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
                 uids != edit.outline_uids || levels != edit.outline_levels) {
                 return false;
             }
+            // W35b-3.1 (R35G2-5): both level vectors must be an outline the pairs
+            // measure, so a hand-built edit on another shape is refused here and
+            // not only when Save runs the writer.
+            const mppwrite::ViewOutlineEdit view_edit =
+                show_level_view_edit(edit.show_level, uids, levels);
+            if (!mppwrite::outline_shape_measured(view_edit.rows)) {
+                return false;
+            }
             std::vector<bool> hidden;
             std::vector<bool> collapsed;
-            mppwrite::outline_show_level_sets(
-                show_level_view_edit(edit.show_level, uids, levels).rows, edit.show_level,
-                hidden, collapsed);
+            mppwrite::outline_show_level_sets(view_edit.rows, edit.show_level, hidden,
+                                              collapsed);
             if (std::find(hidden.begin(), hidden.end(), true) == hidden.end()) {
                 return false;
             }

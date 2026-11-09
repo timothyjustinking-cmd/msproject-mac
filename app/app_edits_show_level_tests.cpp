@@ -502,6 +502,30 @@ void check_refusals() {
               "push() accepts the hand-built measured level");
     }
 
+    /* W35b-3.1 (R35G2-5): push() checks the outline is one the pairs measure, from
+     * the plan and from the edit's own level vector.  Each hand-built edit carries
+     * exactly the plan's rows, so only the shape check can refuse it. */
+    {
+        app::PlanInput three_deep = plan;
+        task_by_uid(three_deep, 3)->outline_level = 2;
+        app::PlanInput four_deep = plan;
+        task_by_uid(four_deep, 3)->outline_level = 2;
+        task_by_uid(four_deep, 4)->outline_level = 3;
+        const auto refused = [&uids](int level, const app::PlanInput& on,
+                                     const std::vector<std::uint32_t>& rows_levels,
+                                     const std::string& what) {
+            app::StructuralEdits fresh;
+            check(!fresh.push(hand_edit(level, uids, rows_levels), &on), what);
+            check(fresh.empty(), what + ": nothing was queued");
+        };
+        refused(1, three_deep, {0, 1, 2, 0, 0},
+                "R35G2-5: push() refuses Level 1 on a three-level-deep outline {0,1,2,0,0}");
+        refused(3, four_deep, {0, 1, 2, 3, 0},
+                "R35G2-5: push() refuses Level 3 on a four-level outline {0,1,2,3,0}");
+        refused(1, four_deep, {0, 1, 2, 3, 0},
+                "R35G2-5: push() refuses Level 1 on a four-level outline {0,1,2,3,0}");
+    }
+
     /* Exclusivity, in both directions. */
     {
         app::StructuralEdit priority;
