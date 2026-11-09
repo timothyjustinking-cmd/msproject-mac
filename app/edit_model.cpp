@@ -3062,6 +3062,14 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
             }
         }
     }
+    // W35d-2.12 (R35cG1-6): the writer reads every physical resource row, so the plan reads the
+    // rows the reader skipped too; without this a tombstoned row carrying 0x5C passed here and
+    // was refused by the writer alone.
+    if (!assign && !plan.skipped_resource_sessions_unsaved) {
+        return "Removing an assignment is not implemented in this port for this project: a "
+               "deleted or unreadable resource row does not carry the unsaved session byte "
+               "0x1C, which the measured Project pair's file does";
+    }
     if (assign && real != 0) {
         return "Assign Resources on a task that already has an assignment is not "
                "implemented in this port: the measured Project pair assigns the "

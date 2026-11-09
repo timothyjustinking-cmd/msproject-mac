@@ -1069,6 +1069,12 @@ struct SkippedRow {
     /* When the slot still has variable blocks but no metadata, the name block
      * in the gap between its neighbours is reported here as evidence. */
     std::string orphan_name;
+    /* W35d-2.12 (R35cG1-6): for a skipped RESOURCE row, byte 12 of its FixedMeta entry (the
+     * save-session byte) and whether an entry supplied it.  The assignment writer reads this
+     * byte on every physical resource row, tombstones included, so the plan layer needs it
+     * for the rows the reader does not return as live resources. */
+    std::uint8_t fixed_meta_session = 0;
+    bool fixed_meta_session_stored = false;
 };
 
 /*

@@ -1403,7 +1403,29 @@ void check_port_saved_removal() {
     const PortCase other_case = {
         &other_row,
         "resource uid 1 does not", "a file with only another resource row marked"};
-    for (const PortCase& one : {cases[0], cases[1], other_case}) {
+    /* W35d-2.12 (R35cG1-6): resource 1's row is a TOMBSTONE (FixedMeta +0 = 0x02) that still
+     * carries the session byte 0x5C.  The reader returns no live row for it, so the plan layer's
+     * live-row loop never sees it; the writer walks every physical row and does.  The same file
+     * with the tombstone's byte left 0x1C is the control that the new plan check blames only the
+     * byte. */
+    const std::filesystem::path tombstone_marked = out_path("app-assign-remove-tombstone-marked.mpp");
+    const std::filesystem::path tombstone_unmarked =
+        out_path("app-assign-remove-tombstone-unmarked.mpp");
+    for (const bool marked : {true, false}) {
+        mppwrite::CfbDocument doc =
+            mppwrite::CfbDocument::from_file(data_path(kRemove.control).string());
+        std::vector<std::uint8_t> meta = doc.read_stream("114/TBkndRsc/FixedMeta");
+        check(meta.size() > 213 && meta[164] == 0x00 && meta[176] == 0x1C,
+              "the removal control's resource row 1 entry is live with session byte 0x1C");
+        meta[164] = 0x02;
+        meta[176] = marked ? 0x5C : 0x1C;
+        doc.replace_stream("114/TBkndRsc/FixedMeta", meta);
+        doc.save((marked ? tombstone_marked : tombstone_unmarked).string());
+    }
+    const PortCase tombstone_case = {
+        &tombstone_marked, "a deleted or unreadable resource row",
+        "a file whose tombstoned resource row carries 0x5C"};
+    for (const PortCase& one : {cases[0], cases[1], other_case, tombstone_case}) {
         app::PlanInput plan;
         try {
             plan = load_plan(*one.path);
@@ -1425,6 +1447,24 @@ void check_port_saved_removal() {
                   edit.resource_uid == 0 && edit.assignment_uid == 0,
               std::string("the refused edit for ") + one.label + " is left default-constructed");
     }
+    {
+        const app::PlanInput marked_plan = load_plan(tombstone_marked);
+        const app::PlanInput unmarked_plan = load_plan(tombstone_unmarked);
+        check(!marked_plan.skipped_resource_sessions_unsaved,
+              "the reader reports a tombstoned resource row with 0x5C as not unsaved");
+        check(unmarked_plan.skipped_resource_sessions_unsaved,
+              "the reader reports a tombstoned resource row with 0x1C as unsaved");
+        app::StructuralEdits queue;
+        check(!queue.push(hand_edit(false, 1, 2, 99), &marked_plan),
+              "push() refuses a removal over a plan whose tombstoned resource row is session-saved");
+        app::StructuralEdit edit;
+        std::string error;
+        app::make_assignment_edit(unmarked_plan, tombstone_unmarked.string(), 1, 2, false, edit,
+                                  error);
+        check(error.find("a deleted or unreadable resource row") == std::string::npos,
+              "a tombstoned row with the unsaved byte is not blamed by the plan layer (got \"" +
+                  error + "\")");
+    }
     /* W35c-1.10 (R35bG1-3), the writer's layer on its own: with the plan's session bytes set to
      * the measured value the plan layer passes, push() accepts, and the save's writer refuses
      * both the file Project resaved (the target row) and the file with only another row
@@ -1439,6 +1479,9 @@ void check_port_saved_removal() {
          "the file Project resaved"},
         {&other_row, "the resource table's row 1 FixedMeta byte 12 is 0x5C, not the measured 0x1C",
          "a file with only another resource row marked"},
+        {&tombstone_marked,
+         "the resource table's row 1 FixedMeta byte 12 is 0x5C, not the measured 0x1C",
+         "a file whose tombstoned resource row carries 0x5C"},
     };
     for (const WriterCase& one : writer_cases) {
         app::PlanInput plan;
@@ -1451,6 +1494,7 @@ void check_port_saved_removal() {
         for (app::ResourceRow& row : plan.resources) {
             row.fixed_meta_session = 0x1C;
         }
+        plan.skipped_resource_sessions_unsaved = true;
         std::uint32_t fresh_uid = 0;
         for (const app::AssignmentRow& row : plan.assignments) {
             fresh_uid = std::max(fresh_uid, row.uid);

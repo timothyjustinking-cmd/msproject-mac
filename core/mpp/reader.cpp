@@ -2303,6 +2303,10 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                     SkippedRow skipped;
                     skipped.row = row;
                     skipped.uid = uid;
+                    if (rsc_meta_stream && rsc_live[row] && row < rsc_meta_type.size()) {
+                        skipped.fixed_meta_session = rsc_meta_type[row];
+                        skipped.fixed_meta_session_stored = true;
+                    }
                     if (uid == 0) {
                         skipped.reason = "UniqueID 0";
                     } else if (!rsc_live[row]) {
