@@ -54,3 +54,27 @@ Still queued for the next measuring wave, not here: `sort-duration-asc` and an a
 Sort pair (R35G2-4).
 
 Status: fixed, with the commits above.  Nothing is deferred for this id.
+
+## G3 summary
+
+Every item of section 2, group G3, is done; none is deferred.  One commit per finding id, each
+with its gate log under `build/w35b/` quoted in the commit message.
+
+| Item | Ids | State |
+|---|---|---|
+| 3.1 | R35G2-5 | fixed |
+| 3.2 | R35G2-6 | fixed |
+| 3.3 | R35G2-7 | fixed |
+| 3.4 | coordinator mutation M13 on G2 | fixed (d3a9fad) |
+| 3.5 | R35G3-3 | fixed |
+| 3.6 | R35G3-4 | fixed, each `unbold_cell` guard tested with its own needle |
+| 3.7 | RW35-W4, W5 (records, fixed in G2), W6, W7, R3, R4 | fixed |
+| 3.8 | R35G2-8, R35G3-5, R35G3-2, R35G3-7 | record corrections; the brief and review-g3 swap the ids R35G3-2 and R35G3-5, and the commits use the review ids |
+
+The `guard_names=1` in every gate log is the two pre-existing `wave35-g3-notes-generator*.mpp`
+blobs in `main..HEAD`, not a new finding.  `app/main.mm` was not touched; CI is its only compile
+gate.  No push, no workflow dispatch, no amend, no history rewrite.
+
+Queued for the measuring wave, not done here: Toolbar Underline (early-bound call), a two-row
+Bold range that checks `ActiveSelection.Tasks.Count == 2`, the Applied-table writer attempt
+(R35G2-8), an effort-driven pair (R35G0-5), and the pairs listed in the brief.
