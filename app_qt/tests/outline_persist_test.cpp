@@ -416,8 +416,8 @@ int main(int argc, char** argv) {
         gate::check(status_contains(window, "Show Level is not implemented in this port while "
                                             "the plan carries unsaved edits"),
                     "unsaved rename: the status line names the unsaved edits");
-        gate::check(status_contains(window, "save or undo the grid edits first"),
-                    "unsaved rename: the status line says save or undo the grid edits first");
+        gate::check(status_contains(window, "(or save them, where Save writes that field)"),
+                    "unsaved rename: the status line says undo the grid edits first (or save them)");
         gate::check(status_contains(window, "session only"),
                     "unsaved rename: the status line says session only");
     }

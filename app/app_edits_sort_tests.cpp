@@ -529,7 +529,7 @@ void check_refusals() {
             expect_refused(edited, source, name_desc, true, false, edit_case.needle,
                            std::string("a sort with ") + edit_case.what);
             expect_refused(edited, source, name_desc, true, false,
-                           "save or undo the grid edits first",
+                           "(or save them, where Save writes that field)",
                            std::string("a sort with ") + edit_case.what + " asks to save or undo");
         }
 

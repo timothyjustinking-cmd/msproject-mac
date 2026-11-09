@@ -3290,6 +3290,9 @@ std::string sort_plan_order(const PlanInput& plan, std::uint32_t field_id, bool 
 // own base order, so a rename of two siblings would save an order of names the
 // file does not store.  Compare the plan with the file's own rows, by UniqueID, on
 // every field a grid edit reaches; the reason names the first difference.
+// W35c-2.20 (R35bG1-8): the advice used to be "save or undo", but a grid edit on a field Save
+// does not write (a renamed task is session only) stays different from the file after a
+// Save, so the refusal stays; only undo (or reopening) clears it.  The text now says so.
 std::string plan_unsaved_edits(const PlanInput& plan, std::string_view source_path,
                                std::string_view what) {
     PlanInput stored;
@@ -3300,7 +3303,8 @@ std::string plan_unsaved_edits(const PlanInput& plan, std::string_view source_pa
     }
     const auto refuse = [&what](const std::string& detail) {
         return std::string(what) + " is not implemented in this port while the plan carries "
-               "unsaved edits (" + detail + "): save or undo the grid edits first";
+               "unsaved edits (" + detail + "): undo the grid edits first (or save them, "
+               "where Save writes that field)";
     };
     std::map<std::uint32_t, const TaskRow*> file_rows;
     for (const TaskRow& task : stored.tasks) {

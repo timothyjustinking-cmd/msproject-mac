@@ -452,7 +452,7 @@ void check_refusals() {
         expect_refused(renamed, source, 1,
                        "carries unsaved edits (UniqueID 2 Name differs from the file)",
                        "Show Level with a renamed task");
-        expect_refused(renamed, source, 1, "save or undo the grid edits first",
+        expect_refused(renamed, source, 1, "(or save them, where Save writes that field)",
                        "Show Level with a renamed task asks to save or undo");
         app::PlanInput retimed = plan;
         task_by_uid(retimed, 3)->duration_ticks += 480;
