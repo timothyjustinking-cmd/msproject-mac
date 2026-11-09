@@ -2604,6 +2604,31 @@ void test_remove_port_saved(TestContext& t) {
             resaved_needle, "remove on the port's file with Project's resaved Rsc FixedMeta");
         check_unchanged(t, doc, before, "remove with Project's resaved Rsc FixedMeta");
     }
+    {
+        /* W35c-1.9 (R35bG1-2): the guard read only the target row.  Project's resave sets
+         * 0x40 on every resource row, and the port's own resource add stamps 0x1C even into a
+         * file Project has saved, so a file whose TARGET row (resource 2, stream byte 213) is
+         * 0x1C but another row is 0x5C is still a file a session has saved.  Only the other
+         * row (resource 1, byte 176) is changed here. */
+        CfbDocument doc = control;
+        for (char const* path : {kAssnMeta, kAssnF2Meta, kProps}) {
+            doc.replace_stream(path, null_save.read_stream(path)); /* the settled shape */
+        }
+        Bytes meta = doc.read_stream(kRscMeta);
+        t.equal(meta[176], 0x1C, "the control's resource 1 session byte is 0x1C");
+        t.equal(meta[213], 0x1C, "the control's resource 2 (the target) session byte is 0x1C");
+        meta[176] = 0x5C;
+        doc.replace_stream(kRscMeta, meta);
+        Bytes const before = doc.to_bytes();
+        std::error_code ignored;
+        std::filesystem::remove(missing_path(), ignored);
+        expect_error(
+            t, [&] { (void)mppwrite::unassign_resource(doc, key(1, 2), missing_path()); },
+            "the resource table's row 1 FixedMeta byte 12 is 0x5C, not the measured 0x1C",
+            "remove with only a non-target resource row marked as Project-saved");
+        check_unchanged(t, doc, before, "remove with only a non-target row marked");
+        t.check(!file_exists(missing_path()), "the refused removal writes no file");
+    }
 
     /* 3. The settle step is not the only gap.  Give the control the streams
      * Project's null save rewrites except the resource flag byte (Assn FixedMeta

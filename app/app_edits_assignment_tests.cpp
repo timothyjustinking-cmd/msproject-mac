@@ -1348,7 +1348,24 @@ void check_port_saved_removal() {
         {&resaved, "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C",
          "the file Project resaved"},
     };
-    for (const PortCase& one : cases) {
+    /* W35c-1.9 (R35bG1-2): only a NON-target resource row (resource 1, stream byte 176) is
+     * marked as Project-saved; the target row (resource 2) is still 0x1C. */
+    const std::filesystem::path other_row = out_path("app-assign-remove-other-row-marked.mpp");
+    {
+        mppwrite::CfbDocument doc =
+            mppwrite::CfbDocument::from_file(data_path(kRemove.control).string());
+        std::vector<std::uint8_t> meta = doc.read_stream("114/TBkndRsc/FixedMeta");
+        check(meta.size() > 213 && meta[176] == 0x1C && meta[213] == 0x1C,
+              "the removal control's resource rows 1 and 2 both carry session byte 0x1C");
+        meta[176] = 0x5C;
+        doc.replace_stream("114/TBkndRsc/FixedMeta", meta);
+        doc.save(other_row.string());
+    }
+    const PortCase other_case = {
+        &other_row,
+        "the resource table's row 1 FixedMeta byte 12 is 0x5C, not the measured 0x1C",
+        "a file with only another resource row marked"};
+    for (const PortCase& one : {cases[0], cases[1], other_case}) {
         app::PlanInput plan;
         try {
             plan = load_plan(*one.path);

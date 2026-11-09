@@ -404,3 +404,16 @@ builds the edit on the null save and saves a hand-built one.  The KnownGap
 comparison of item 3 now copies the other three streams only, so the resource byte
 stays 0x1C and the writer accepts the file.  No removal pair is measured from a file
 whose resources carry 0x5C, so any such removal stays refused.
+
+**W35c-1.9 (R35bG1-2): the guard reads every resource row, not only the target's.**
+Project's resave sets 0x40 on every resource row and the port's own resource add stamps
+0x1C even into a file Project has saved, so the target's byte alone does not prove that no
+Project session has saved the file.  `unassign_resource` and, through its dry run,
+`make_assignment_edit` now read byte 12 of every resource row from row 1 and refuse any
+that is not 0x1C ("the resource table's row N FixedMeta byte 12 is 0x5C, not the measured
+0x1C"), after the target's own check, whose text is unchanged.  Row 0 (the first row of the
+table) is 0x5C in the measured control and is read only when it is the target.  The
+writer test sets only resource 1's byte (stream offset 176) to 0x5C on the settled control,
+and `app_edits_assignment_tests` builds the edit on the same file.  Not traced: whether a
+real lineage reaches a file whose target row is 0x1C and another is 0x5C; the guard
+refuses it either way.
