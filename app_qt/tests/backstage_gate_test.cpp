@@ -75,6 +75,7 @@
 #include "options_dialog.h"
 #include "preferences_store.h"
 #include "print_page.h"
+#include "prompt_hook.h"
 #include "ribbon_bar.h"
 #include "shell_style.h"
 #include "theme.h"
@@ -440,51 +441,25 @@ void check_account(msqt::MainWindow& window, const QJsonObject& measures,
     gate::check(about != nullptr && about->isEnabled(),
                 "the Account page has an enabled About button");
     if (about != nullptr) {
-        bool saw_dialog = false;
-        QString title;
-        QString about_text;
-        // The top-level walk is the repo's cross-platform dialog idiom
-        // (dialog_gate_test.cpp); QApplication::activeModalWidget() returned
-        // null for this QMessageBox on the macOS offscreen run
-        // (qt-shell 40054734014).  Identify the box by its TEXT, not its
-        // windowTitle(): the macOS runs do not carry the title the Windows
-        // run does (qt-shell 40054734014 and 40055403392), and the content is
-        // the stronger claim anyway -- the port's product name and version,
-        // not the system About panel.  The title is printed for the record.
-        QTimer::singleShot(0, [&saw_dialog, &title, &about_text]() {
-            QMessageBox* found = nullptr;
-            for (QWidget* widget : QApplication::topLevelWidgets()) {
-                auto* dialog = qobject_cast<QDialog*>(widget);
-                if (dialog == nullptr || !dialog->isVisible()) {
-                    continue;
-                }
-                if (auto* message = qobject_cast<QMessageBox*>(widget)) {
-                    found = message;
-                    break;
-                }
-            }
-            if (found != nullptr) {
-                saw_dialog = true;
-                title = found->windowTitle();
-                about_text = found->text();
-                found->close();
-                return;
-            }
-            // Not a message box: close the first visible dialog so exec()
-            // returns and the failure below is honest.
-            for (QWidget* widget : QApplication::topLevelWidgets()) {
-                auto* dialog = qobject_cast<QDialog*>(widget);
-                if (dialog != nullptr && dialog->isVisible()) {
-                    title = dialog->windowTitle();
-                    dialog->close();
-                    return;
-                }
-            }
-        });
-        about->click();
-        QApplication::processEvents();
+        // W35c-2.18 (R35bG4-5): the one-look QTimer::singleShot(0) this check used to
+        // carry is the platform-sensitive look CI-4 was about (two earlier macOS
+        // failures), and it filled nothing, so gate::PromptAnswerer polls for the box,
+        // records its text and rejects it.  Identify the box by its TEXT, not its
+        // windowTitle(): the macOS runs do not carry the title the Windows run does
+        // (qt-shell 40054734014 and 40055403392), and the content is the stronger claim
+        // anyway -- the port's product name and version, not the system About panel.
+        // The title is printed for the record.
+        gate::PromptResult about_prompt;
+        {
+            gate::PromptAnswerer answerer(&about_prompt, false, QString());
+            about->click();
+            QApplication::processEvents();
+        }
+        const QString title = about_prompt.title;
+        const QString about_text = about_prompt.text;
         std::fprintf(stderr, "note: About dialog title \"%s\"\n", qPrintable(title));
-        gate::check(saw_dialog, "the About button opens a modal About box");
+        gate::check(about_prompt.seen && about_prompt.question,
+                    "the About button opens a modal About box");
         gate::check(about_text.startsWith(QStringLiteral("MS Project Shell ")) &&
                         about_text.contains(version),
                     "the About box is the port's own");
@@ -640,17 +615,15 @@ void check_new(msqt::MainWindow& window, const QString& fixture, const QString& 
 
     // New from existing is wired to the file picker; the offscreen gate closes
     // the modal without choosing a file.
-    bool saw_dialog = false;
-    QTimer::singleShot(0, [&saw_dialog]() {
-        if (QApplication::activeModalWidget() != nullptr) {
-            saw_dialog = true;
-            QApplication::activeModalWidget()->close();
-        }
-    });
+    // W35c-2.18 (R35bG4-5): answered by gate::PromptAnswerer (a poll, not a one-look timer).
+    gate::PromptResult existing_prompt;
     if (existing != nullptr) {
-        existing->click();
-        QApplication::processEvents();
-        gate::check(saw_dialog,
+        {
+            gate::PromptAnswerer answerer(&existing_prompt, false, QString());
+            existing->click();
+            QApplication::processEvents();
+        }
+        gate::check(existing_prompt.seen,
                     "New from existing opens the local file picker");
     }
     (void)page;
@@ -1109,22 +1082,17 @@ void check_options(msqt::MainWindow& window, const QJsonObject& measures,
     // The rail's Options entry opens the same dialog.
     window.show_backstage(true);
     QApplication::processEvents();
-    bool saw_dialog = false;
-    QString title;
-    QTimer::singleShot(0, [&saw_dialog, &title]() {
-        auto* opened = qobject_cast<QDialog*>(QApplication::activeModalWidget());
-        if (opened != nullptr) {
-            saw_dialog = true;
-            title = opened->windowTitle();
-            opened->close();
+    // W35c-2.18 (R35bG4-5): gate::PromptAnswerer records the dialog's title and rejects it.
+    gate::PromptResult options_prompt;
+    {
+        gate::PromptAnswerer answerer(&options_prompt, false, QString());
+        if (window.backstage() != nullptr && window.backstage()->options_button() != nullptr) {
+            window.backstage()->options_button()->click();
         }
-    });
-    if (window.backstage() != nullptr && window.backstage()->options_button() != nullptr) {
-        window.backstage()->options_button()->click();
+        QApplication::processEvents();
     }
-    QApplication::processEvents();
-    gate::check(saw_dialog, "the backstage Options entry opens the dialog");
-    gate::check(title == QStringLiteral("Project Options"),
+    gate::check(options_prompt.seen, "the backstage Options entry opens the dialog");
+    gate::check(options_prompt.title == QStringLiteral("Project Options"),
                 "the rail opens Project Options");
     window.show_backstage(false);
 }
