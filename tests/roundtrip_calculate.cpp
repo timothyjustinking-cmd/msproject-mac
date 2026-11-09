@@ -850,6 +850,37 @@ void refused_requests() {
             refuses([&] { mppwrite::save_calculate(doc, good, path); },
                     "differs from the measured control", "0.3: a Props record kind changed");
         }
+        /* W35d-1.4 (R35cG0-3): the pin also holds per-file identity records, the project title
+         * (0x02400008) among them, so a project saved under another title is refused here.
+         * The text says so: it names "a per-file value" and that Calculate Project is enabled
+         * for the measured control's values only, and it does not call the record an option. */
+        std::size_t titles = 0;
+        for (PropsFrame const& frame : frames) {
+            if (frame.id != 0x02400008u) {
+                continue;
+            }
+            Bytes changed = props;
+            changed[frame.at + 12] ^= 0x01;
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            std::string message;
+            try {
+                mppwrite::save_calculate(doc, good, path);
+            } catch (std::exception const& failure) {
+                message = failure.what();
+            }
+            check(message.find("114/Props record 0x02400008 differs from the measured control") !=
+                      std::string::npos,
+                  "1.4: a changed project title is refused by the Props pin");
+            check(message.find("a per-file value") != std::string::npos &&
+                      message.find("enabled for the measured control's values only") !=
+                          std::string::npos,
+                  "1.4: the refusal names a per-file value and the control-only scope");
+            check(message.find("calculation options") == std::string::npos,
+                  "1.4: the refusal does not call the record a calculation option");
+            ++titles;
+        }
+        check(titles == 1, "1.4: the control's Props holds one project title record");
         /* W35d-0.3 (R35cG0-1): the three branches of check_props_pin that no payload flip can
          * reach, each with a needle only its own branch produces (the generic "differs from
          * the measured control" text is shared with the record checks, so it is not used).

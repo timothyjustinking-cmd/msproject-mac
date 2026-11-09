@@ -315,9 +315,13 @@ void check_props_pin(std::vector<std::uint8_t> const& props) {
                         std::to_string(want.length) + " bytes): the stream" + differs);
         }
         if (!props_payload_is_free(id) && fnv1a64(props.data() + at + 12, length) != want.payload_hash) {
+            /* W35d-1.4 (R35cG0-3): the pin also holds per-file identity records (the project
+             * title at 0x02400008, a creation stamp at 0x02401394), so the text must not say
+             * the differing record is an option. */
             throw Error("114/Props record " + hex(id) + differs +
-                        "; the project's calculation options and defaults are stored in "
-                        "these records and no measured Calculate Project pair varies them");
+                        " (an option, a default or a per-file value that no measured Calculate "
+                        "Project pair varies; Calculate Project is enabled for the measured "
+                        "control's values only)");
         }
         at += 12u + length;
         ++index;

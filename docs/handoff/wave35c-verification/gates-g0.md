@@ -94,7 +94,11 @@ Nothing.
   the only ones that differ between them. A file saved on another machine or by another
   Project build may carry further per-file values in `114/Props`; it would be refused with
   "differs from the measured control" until a second null-save pair shows them as noise. That
-  is a refusal, not a wrong write. Not measured (no COM this wave).
+  is a refusal, not a wrong write. Not measured (no COM this wave).  Correction (W35d-1.4,
+  R35cG0-3): a second null save cannot show them, because the per-file records do not change on
+  a resave, and the cause is not only another machine or build: every project has its own title
+  and creation stamp.  Calculate Project is enabled for the measured control's values only; see
+  `spec/writers/calculate.md`, "Scope".
 - **`push()` does not see the Props pin** for a hand-built calculate edit (writer-only, above).
   A hand-built edit cannot be saved over a file whose options differ, but the refusal arrives
   at the save. Bears on R35bG0-5 (group G1, item 1.7: the plan layer matching the writer).
