@@ -2538,8 +2538,14 @@ void test_remove_port_saved(TestContext& t) {
     /* 3. The settle step is not the only gap.  Give the control the streams
      * Project's null save rewrites except the resource flag byte (Assn FixedMeta
      * and Fixed2Meta, Props): the writer then accepts the file, and its output
-     * still differs from Project's edit save in four streams, each a named gap
-     * (the resource flag byte itself is the null save's session bit, masked by
+     * still differs from Project's edit save in four streams, each a named gap.
+     * The four are a LOWER BOUND: the mask compare_all builds is the control
+     * against the null save, and the null save rewrote 19 streams (49 bytes of
+     * Assn Fixed2Data, 22 of 114/Props, 49 of Task Fixed2Data, 190 of CEdl, 247
+     * of Props14), so every byte the settle changed is masked and a port
+     * output wrong at one of them still passes.  Only the Rsc flag (refused
+     * by 2. above) and the CEdl rebuild are open items; the identity bytes are
+     * Project's per-save renumbering.  (The resource flag byte itself is the null save's session bit, masked by
      * the harness, and is what 2. refuses).  Project's save also carries a
      * Props14 edit marker the harness cannot see as an effect for this pair
      * (declared-effect check fails with effects = 0), so Props14 is not in the
@@ -2555,7 +2561,12 @@ void test_remove_port_saved(TestContext& t) {
         kAssnFixed, kAssnMeta, kAssnF2, kAssnF2Meta, kAssnVarMeta, kAssnVar2,
         kTaskFixed, kTaskMeta, kTaskVar2, kRscFixed, kProps, kSummary}};
     std::array<save_pair::KnownGap, 4> const gaps{{
-        /* The appended record's identity counter: Project's is 10 higher. */
+        /* The appended record's session identity suffix, which Project
+         * renumbers on every save (see the identity notes above): the
+         * transplant left the control's wave-30-session Assn Fixed2Data in
+         * place, whereas the null's records already carry Project's suffix.
+         * It is not a rule to derive.  The Var2Data gap at 524 is very likely
+         * the same thing (not separated by a measurement). */
         {kAssnF2, 6, 196, 0xd1, 0xdb},
         {kAssnVar2, 3, 524, 0x12, 0xba},
         /* Project clears a resource flag the port-saved file still carries. */
