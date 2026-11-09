@@ -22,8 +22,13 @@ Fixed in G2, before G3 began:
 - `8d55b5c`, `961b311` and `d3a9fad` (W35b-3.1, 3.2, 3.4) added the edit-model and Qt-gate
   layers on top.
 
-Left as the row's own text says: Show Level 1 to 3 only, on the two measured shapes
+Left as the row's own text says: Show Level 1 and 2 only, on the two measured shapes
 (`kBaseLevels` five rows, `kDeepLevels` six rows).  No new shape is measured in wave 35b.
+(Corrected by W35c-2.23, R35bG3-4: this line, and the `90a3ca9` commit message, first said "Show
+Level 1 to 3", copied from the review row.  The measured range is Level 1 and Level 2
+(`core/mppwrite/viewstate_outline.h`: `kOutlineMeasuredMinLevel` = 1,
+`kOutlineMeasuredMaxLevel` = 2; the W35-2.3 row in `docs/handoff/wave35-complete.md`; the Qt needle "the measured Project
+pairs show Level 1 and Level 2").  The commit is not amended: no history rewrite.)
 
 Status: fixed, with the commits above.  Nothing is deferred for this id.
 
