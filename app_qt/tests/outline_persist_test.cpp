@@ -646,6 +646,82 @@ int main(int argc, char** argv) {
         }
     }
 
+    // W35e-1.1 (R35dG1-1): the two bypasses of the 1.2 cross-kind rule.  The needles are the
+    // queue, the redo state and the displayed rows, not a status text alone.
+    {
+        core::view::SortDefinition by_name;
+        by_name.id = "app.sort";
+        by_name.name = "Name descending";
+        by_name.keys.push_back(core::view::SortKey{app::task_field_id("Name"), false});
+        const int name_col = msqt::entry_column_index(msqt::EntryCellKind::name);
+        const auto shown_names = [&](msqt::SheetTableModel* model) {
+            std::vector<QString> names;
+            for (int row = 0; row < model->rowCount(); ++row) {
+                names.push_back(model->data(model->index(row, name_col)).toString());
+            }
+            return names;
+        };
+
+        // (a) A session Sort first, then a Level: the Level must not be queued over the sorted
+        // rows.  Clearing the sort lets the same Level queue.
+        gate::check(window.open_file(six, &error), "the six-task fixture reopens (sort first)");
+        QApplication::processEvents();
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        window.apply_sort_choice(by_name, "Name descending", false);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "sort first: the six-task Sort stays session only");
+        const std::vector<QString> sorted_names = shown_names(model);
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(),
+                    "sort first: a Level under a session Sort queues nothing");
+        gate::check(status_contains(window, "a session Sort is shown and File > Save would write "
+                                            "the file's own order, not a session Show Level"),
+                    "sort first: the status line names the shown sort");
+        gate::check(shown_names(model) == sorted_names,
+                    "sort first: the refused Level leaves the sorted rows as they were");
+        window.apply_outline_level(0);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty() &&
+                        !status_contains(window, "a session Sort is shown"),
+                    "sort first: All Subtasks is not refused and queues nothing");
+        window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+        QApplication::processEvents();
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                    "sort first: with the sort cleared the same Level queues");
+
+        // (b) A queued Level, Ctrl+Z, a sort choice, then Ctrl+Y: the sort ends the Level on the
+        // redo list, so Redo queues nothing under the sorted display.
+        gate::check(window.open_file(six, &error), "the six-task fixture reopens (redo then sort)");
+        QApplication::processEvents();
+        model = window.sheet_table_model();
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(undo != nullptr && redo != nullptr, "Undo and Redo exist (redo then sort)");
+        if (undo != nullptr && redo != nullptr) {
+            window.apply_outline_level(1);
+            QApplication::processEvents();
+            gate::check(queued_level(window) != nullptr, "redo then sort: Level 1 is queued");
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        "redo then sort: Undo withdraws Level 1 onto the redo list");
+            window.apply_sort_choice(by_name, "Name descending", false);
+            QApplication::processEvents();
+            const std::vector<QString> resorted = shown_names(model);
+            gate::check(!redo->isEnabled(),
+                        "redo then sort: a sort choice ends the Show Level on the redo list");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "redo then sort: Ctrl+Y queues no level under the sorted display");
+            gate::check(shown_names(model) == resorted,
+                        "redo then sort: Ctrl+Y leaves the sorted rows as they were");
+        }
+    }
+
     // W35b-3.4: Level 1 on the five-task control, saved through File > Save, is Project's own
     // save of the pair (outline-level1), every stream under the null-save discipline.  The
     // same bytes the core and app tests pin, here through the shell's queue and save path.
