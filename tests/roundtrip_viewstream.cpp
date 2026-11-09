@@ -57,6 +57,7 @@
 #include <algorithm>
 #include <array>
 #include <cstdint>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -634,7 +635,13 @@ void test_edit_refusals(TestContext& t) {
                                          0x0C40000Eu, 1u}) {
         ViewCellStyleEdit edit = measured_edit();
         edit.field_id = field_id;
-        refuses(control, {edit}, "is not the measured field id",
+        /* W35b-4.G0-11 (R35G0-11): the refusal prints both field ids in hex, the form the
+         * ids are written in everywhere else (never 188743694 for 0x0B40000E). */
+        char given[16];
+        std::snprintf(given, sizeof given, "0x%08x", field_id);
+        refuses(control, {edit},
+                std::string("field id ") + given +
+                    " is not the measured field id (0x0b40000e, the Task Name cell)",
                 "field id " + std::to_string(field_id) + " refused");
     }
     std::array<std::pair<ViewCellAttribute, char const*>, 5> const siblings{{
