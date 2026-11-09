@@ -3709,6 +3709,14 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
         if (task.file_row == 0) {
             return prefix + "while a task is pending: save the project first";
         }
+        // W35c-2.10 (R35bG4-4): active, baseline_stored and type_block_stored default to the
+        // measured shape, so a row the reader did not build would pass the checks below on
+        // defaults.  type_block_known is set only by the reader adapter (as the assignment
+        // rule already requires); a row without it is refused.
+        if (!task.type_block_known) {
+            return prefix + "for a task that was not read from the file: its task type and "
+                            "baseline have not been checked";
+        }
         if (!task.active) {
             return prefix + "for an inactive task: the measured Project pair has active "
                             "tasks only";
