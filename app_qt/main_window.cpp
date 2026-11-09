@@ -5924,6 +5924,15 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         applied = applied || outcome.changed;
     }
 
+    if (!ok && applied) {
+        // W35e-0.1 (R35dG0-1): a field that committed is not rolled back when a later
+        // one fails, and a committed cell edit ends the structural redo list whatever
+        // the final status.  Left on the list, Ctrl+Y re-queued a withdrawn Sort, Show
+        // Level or Calculate Project over the unsaved edit without push() or the
+        // builder.  The structural edits of this apply stay unqueued (trial is dropped).
+        structural_.clear_redo();
+        after_cell_change();
+    }
     if (ok) {
         if (structural_applied) {
             structural_ = std::move(trial);

@@ -38,6 +38,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "dialogs.h"
 #include "edit_model.h"
 #include "entry_columns.h"
 #include "fixture_guard.h"
@@ -263,6 +264,55 @@ int main(int argc, char** argv) {
         } catch (const std::exception& pair_error) {
             std::fprintf(stderr, "note: pair comparison error: %s\n", pair_error.what());
             gate::check(false, "the saved file is compared with Project's pair");
+        }
+    }
+
+    // --- 2b. W35e-0.1 (R35dG0-1, R35dW-1): a partly applied Task Information edit ----------
+    // Calculate Project, Ctrl+Z (nothing queued, the cell gate open), a Name that commits and a
+    // Duration that does not parse, Ctrl+Y.  The Name stays committed, and left on the structural
+    // redo list Redo re-queued the withdrawn Calculate over the changed task without push().
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control reopens for the partial apply");
+        window.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        gate::check(undo != nullptr && redo != nullptr && name_column >= 0 && model != nullptr,
+                    "Undo, Redo and a Name column exist (partial apply)");
+        if (undo != nullptr && redo != nullptr && name_column >= 0 && model != nullptr) {
+            gate::check(click_calculate(window) && window.pending_edits().size() == 1,
+                        "partial apply: Calculate Project is queued");
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        "partial apply: Undo withdraws Calculate Project onto the redo list");
+            window.sheet()->select_cell(1, 0);
+            msqt::TaskInformationValues values;
+            gate::check(window.task_information_values(&values),
+                        "partial apply: a task is selected for the form");
+            values.name = "Renamed by a partial apply";
+            values.duration_text = "not a duration";
+            gate::check(!window.apply_task_information(values),
+                        "partial apply: the form edit fails on the Duration");
+            gate::check(model->data(model->index(1, name_column)).toString() ==
+                            QStringLiteral("Renamed by a partial apply"),
+                        "partial apply: the Name field stays committed");
+            gate::check(!redo->isEnabled(),
+                        "partial apply: the committed Name ends the structural redo list "
+                        "(Redo is disabled)");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "partial apply: Redo re-queues no Calculate Project over the edited task");
+            gate::check(model->data(model->index(1, name_column)).toString() ==
+                            QStringLiteral("Renamed by a partial apply"),
+                        "partial apply: Redo leaves the edited name as it was");
         }
     }
 

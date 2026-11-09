@@ -607,6 +607,52 @@ int main(int argc, char** argv) {
         }
     }
 
+    // W35e-0.1 (R35dG0-1): a PARTLY applied Task Information or Task Form edit.  Route: Sort Name
+    // descending, Ctrl+Z (nothing is queued, so the field edit is accepted), a Name that commits
+    // and a Duration that does not parse, Ctrl+Y.  The Name stays committed (no rollback), so the
+    // apply ended with a cell edit and must end the structural redo list too; left on it, Redo
+    // re-queued the Sort over the unsaved name without push() or the builder.
+    {
+        gate::check(window.open_file(fixture, &error), "the fixture reopens for the partial apply gate");
+        QApplication::processEvents();
+        const int name_col = msqt::entry_column_index(msqt::EntryCellKind::name);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(undo != nullptr && redo != nullptr && name_col >= 0,
+                    "Undo, Redo and a Name column exist (partial apply)");
+        if (undo != nullptr && redo != nullptr && name_col >= 0) {
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            QApplication::processEvents();
+            gate::check(queued_sort(window) != nullptr, "partial apply: Name descending is queued");
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        "partial apply: Undo withdraws the Sort onto the redo list");
+            window.sheet()->select_cell(1, 0);
+            msqt::TaskInformationValues values;
+            gate::check(window.task_information_values(&values),
+                        "partial apply: a task is selected for the form");
+            values.name = "Renamed by a partial apply";
+            values.duration_text = "not a duration";
+            gate::check(!window.apply_task_information(values),
+                        "partial apply: the form edit fails on the Duration");
+            gate::check(any_row_named(model, name_col, QStringLiteral("Renamed by a partial apply")),
+                        "partial apply: the Name field stays committed");
+            gate::check(!redo->isEnabled(),
+                        "partial apply: the committed Name ends the structural redo list "
+                        "(Redo is disabled)");
+            const std::vector<QString> edited = displayed_names(model, name_col);
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "partial apply: Redo re-queues no Sort over the edited name");
+            gate::check(displayed_names(model, name_col) == edited,
+                        "partial apply: Redo leaves the edited names as they were");
+        }
+    }
+
     // W35c-1.3: undo in the sheet, then Sort, then Ctrl+Y.  Queueing the Sort rebuilds the
     // document, and the rebuild's new sheet carries no history, so there is no sheet Redo to
     // re-apply the rename under the queued Sort.  This pins that: Redo is disabled and the
