@@ -921,6 +921,35 @@ void refused_requests() {
             ++titles;
         }
         check(titles == 1, "1.4: the control's Props holds one project title record");
+        /* W35d-2.8 (R35cW-5): a file with another title AND a reason the later checks name is
+         * refused for that reason, not by the pin, which runs last.  Before, every such file was
+         * refused by the pin ("calculation options"), so those checks were reachable only from
+         * a synthetic mutation of the control. */
+        for (PropsFrame const& frame : frames) {
+            if (frame.id != 0x02400008u) {
+                continue;
+            }
+            Bytes changed = props;
+            changed[frame.at + 12] ^= 0x01;
+            {
+                CfbDocument doc = control;
+                doc.replace_stream("114/Props", changed);
+                Bytes rsc = doc.read_stream("114/TBkndRsc/FixedData");
+                rsc.resize(rsc.size() + 172, 0);
+                doc.replace_stream("114/TBkndRsc/FixedData", rsc);
+                refuses([&] { mppwrite::save_calculate(doc, good, path); }, "resource table has",
+                        "2.8: another title and a resource row: the resource row is named");
+            }
+            {
+                CfbDocument doc = control;
+                doc.replace_stream("114/Props", changed);
+                TaskTable rows = TaskTable::from_document(doc);
+                rows.set_u32(1, mppwrite::task_row::kStartAnchor, 0xFFFFFFFFu);
+                rows.store_into(doc);
+                refuses([&] { mppwrite::save_calculate(doc, good, path); }, "has no start anchor",
+                        "2.8: another title and a leaf with no start anchor: the anchor is named");
+            }
+        }
         /* W35d-0.3 (R35cG0-1): the three branches of check_props_pin that no payload flip can
          * reach, each with a needle only its own branch produces (the generic "differs from
          * the measured control" text is shared with the record checks, so it is not used).
