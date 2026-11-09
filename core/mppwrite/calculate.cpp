@@ -380,7 +380,9 @@ constexpr std::size_t kCalHeader = 64;
 constexpr std::size_t kCalRow = 12;
 constexpr std::size_t kF2MetaHeader = 16;
 constexpr std::size_t kF2MetaEntry = 96;
+constexpr std::size_t kF2MetaRowWord = 4;
 constexpr std::size_t kF2MetaFlags = 8;
+constexpr std::size_t kF2Record = 64;
 constexpr std::uint8_t kF2MetaActive = 0x40;
 constexpr std::uint32_t kCalNameKey = 0x0D400001u;
 
@@ -499,6 +501,15 @@ void check_unvaried_parameters(CfbDocument const& doc, TaskTable const& rows) {
          * index, as task_mode.cpp pairs them, not the one at the row's position. */
         std::size_t const f2_at =
             kF2MetaHeader + ((at - kFixedMetaHeader) / kFixedMetaEntry) * kF2MetaEntry;
+        /* W35d-2.6 (R35cG2-3): as task_mode.cpp does, the entry must also name this row's
+         * Fixed2Data record (row + 3), or the uid blamed below rests on an unchecked pairing. */
+        if (f2_meta.size() >= f2_at + kF2MetaEntry &&
+            get_u32(f2_meta, f2_at + kF2MetaRowWord) !=
+                static_cast<std::uint32_t>(kF2Record * (row + 3))) {
+            throw Error("task uid " + std::to_string(rows.uid(row)) +
+                        ": its Fixed2Meta entry does not name Fixed2Data record " +
+                        std::to_string(row + 3));
+        }
         if (f2_meta.size() < f2_at + kF2MetaEntry ||
             (f2_meta[f2_at + kF2MetaFlags] & kF2MetaActive) == 0) {
             throw Error("task uid " + std::to_string(rows.uid(row)) +
