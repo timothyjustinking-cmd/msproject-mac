@@ -2570,7 +2570,15 @@ void test_remove_port_saved(TestContext& t) {
      * on the target resource's FixedMeta entry (byte 12, 0x1C to 0x5C), and
      * Project's removal from that file clears Rsc Fixed2Meta byte 279 (0x2B to
      * 0x0B), which the port never writes.  The writer refuses the file on the
-     * byte, so it does not write what Project would not. */
+     * byte, so it does not write what Project would not.
+     *
+     * RW35-W12: Project's save of the port's file also carries a Props14 edit
+     * marker, and this test does not vouch for it.  Nothing here needs to: no
+     * removal is written from that file (every case below ends in the refusal,
+     * with the document unchanged and no output file), so there is no port
+     * output whose Props14 could be compared.  A later change that makes the
+     * removal succeed on a resaved file must add the Props14 comparison to the
+     * pair that proves it. */
     CfbDocument const null_save = doc_from_data(kPortNull);
     char const* const resaved_needle =
         "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C";
