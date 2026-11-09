@@ -535,7 +535,14 @@ void refused_requests() {
         crows.set_u16(0, mppwrite::task_row::kConstraintType, 4);
         crows.store_into(constrained);
         refuses([&] { mppwrite::save_calculate(constrained, good, path); },
-                "the project summary task carries a constraint", "project row constraint");
+                "the project row's ConstraintType word (+64) is not 0", "project row constraint");
+        /* W35d-2.5 (R35cG2-2): the refusal no longer says a constraint was carried. */
+        try {
+            mppwrite::save_calculate(constrained, good, path);
+        } catch (std::exception const& error) {
+            check(std::string(error.what()).find("carries a constraint") == std::string::npos,
+                  "project row +64: the refusal does not claim a user-set constraint");
+        }
     }
     {
         /* W35b-0.3 (R35G1-2) case 2: the recalculation would shorten the project. */
