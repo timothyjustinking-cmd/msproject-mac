@@ -101,7 +101,7 @@ Builder record: `wave35d-verification/gates-g2.md`. Commits: `6f5cc18` (2.1), `c
 
 | Item | Finding | Status |
 |---|---|---|
-| 2.1 | R35cG0-2 (Medium), R35cW-3 | **partly fixed** `6f5cc18`: the writer half is closed (W35c-2.2's +104 check runs before 0.2) and said so; the plan half is open (the plan reads Start word +104 only); the stale test comment is corrected |
+| 2.1 | R35cG0-2 (Medium); R35cW-3 is fixed `6f5cc18` (record) | **partly fixed** `6f5cc18` for R35cG0-2: the writer half is closed (W35c-2.2's +104 check runs before 0.2) and said so; the plan half is open (the plan reads Start word +104 only); the stale test comment is corrected |
 | 2.2 | R35cG0-4 | **partly fixed** `caa6cb1`: the plan has no Props digest, now a recorded gap; the two wrong sentences that explained it are corrected |
 | 2.3 | R35cG0-5 | fixed `ec2429c` |
 | 2.4 | R35cG0-6 | fixed `7d908c6` |
@@ -191,7 +191,8 @@ they are documents and no gate reads them.
 | G1 | R35cG0-3 | **partly fixed** `6552f11` (a record and a refusal text; no refusal lifted): remainder R35dG1-2 and R35dW-4 (closed by W35e-1.2 `1da3997`) |
 | G1 | R35cW-2, R35cG2-8 | fixed `454521d`, `4410935` (records) |
 | G1 | R35cW-1 | **partly fixed** `4410935` (records): remainder R35dG1-3 and R35dW-2 (closed by W35e-1.3) |
-| G2 | R35cG0-2, R35cW-3 | **partly fixed** `6f5cc18`: the plan half remains (the plan reads Start word +104 only; the writer half is closed and refused) |
+| G2 | R35cG0-2 | **partly fixed** `6f5cc18`: the plan half remains (the plan reads Start word +104 only; the writer half is closed and refused) |
+| G2 | R35cW-3 | fixed `6f5cc18` (record) |
 | G2 | R35cG0-4 | **partly fixed** `caa6cb1`: the plan has no Props digest, a recorded gap; the save is refused at the writer |
 | G2 | R35cG0-5, R35cG0-6 | fixed `ec2429c`, `7d908c6` |
 | G2 | R35cG2-2, -3, -6 | fixed `fc12254`, `f3c38d9`, `51c474b` |
