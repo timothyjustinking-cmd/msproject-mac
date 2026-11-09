@@ -38,6 +38,7 @@
 #include <exception>
 #include <filesystem>
 #include <iostream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -225,9 +226,18 @@ CfbDocument with_control_path_size(std::string const& name, std::size_t control_
     Bytes const edl = doc.read_stream(kEdlVar2);
     std::size_t const size = edl.size() - path_record_bytes(edl) + control_path;
     Bytes meta = doc.read_stream(kEdlMeta);
+    Bytes props = doc.read_stream(kProps);
+    /* R35G2-9: Project's own words must be its CEdl length before they are replaced, or the
+     * normalisation would hide a difference of its own. */
+    if (u32_at(meta, 0x14) != edl.size() || u32_at(props, kEdlSizeAt) != edl.size()) {
+        throw std::runtime_error(
+            "with_control_path_size: " + name + " holds CEdl size words " +
+            std::to_string(u32_at(meta, 0x14)) + " (VarMeta +0x14) and " +
+            std::to_string(u32_at(props, kEdlSizeAt)) + " (Props), not its CEdl length " +
+            std::to_string(edl.size()));
+    }
     put_u32_at(meta, 0x14, static_cast<std::uint32_t>(size));
     doc.replace_stream(kEdlMeta, meta);
-    Bytes props = doc.read_stream(kProps);
     put_u32_at(props, kEdlSizeAt, static_cast<std::uint32_t>(size));
     doc.replace_stream(kProps, props);
     return doc;
