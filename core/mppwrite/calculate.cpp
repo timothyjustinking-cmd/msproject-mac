@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <filesystem>
+#include <iterator>
 #include <map>
 #include <system_error>
 #include <string>
@@ -1100,6 +1101,12 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
         pending.payload = {0, 0};
         props_edit.records = {finish, pending};
         save_props_edit(work, props_edit, scratch);
+        /* W35e-2.9 (R35dG1-4): one past the last append is the Props edit, the step after which
+         * the scratch file holds the whole result and only the re-read and the target write
+         * remain. */
+        if (g_fault_after_appends == std::size(kAppends) + 1) {
+            throw Error("calculate: injected fault after the Props edit (test seam)");
+        }
 
         work.save(scratch);
         CfbDocument const reread = CfbDocument::from_file(scratch);
