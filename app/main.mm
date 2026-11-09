@@ -1438,11 +1438,31 @@ void note(PlanState& plan, std::string message, bool is_error) {
     plan.message_is_error = is_error;
 }
 
+// W35e-2.7 (R35dW-5): the AppKit counterpart of the Qt shell's data_change_refusal (W35d-2.11,
+// R35cW-4).  A queued Calculate Project is exclusive and File > Save writes it, so a cell edit
+// or paste made after it would show on the grid while Save wrote the file's own recalculation.
+// Empty when no Calculate is queued.  CI is the only compile check of this file.
+std::string calculate_queued_refusal(const PlanState& plan, const std::string& change) {
+    const std::vector<app::StructuralEdit>& applied = plan.edits.applied();
+    if (!applied.empty() && applied.back().kind == app::StructuralKind::calculate_project) {
+        return "calculate: a Calculate Project is queued and File > Save would write it, not " +
+               change + "; save or undo the calculation first";
+    }
+    return {};
+}
+
 // Commits the open edit session.  A rejected commit keeps the session open (so
 // the user can correct the text) and puts EditOutcome::error in the status line.
 bool commit_open_edit(PlanState& plan) {
     core::sheet::SheetModel& sheet = *plan.sheet;
     if (!sheet.editing()) {
+        return false;
+    }
+    // W35e-2.7 (R35dW-5): refused like a rejected commit (the session stays open and Esc
+    // cancels it), with the queued Calculate named.
+    if (const std::string reason = calculate_queued_refusal(plan, "an edited cell");
+        !reason.empty()) {
+        note(plan, reason, true);
         return false;
     }
     // commit_edit() clears the edit target on success, so capture the column name
@@ -1813,6 +1833,12 @@ void paste_from_pasteboard(PlanState& plan) {
     // read-only refusal as the cell session (begin_edit_at would not see it).
     if (!plan.read_only_reason.empty()) {
         note(plan, plan.read_only_reason, true);
+        return;
+    }
+    // W35e-2.7 (R35dW-5): the Qt shell refuses a paste beside a queued Calculate Project too.
+    if (const std::string reason = calculate_queued_refusal(plan, "a pasted cell");
+        !reason.empty()) {
+        note(plan, reason, true);
         return;
     }
     NSPasteboard* pasteboard = [NSPasteboard generalPasteboard];
