@@ -2284,7 +2284,10 @@ void MainWindow::handle_action(app::MenuAction action) {
             } else if (structural_.can_redo()) {
                 structural_.redo();
                 after_structural_change();
-                set_message("redo the structural edit", false);
+                set_message(queued_edit_is(structural_.applied(), app::StructuralKind::show_level)
+                                ? "redo the queued Show Level; the rows show that level again"
+                                : "redo the structural edit",
+                            false);
                 update_status();
             } else {
                 set_message("nothing to redo", false);
@@ -3562,6 +3565,13 @@ void MainWindow::after_structural_change(std::uint32_t keep_uid) {
     sheet_model_.set_sheet(nullptr);
     doc_.apply_structural_edits(structural_, prefs_.zoom, keep_uid);
     rebind_sheet();
+    // W35c-1.2 (R35bG4-1): the rebuild makes a new sheet with every row expanded.  A
+    // queued Show Level is what File > Save writes, so the level is shown again on
+    // every rebuild (a Redo re-queues it without going through push()).
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
+        doc_.show_outline_level(structural_.applied().back().show_level);
+        after_model_change();
+    }
     if (prefs_.view != app::ViewMode::task_sheet && sheet_view_ != nullptr) {
         // W34-4.1: the Resource Sheet and the usage grids are built from the
         // displayed plan, so a queued (or undone) edit made from one of them
@@ -6130,6 +6140,9 @@ void MainWindow::apply_outline_level(int level) {
                                       app::StructuralKind::show_level;
     if (had_queued_level) {
         structural_.undo();
+        // W35c-1.2 (R35bG4-1): a level the user replaced or withdrew must not come
+        // back unseen on a Redo, under whatever the display shows by then.
+        structural_.clear_redo();
         after_structural_change(doc_.selected_uid());
     }
     if (level == 0) {
@@ -6157,9 +6170,9 @@ void MainWindow::apply_outline_level(int level) {
             persisted_note =
                 "session only; the file keeps its outline (the level edit was refused)";
         } else {
+            // after_structural_change() rebuilds the document and shows the queued
+            // level again (W35c-1.2).
             after_structural_change(doc_.selected_uid());
-            // after_structural_change() rebuilds the document; show the level again.
-            doc_.show_outline_level(level);
             persisted_note = "queued; File > Save writes it";
         }
     }

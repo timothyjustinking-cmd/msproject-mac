@@ -211,6 +211,50 @@ int main(int argc, char** argv) {
     gate::check(window.pending_edits().empty(), "Undo withdraws the queued level");
     gate::check(window.sheet_row_count() == full_rows,
                 "Undo of a queued level shows every row, as the file will be saved");
+    // W35c-1.2 (R35bG4-1): Redo after that Undo queues the level again, so the sheet must
+    // show the level again; before the fix it showed every row while Save wrote Level 1.
+    {
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(redo != nullptr && redo->isEnabled(),
+                    "Redo is enabled after the Undo of a queued level");
+        if (redo != nullptr) {
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                        "Redo queues Level 1 again");
+            gate::check(window.sheet_row_count() == level1_rows,
+                        "Redo of a queued level shows the level it queued");
+            gate::check(status_contains(window, "redo the queued Show Level"),
+                        "Redo of a queued level: the status line names the level");
+
+            // All Subtasks withdraws the level, and the withdrawn level cannot come back.
+            window.apply_outline_level(0);
+            QApplication::processEvents();
+            gate::check(!redo->isEnabled(), "All Subtasks leaves nothing to redo");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Redo after All Subtasks queues nothing");
+            gate::check(window.sheet_row_count() == full_rows,
+                        "Redo after All Subtasks leaves every row shown");
+
+            // A level the builder refuses replaces the queued one for the session, and
+            // the withdrawn Level 1 must not come back under the new display.
+            window.apply_outline_level(1);
+            QApplication::processEvents();
+            window.apply_outline_level(3);
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "a refused replacement level withdraws the queued one");
+            gate::check(!redo->isEnabled(), "a refused replacement level leaves nothing to redo");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Redo after a refused replacement level queues nothing");
+            gate::check(window.sheet_row_count() == full_rows,
+                        "Redo after a refused replacement level leaves the display as it was");
+        }
+    }
     // With nothing queued the same toggle works (All Subtasks first withdraws it).
     window.apply_outline_level(0);
     QApplication::processEvents();
