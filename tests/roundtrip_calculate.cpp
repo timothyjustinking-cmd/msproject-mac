@@ -192,6 +192,27 @@ void rename_props_record(CfbDocument& doc, std::uint32_t id, std::uint32_t renam
     doc.replace_stream("114/Props", props);
 }
 
+/* Overwrite the payload of the 114/Props record `id` (same length). */
+void set_props_payload(CfbDocument& doc, std::uint32_t id, Bytes const& payload) {
+    Bytes props = doc.read_stream("114/Props");
+    auto const get = [&props](std::size_t at) {
+        return static_cast<std::uint32_t>(props[at]) |
+               (static_cast<std::uint32_t>(props[at + 1]) << 8) |
+               (static_cast<std::uint32_t>(props[at + 2]) << 16) |
+               (static_cast<std::uint32_t>(props[at + 3]) << 24);
+    };
+    bool found = false;
+    for (std::size_t at = 16; at + 12 <= props.size() && (get(at + 4) & 0x00FF0000u) == 0x00400000u;
+         at += 12 + get(at)) {
+        if (get(at + 4) == id && get(at) == payload.size()) {
+            std::copy(payload.begin(), payload.end(), props.begin() + at + 12);
+            found = true;
+        }
+    }
+    check(found, "the Props record to overwrite exists");
+    doc.replace_stream("114/Props", props);
+}
+
 Bytes file_bytes(std::string const& path) {
     std::ifstream in(path, std::ios::binary);
     return Bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -563,6 +584,27 @@ void refused_requests() {
         rows.store_into(doc);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
                 "uses a task calendar", "task calendar");
+    }
+    {
+        /* W35b-2.3 (R35G1-6): a file Project (or this port) already calculated, edited again
+         * under manual calculation so the flag is pending once more.  Its project row already
+         * holds the five overtime records, so the save would collide on the first append; the
+         * command refuses it up front with its own message.  The pending flag is set back and
+         * nothing else is changed, so every other guard passes and only this one can fire. */
+        CfbDocument calculated = control;
+        std::string const first = out_path("w35-calculate-twice-first.mpp");
+        mppwrite::save_calculate(calculated, good, first);
+        std::filesystem::remove(first);
+        set_props_payload(calculated, 0x02400024u, Bytes{1, 0});
+        std::string const again = out_path("w35-calculate-twice-second.mpp");
+        std::string reason;
+        mppwrite::CalculateShape shape;
+        check(!mppwrite::read_calculate_shape(calculated, shape, reason), "2.3: refused");
+        check(reason.find("has been calculated before") != std::string::npos,
+              "2.3: the shape check names the earlier calculation (got: " + reason + ")");
+        refuses([&] { mppwrite::save_calculate(calculated, good, again); },
+                "has been calculated before", "a file calculated once before");
+        check(!std::filesystem::exists(again), "2.3: no file left behind");
     }
     {
         /* W35b-2.1 (R35G1-4): a Props record the save needs after its appends is missing.  The
