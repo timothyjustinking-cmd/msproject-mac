@@ -1002,7 +1002,14 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
      * anywhere leaves the target exactly as it was. */
     std::string const scratch = path + ".calculate.tmp";
     std::error_code ignored;
-    std::filesystem::remove(scratch, ignored);
+    /* W35c-2.7 (R35bG2-7): the scratch name is not ours to clear.  A file or directory
+     * already there (a user's own, or the leftover of a crashed save) is refused, not
+     * deleted; this runs before the try block so the cleanup below never touches it. */
+    if (std::filesystem::symlink_status(scratch, ignored).type() !=
+        std::filesystem::file_type::not_found) {
+        throw Error("calculate: the scratch path " + scratch +
+                    " already exists; it is not removed, so move it aside and save again");
+    }
     try {
         for (Append const& append : kAppends) {
             VarRecordEdit edit;

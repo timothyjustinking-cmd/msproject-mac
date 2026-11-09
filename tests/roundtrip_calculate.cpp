@@ -1101,10 +1101,10 @@ void refused_requests() {
         std::filesystem::remove(target);
     }
     {
-        /* W35c-2.4 (R35bG2-2): the scratch indirection itself.  A non-empty directory squats on
-         * the scratch name, so the chain cannot write there: the save fails and the existing
-         * target stays byte-identical.  Written straight to the target (the indirection
-         * reverted) the save would succeed, so this goes red on that revert. */
+        /* W35c-2.4 (R35bG2-2), 2.7 (R35bG2-7): the scratch indirection itself.  A non-empty
+         * directory squats on the scratch name.  The save is refused and neither the existing
+         * target nor the squatter is touched; before 2.7 the squatter was deleted first, and
+         * with the indirection reverted the save would succeed. */
         CfbDocument doc = control;
         std::string const target = out_path("w35-calculate-atomic-target5.mpp");
         std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
@@ -1116,16 +1116,35 @@ void refused_requests() {
             std::ofstream keep(squat + "/keep.txt");
             keep << "squatter";
         }
-        bool threw = false;
-        try {
-            mppwrite::save_calculate(doc, good, target);
-        } catch (std::exception const&) {
-            threw = true;
-        }
-        check(threw, "the scratch path is unusable: the save fails");
-        check(file_bytes(target) == before, "the scratch path is unusable: target unchanged");
+        refuses([&] { mppwrite::save_calculate(doc, good, target); },
+                "already exists; it is not removed", "the scratch path is taken");
+        check(file_bytes(target) == before, "the scratch path is taken: target unchanged");
+        check(std::filesystem::exists(squat + "/keep.txt"),
+              "the scratch path is taken: the squatter is left alone");
         std::error_code ignored;
         std::filesystem::remove_all(squat, ignored);
+        std::filesystem::remove(target);
+    }
+    {
+        /* W35c-2.7 (R35bG2-7): a user's own plain file on the scratch name is refused and kept,
+         * not deleted.  The scratch name is then free again and the same save succeeds. */
+        CfbDocument doc = control;
+        std::string const target = out_path("w35-calculate-atomic-target6.mpp");
+        std::string const squat = target + ".calculate.tmp";
+        std::filesystem::remove(target);
+        std::filesystem::remove(squat);
+        {
+            std::ofstream keep(squat);
+            keep << "a user's own file";
+        }
+        refuses([&] { mppwrite::save_calculate(doc, good, target); },
+                "already exists; it is not removed", "a plain file on the scratch name");
+        check(!std::filesystem::exists(target), "a plain file on the scratch name: no target written");
+        check(std::filesystem::exists(squat), "a plain file on the scratch name: kept");
+        std::filesystem::remove(squat);
+        mppwrite::save_calculate(doc, good, target);
+        check(std::filesystem::exists(target), "the save succeeds once the scratch name is free");
+        check(!std::filesystem::exists(squat), "success leaves no scratch (after the squat)");
         std::filesystem::remove(target);
     }
     {
