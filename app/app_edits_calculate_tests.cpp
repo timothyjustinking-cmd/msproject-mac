@@ -47,6 +47,7 @@
 #include <utility>
 #include <vector>
 
+#include "calculate.h"
 #include "cfb_writer.h"
 #include "edit_model.h"
 #include "fixture_guard.h"
@@ -905,6 +906,68 @@ void check_refusals() {
             check(!std::filesystem::exists(out), "the refused save writes no target for " + what);
             check(edits.applied().size() == queued, "the queue is unchanged after " + what);
         }
+    }
+
+    /* W35b-2.2 (R35G1-5): a file that changed after the edit was queued but still reads as
+     * the measured shape.  The non-critical leaf is shortened by a day (its Finish moved to
+     * match), so the project finish and critical duration the writer's request check compares
+     * are unchanged and only the slack the edit carries is stale.  The save must refuse it. */
+    {
+        app::StructuralEdit edit;
+        std::string error;
+        check(app::make_calculate_edit(plan, source, edit, error),
+              "the stale-slack fixture builds its Calculate edit");
+        check(edit.source_digest != 0, "the built edit records its source digest");
+        app::StructuralEdits edits;
+        check(edits.push(std::move(edit), &plan), "the stale-slack fixture queues it");
+        mppwrite::CfbDocument other = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(other);
+        const std::size_t shorter =
+            rows.u32(1, mppwrite::task_row::kFinish) < rows.u32(2, mppwrite::task_row::kFinish) ? 1
+                                                                                                : 2;
+        const std::uint32_t duration = rows.u32(shorter, mppwrite::task_row::kDuration);
+        std::uint32_t finish = 0;
+        const bool derived = duration > 4800 &&
+                             mppwrite::calculate_measured_finish(
+                                 rows.u32(shorter, mppwrite::task_row::kStart), duration - 4800,
+                                 finish);
+        check(derived, "the stale-slack fixture derives a shorter leaf");
+        if (derived) {
+            rows.set_u32(shorter, mppwrite::task_row::kDuration, duration - 4800);
+            rows.set_u32(shorter, mppwrite::task_row::kFinish, finish);
+            rows.store_into(other);
+            set_planned_work(other, rows.uid(shorter), duration - 4800);
+            const std::filesystem::path other_path = out_path("app-calculate-stale-slack-source.mpp");
+            other.save(other_path.string());
+            const std::filesystem::path out = out_path("app-calculate-stale-slack.mpp");
+            std::error_code fs_error;
+            std::filesystem::copy_file(control_path, out,
+                                       std::filesystem::copy_options::overwrite_existing, fs_error);
+            const Bytes target_before = mppwrite::CfbDocument::from_file(out.string()).to_bytes();
+            const app::StructuralSaveResult saved = app::save_structural_edits(
+                edits, {}, other_path.string(), out.string(), false);
+            check(!saved.ok, "the save refuses a source whose leaf changed after the edit was queued");
+            check(saved.error.find("has changed since Calculate Project was queued") !=
+                      std::string::npos,
+                  "the stale-slack refusal names the changed file (got \"" + saved.error + "\")");
+            check(mppwrite::CfbDocument::from_file(out.string()).to_bytes() == target_before,
+                  "the stale-slack refusal leaves the existing target byte-identical");
+        }
+    }
+    {
+        /* A hand-built edit carries no digest and cannot be saved. */
+        app::StructuralEdits edits;
+        check(edits.push(hand_edit(plan), &plan), "the digest-less fixture queues");
+        const std::filesystem::path out = out_path("app-calculate-no-digest.mpp");
+        std::error_code fs_error;
+        std::filesystem::remove(out, fs_error);
+        const app::StructuralSaveResult saved =
+            app::save_structural_edits(edits, {}, source, out.string(), false);
+        check(!saved.ok, "the save refuses a Calculate edit with no source digest");
+        check(saved.error.find("has changed since Calculate Project was queued") !=
+                  std::string::npos,
+              "the digest-less refusal names the digest check (got \"" + saved.error + "\")");
+        check(!std::filesystem::exists(out), "the digest-less refusal writes no target");
     }
 
     /* A file that changed after the edit was queued: the same edit saved against

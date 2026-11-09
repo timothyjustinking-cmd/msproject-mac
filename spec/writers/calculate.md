@@ -189,6 +189,13 @@ is the writer for the first one; the other three are refused.
   and total slack are equal, the late Finish is the project Finish and the late Start is
   that date less the leaf's duration. `app_edits_calculate` proves the engine's words equal
   Project's own for this pair.
+- **Enforced, not trusted (W35b-2.2, R35G1-5).** The writer's request check requires every
+  leaf's late Finish to equal the project Finish, and the leaf that ends the project to
+  carry total slack 0 and a late Start equal to its early Start. The writer cannot recompute
+  the per-leaf slack (it has no calendar), so the app proves the file is unchanged since the
+  edit was built: `StructuralEdit::source_digest` (FNV-1a 64 of the container) is compared
+  at save, and a different file, or an edit with no digest, is refused ("has changed since
+  Calculate Project was queued").
 
 What stays refused: any link (the linked, lag and snet pairs), a constraint, a manual
 row, a summary beyond the project row, progress, a task calendar, any row count other than
