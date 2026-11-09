@@ -389,6 +389,26 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                "0x02400024 is not 01 00); there is nothing to "
                                "calculate");
         }
+        /* W35b-2.3 (R35G1-6): the measured save is the FIRST calculation of an
+         * automatically built file.  A file that already holds the five overtime
+         * records on its project row was calculated before (by Project or by this
+         * port) and edited again; Project's repeat save is unmeasured, and this
+         * writer's append would collide with them, so it is refused up front.  (A
+         * calculated file that is not pending is refused above, as not pending.) */
+        for (VarEntry const& entry :
+             read_var_entries(doc.read_stream(std::string(kTable) + "/VarMeta"))) {
+            if (entry.mid == 0 && (entry.field_id == kTaskActualOvertimeWorkFieldId ||
+                                   entry.field_id == kTaskRemainingOvertimeWorkFieldId ||
+                                   entry.field_id == kTaskOvertimeCostFieldId ||
+                                   entry.field_id == kTaskActualOvertimeCostFieldId ||
+                                   entry.field_id == kTaskRemainingOvertimeCostFieldId)) {
+                return fail(error, "the project row already holds the overtime record " +
+                                       hex(entry.field_id) +
+                                       ", so the file has been calculated before; the "
+                                       "measured Calculate Project save is the first "
+                                       "calculation of an automatically built file");
+            }
+        }
         /* W35b-2.1 (R35G1-4): the two other Props records the save writes are
          * checked here, before any write, so no append can land in a target that
          * a later Props edit would then refuse. */

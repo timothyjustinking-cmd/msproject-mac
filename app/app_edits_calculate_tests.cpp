@@ -604,6 +604,43 @@ void check_refusals() {
         expect_refused(done_plan, done_path.string(), "not pending",
                        "a file Project already calculated");
     }
+    {
+        /* W35b-2.3 (R35G1-6): the port's own calculated save, edited again so the pending flag
+         * is back to 01 00.  Nothing else differs, so the up-front refusal is the one under
+         * test (before it, the command queued and the save failed on the first append). */
+        const std::filesystem::path calculated_path = out_path("app-calculate-unlinked.mpp");
+        check(std::filesystem::exists(calculated_path),
+              "the port's calculated save from check_pair is present");
+        mppwrite::CfbDocument again = mppwrite::CfbDocument::from_file(calculated_path.string());
+        Bytes props = again.read_stream(kProps);
+        bool flagged = false;
+        for (std::size_t at = 16; at + 12 <= props.size();) {
+            const std::uint32_t length = static_cast<std::uint32_t>(props[at]) |
+                                         (static_cast<std::uint32_t>(props[at + 1]) << 8) |
+                                         (static_cast<std::uint32_t>(props[at + 2]) << 16) |
+                                         (static_cast<std::uint32_t>(props[at + 3]) << 24);
+            const std::uint32_t id = static_cast<std::uint32_t>(props[at + 4]) |
+                                     (static_cast<std::uint32_t>(props[at + 5]) << 8) |
+                                     (static_cast<std::uint32_t>(props[at + 6]) << 16) |
+                                     (static_cast<std::uint32_t>(props[at + 7]) << 24);
+            if ((id & 0x00FF0000u) != 0x00400000u) {
+                break;
+            }
+            if (id == 0x02400024u && length == 2) {
+                props[at + 12] = 1;
+                props[at + 13] = 0;
+                flagged = true;
+            }
+            at += 12 + length;
+        }
+        check(flagged, "the pending flag record was found and set");
+        again.replace_stream(kProps, props);
+        const std::filesystem::path again_path = out_path("app-calculate-calculated-twice.mpp");
+        again.save(again_path.string());
+        const app::PlanInput again_plan = load_plan(again_path);
+        expect_refused(again_plan, again_path.string(), "has been calculated before",
+                       "a file already calculated once and pending again");
+    }
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    "could not be read", "a missing project file");
     {
