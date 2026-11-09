@@ -6028,6 +6028,9 @@ void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
                                      app::StructuralKind::sort_view;
     if (had_queued_sort) {
         structural_.undo();
+        // W35c-1.4 (R35bW-2): a sort the user replaced or cleared must not come back
+        // unseen on a Redo, under whatever sort the display shows by then.
+        structural_.clear_redo();
         after_structural_change(doc_.selected_uid());
     }
     if (cleared) {
