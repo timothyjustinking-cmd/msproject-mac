@@ -98,6 +98,10 @@ app_qt; the 1.7, 1.10 and 1.11 rows cover it.
 - The wave 35b line for `114861b` ("push() and the save cascade call the writer again") is wrong:
   `push()`'s `show_level` case does not call the writer. Corrected in `gates-g1.md`; history is
   not rewritten.
+- The subject of `4a2133e` ("Sort, a removal and Show Level each have a guard in both layers")
+  overstates Show Level: its two layers share one predicate and `push()` has no file to check, so
+  Show Level is partly fixed (row 1.10 above is the status; `git log` alone gives the wrong one).
+  Recorded by W35d-2.13 (R35cG1-5); history is not rewritten.
 
 No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no workflow
 dispatched.
