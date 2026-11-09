@@ -65,9 +65,17 @@ try {
         Tee-Object (Join-Path $runs "build.txt")
 
     # Attach the recorder only around the save, so the trace holds the save and little else.
-    & $tracer -attach $proc[0].Id -out $runs | Tee-Object (Join-Path $runs "tttracer-attach.log")
+    # "tttracer -attach" stays in the foreground until the trace stops (checked 9 Nov 2026), so it
+    # is started detached and the script waits for the .run file before it saves.
+    $attLog = Join-Path $runs "tttracer-attach.log"
+    $att = Start-Process $tracer -ArgumentList @("-attach", $proc[0].Id, "-out", "`"$runs`"") -PassThru -WindowStyle Hidden -RedirectStandardOutput $attLog -RedirectStandardError (Join-Path $runs "tttracer-attach.err")
+    $deadline = (Get-Date).AddSeconds(90)
+    while (-not (Get-ChildItem $runs -Filter *.run -ErrorAction SilentlyContinue) -and (Get-Date) -lt $deadline) { Start-Sleep -Milliseconds 500 }
+    if (-not (Get-ChildItem $runs -Filter *.run -ErrorAction SilentlyContinue)) { throw "no .run file appeared: attach failed (see $attLog)" }
+    Start-Sleep -Seconds 2
     [void]$app.FileSaveAs($out)
     & $tracer -stop $proc[0].Id | Tee-Object (Join-Path $runs "tttracer-stop.log")
+    [void]$att.WaitForExit(120000)
     [void]$app.FileCloseEx(0)     # pjDoNotSave: the save above is the only one
 }
 finally {
