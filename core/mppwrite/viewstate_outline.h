@@ -129,6 +129,13 @@ void outline_show_level_sets(std::vector<OutlineViewRow> const& rows, int show_l
  * checks it on every request; the edit model checks it in push() (W35b-3.1). */
 bool outline_shape_measured(std::vector<OutlineViewRow> const& rows);
 
+/* W35c-1.10 (R35bG1-3): the view-state half of save_view_outline's checks (the applied
+ * view, table and column list, and the uid-2 view block with the default sort spec), as a
+ * call of its own so the edit model's builder can refuse a view no pair measured at its
+ * own call site rather than only through the writer's dry run.  save_view_outline still
+ * makes these checks itself.  Throws Error. */
+void require_measured_outline_view(CfbDocument const& doc);
+
 /*
  * Apply `edit` to `doc`, write the package to `path`, re-open it and prove the
  * state from the bytes.  Throws Error on a refusal or a mismatch.  A refusal, or a

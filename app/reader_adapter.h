@@ -137,6 +137,8 @@ inline ResourceRow resource_row_from_mpp(const mpp::Resource& resource) {
     row.calendar_base_uid = resource.calendar_base_uid;
     row.calendar_stored_blocks = resource.calendar_stored_blocks;
     row.calendar_base_extra_blocks = resource.calendar_base_extra_blocks;
+    row.fixed_meta_session = resource.fixed_meta_session;
+    row.fixed_meta_session_stored = resource.fixed_meta_session_stored;
     return row;
 }
 

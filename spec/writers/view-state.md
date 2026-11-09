@@ -316,3 +316,29 @@ Pairs still needed to enable it: the pane-width term decoded (several window wid
 request, the `u16` and the scaled date word expressed from the width and the zoom), or an
 oracle that saves at a pinned window width together with a rule the port can satisfy from
 the project alone.
+
+## W35c-1.10 (R35bG1-3): a guard in each layer for Show Level, Sort and a removal
+
+W35b closed three findings with one guard each that both layers reached: the view-state pins
+(R35G2-1) through the writer's dry run, the one measured outline (R35G2-3) through the core's
+`sorted_order_of`, and the resaved-file refusal of an assignment removal (R35G3-1) through
+`unassign_resource`'s dry run.  One edit at one line turned both layers green.  Each layer now
+has a guard of its own, and `app_edits_*` and `roundtrip_*` pin each on its own text.
+
+- **Sort's outline (R35G2-3).**  `sort_plan_order` compares the plan's file-order levels with
+  the measured 0, 1, 1, 0, 0 itself ("the plan's outline has levels 1, 2, 2, 1, 1" is the shape
+  it names); `sorted_order_of` keeps its own pin for the writer ("and this one has levels ...").
+  The two are separate code: neither is a call of the other.
+- **A removal's resaved file (R35G3-1, R35bG1-2).**  The reader fills `fixed_meta_session`
+  (FixedMeta byte 12 of each resource row) and `ResourceRow` carries it;
+  `assignment_plan_refusal` refuses a removal over any resource row that is not the measured
+  0x1C or was not read ("a Project session has saved it"), in the builder and in `push()`.  The
+  writer keeps its own loop over every resource row.
+- **Show Level's view state (R35G2-1).**  Here the plan cannot be the guard: the applied view,
+  the table, its columns and the uid-2 view block are in the file.  `make_show_level_edit` now
+  calls `mppwrite::require_measured_outline_view` itself, before the dry run, and says
+  "the view Show Level would persist on is not the measured one"; `save_view_outline` still
+  makes the same checks.  This is a second call site of the same predicate, not a second
+  predicate: a change inside `require_applied_view` or `require_measured_view_block` would
+  remove both.  **Partly fixed.**  `push()` has no file, so it cannot make this check; the
+  save re-runs the writer's.

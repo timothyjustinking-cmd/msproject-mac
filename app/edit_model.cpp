@@ -16,6 +16,7 @@
 #include <cstdint>
 #include <exception>
 #include <filesystem>
+#include <iterator>
 #include <map>
 #include <set>
 #include <string>
@@ -3040,6 +3041,21 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
                    "pair removes an assignment holding 40 hours of work";
         }
     }
+    // W35c-1.10 (R35bG1-3): the removal is measured from a file no Project session has saved,
+    // and the plan layer says so itself instead of leaving it to the writer's dry run.  Project
+    // sets bit 0x40 of FixedMeta byte 12 on every resource row when it saves, and the port's own
+    // resource add stamps 0x1C even into such a file, so every resource row is read, not the
+    // target's alone.  The default (not read) is refused.
+    if (!assign) {
+        for (const ResourceRow& row : plan.resources) {
+            if (!row.fixed_meta_session_stored || row.fixed_meta_session != 0x1C) {
+                return "Removing an assignment is not implemented in this port for this "
+                       "project: a Project session has saved it (the measured Project pair "
+                       "removes from a file whose resource rows carry the unsaved session byte "
+                       "0x1C, and resource uid " + std::to_string(row.uid) + " does not)";
+            }
+        }
+    }
     if (assign && real != 0) {
         return "Assign Resources on a task that already has an assignment is not "
                "implemented in this port: the measured Project pair assigns the "
@@ -3228,6 +3244,25 @@ std::string sort_plan_order(const PlanInput& plan, std::uint32_t field_id, bool 
     std::sort(rows.begin(), rows.end(), [](const TaskRow* a, const TaskRow* b) {
         return a->file_row < b->file_row;
     });
+    // W35c-1.10 (R35bG1-3): the plan layer pins the one measured outline itself (a summary
+    // with two children, then two leaves: 0-based levels 0, 1, 1, 0, 0) instead of leaving it to
+    // the core helper below, which the writer shares, so a change to either one cannot silently
+    // remove both.
+    {
+        static constexpr int kMeasuredPlanLevels[] = {0, 1, 1, 0, 0};
+        bool measured = true;
+        std::string levels;
+        for (std::size_t index = 0; index < rows.size(); ++index) {
+            measured = measured && index < std::size(kMeasuredPlanLevels) &&
+                       rows[index]->outline_level == kMeasuredPlanLevels[index];
+            levels += (levels.empty() ? "" : ", ") + std::to_string(rows[index]->outline_level + 1);
+        }
+        if (!measured) {
+            return "Sort is not implemented in this port for this outline or these rows: the "
+                   "measured Project pairs sort one outline (a summary with two children, then "
+                   "two leaves: levels 1, 2, 2, 1, 1), and the plan's outline has levels " + levels;
+        }
+    }
     // W35b-1.2: the order is the core rule the writer also applies to the file's own
     // rows (outline, names, durations), so the two layers cannot drift.
     std::vector<mppwrite::SortRow> sort_rows;
@@ -3409,6 +3444,17 @@ bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, i
     } catch (const std::exception& open_error) {
         error = std::string("the project file could not be read (") + open_error.what() +
                 ")";
+        return false;
+    }
+    // W35c-1.10 (R35bG1-3): the builder's own check of the view the level persists on (the
+    // Gantt Chart on the Entry table, the measured view-state block, no persisted sort), at a
+    // call site of its own, so removing the writer's check does not remove this one.  The
+    // predicate is the core's: the view block lives in the file and the plan does not carry it.
+    try {
+        mppwrite::require_measured_outline_view(document);
+    } catch (const std::exception& refusal) {
+        error = std::string("the view Show Level would persist on is not the measured one: ") +
+                refusal.what();
         return false;
     }
     // The writer's dry run validates the file: the outline shape, the rows, that
