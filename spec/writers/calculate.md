@@ -197,6 +197,12 @@ is the writer for the first one; the other three are refused.
   at save, and a different file, or an edit with no digest, is refused ("has changed since
   Calculate Project was queued").
 
+- **One arrangement is measured (W35b-2.7, RW35-W3).** In the unlinked pair the first leaf row
+  ends the project and the other leaf finishes before the stored project finish; the leaf stamp
+  `0x30` is measured for that arrangement alone (the linked pair stores `0x30` and `0x28`). Two
+  leaves that finish together, and the second leaf row ending the project, are refused
+  ("finish together", "is not the first leaf row") rather than saved with the constant.
+
 What stays refused: any link (the linked, lag and snet pairs), a constraint, a manual
 row, a summary beyond the project row, progress, a task calendar, any row count other than
 the project row plus two leaves, and a file whose recalculation is not pending. Respect
