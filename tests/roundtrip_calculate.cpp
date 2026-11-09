@@ -1012,6 +1012,40 @@ void refused_requests() {
             refuses([&] { mppwrite::save_calculate(doc, good, path); },
                     "114/Props tail differs from the measured control", "0.3: a Props tail byte flipped");
         }
+        /* W35e-2.8 (R35dG0-5): the two tail checks that run BEFORE the tail hash, each with a
+         * needle only its own branch produces (with either switched off the hash still refuses,
+         * but with its generic "114/Props tail differs" text). */
+        {
+            /* A tail padded by 16 bytes: only the tail-length check names its length. */
+            Bytes changed = props;
+            changed.insert(changed.end(), 16, 0x00);
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); }, "114/Props tail is ",
+                    "W35e-2.8: a Props tail padded by 16 bytes");
+        }
+        {
+            /* A second 0x01000100 scalar: the first 16-byte tail block that is not the Task size
+             * scalar's is overwritten with a copy of it, so the length is the control's and only
+             * the scalar-count check refuses. */
+            Bytes changed = props;
+            std::size_t scalar_at = 0;
+            for (std::size_t at = tail_start; at + 16 <= changed.size(); at += 16) {
+                if (changed[at + 4] == 0x01 && changed[at + 5] == 0x00 && changed[at + 6] == 0x01 &&
+                    changed[at + 7] == 0x00) {
+                    scalar_at = at;
+                }
+            }
+            check(scalar_at != 0, "W35e-2.8: the tail holds a Task size scalar block to copy");
+            std::size_t const target = scalar_at == tail_start ? tail_start + 16 : tail_start;
+            for (std::size_t i = 0; i < 16; ++i) {
+                changed[target + i] = props[scalar_at + i];
+            }
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "Task size scalars, not one", "W35e-2.8: a second Task size scalar in the tail");
+        }
         {
             Bytes changed = props;
             std::size_t keys = 0;
