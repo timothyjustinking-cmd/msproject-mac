@@ -263,8 +263,12 @@ int main(int argc, char** argv) {
             return action != nullptr && action->isEnabled();
         };
         // The status line a triggered action leaves; "is not wired" is the
-        // handle_action() fall-through that these five used to reach.
-        const auto trigger = [&window](app::MenuAction id) {
+        // handle_action() fall-through that these five used to reach.  W35c-2.14
+        // (R35bG1-6): "not the fall-through" is not "the right handler", so each action is
+        // also checked for what its own handler leaves: the prompt it opened or its status
+        // text (a case dispatched to another handler, or to none, fails).
+        Prompt last_prompt;
+        const auto trigger = [&window, &last_prompt](app::MenuAction id) {
             QAction* action = gate::find_action(window, id);
             if (action == nullptr || !action->isEnabled()) {
                 return false;
@@ -275,10 +279,14 @@ int main(int argc, char** argv) {
                 action->trigger();
                 QApplication::processEvents();
             }
+            last_prompt = prompt;
             return true;
         };
         const auto not_wired = [&window]() {
             return window.status_left_text().contains(QStringLiteral("is not wired"));
+        };
+        const auto status_has = [&window](const char* text) {
+            return window.status_left_text().contains(QString::fromLatin1(text));
         };
 
         gate::check(enabled(app::MenuAction::assign_resources),
@@ -295,14 +303,24 @@ int main(int argc, char** argv) {
                     "the Assign Resources menu item triggers");
         gate::check(!not_wired() && window.pending_edits().empty(),
                     "the Assign Resources menu item opens the prompt (Cancel queues nothing)");
+        gate::check(last_prompt.seen && last_prompt.title == QStringLiteral("Assign Resources"),
+                    "the Assign Resources menu item opened the Assign Resources prompt");
+        gate::check(status_has("assign resources cancelled"),
+                    "the Assign Resources handler left its own status");
         gate::check(trigger(app::MenuAction::font_bold), "the Font Bold menu item triggers");
         gate::check(!not_wired(), "the Font Bold menu item reaches its handler");
+        gate::check(!last_prompt.seen && status_has("queued Font Bold on the Task Name cell"),
+                    "the Font Bold handler queued its edit and said so");
         gate::check(trigger(app::MenuAction::define_wbs_code),
                     "the Define WBS Code menu item triggers");
         gate::check(!not_wired(), "the Define WBS Code menu item reaches its handler");
+        gate::check(status_has("Define WBS Code:"),
+                    "the Define WBS Code handler left its own status");
         gate::check(trigger(app::MenuAction::calculate_project),
                     "the Calculate Project menu item triggers");
         gate::check(!not_wired(), "the Calculate Project menu item reaches its handler");
+        gate::check(status_has("Calculate Project:"),
+                    "the Calculate Project handler left its own status");
 
         QAction* resource_view = gate::find_action(window, app::MenuAction::view_resource_sheet);
         gate::check(resource_view != nullptr, "the menu carries the Resource Sheet view");
@@ -318,6 +336,8 @@ int main(int argc, char** argv) {
         gate::check(trigger(app::MenuAction::resource_information),
                     "the Resource Information menu item triggers");
         gate::check(!not_wired(), "the Resource Information menu item reaches its handler");
+        gate::check(status_has("select a resource first"),
+                    "the Resource Information handler left its own status");
     }
 
     // --- 1. the control, the refusals that queue nothing, the measured add ----
