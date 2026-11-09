@@ -1184,8 +1184,13 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
                                       std::vector<std::array<std::uint8_t, 4>>*
                                           row_flag_group = nullptr,
                                       std::vector<std::uint8_t>* row_flag10_byte = nullptr,
-                                      std::vector<std::uint8_t>* row_type_flag = nullptr) {
+                                      std::vector<std::uint8_t>* row_type_flag = nullptr,
+                                      std::vector<std::vector<std::uint8_t>>* row_entry =
+                                          nullptr) {
     std::vector<bool> covered(rows, false);
+    if (row_entry != nullptr) {
+        row_entry->assign(rows, std::vector<std::uint8_t>());
+    }
     if (row_flag_byte != nullptr) {
         row_flag_byte->assign(rows, 0);
     }
@@ -1323,6 +1328,10 @@ std::vector<bool> fixed_meta_coverage(const CompoundFile& cfb, std::string_view 
         }
         offset_owner.emplace(offset, i);
         covered[row] = true;
+        if (row_entry != nullptr && base + entry_size <= meta.size()) {
+            (*row_entry)[row].assign(meta.begin() + static_cast<std::ptrdiff_t>(base),
+                                     meta.begin() + static_cast<std::ptrdiff_t>(base + entry_size));
+        }
         if (row_state != nullptr) {
             (*row_state)[row] = static_cast<std::int16_t>(meta[base + kFixedMetaStateByte]);
         }
@@ -1849,6 +1858,7 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
     std::vector<std::int16_t> task_meta_state;
     std::vector<std::array<std::uint8_t, 4>> task_flag_group;
     std::vector<std::uint8_t> task_meta_flag10_bytes;
+    std::vector<std::vector<std::uint8_t>> task_meta_entries;
     const bool task_has_fixed_meta = cfb.has_stream(std::string(root) +
                                                     "/TBkndTask/FixedMeta");
     const std::vector<bool> fixed_meta_live =
@@ -1856,7 +1866,8 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
                             kFixedRowSize, kFixedMetaEntrySize, kFixedMetaDescriptors,
                             rows, uid_by_row, document.warnings, &task_meta_offsets,
                             &task_meta_flag_bytes, &task_meta_state,
-                            &task_flag_group, &task_meta_flag10_bytes);
+                            &task_flag_group, &task_meta_flag10_bytes, nullptr,
+                            &task_meta_entries);
     /* Wave 24 (W24-9/R11): the project row's SUMMARY column is its OWN stored
      * Flag10 bit (FixedMeta row 0, entry +25 bit 0x04), not a constant read off
      * one capture.  A file whose row 0 does not cover the bit reports
@@ -2152,6 +2163,17 @@ void parse_mpp14(const CompoundFile& cfb, std::string_view root, Document& docum
             task.flag10_stored = true;
         }
         task.baseline = read_baseline(table, var2, uid, kTaskBaselineKeys);
+        /* W35c-1.7 (R35bG0-5): the raw FixedMeta entry and the VarMeta keys, for the plan-side
+         * Calculate Project pins. */
+        if (task_has_fixed_meta && fixed_meta_live[row] && row < task_meta_entries.size()) {
+            task.fixed_meta_entry = task_meta_entries[row];
+        }
+        for (const VarEntry& entry : table.entries) {
+            if (entry.uid == uid) {
+                task.var_keys.push_back(entry.key);
+            }
+        }
+        std::sort(task.var_keys.begin(), task.var_keys.end());
         task.leveling_delay_ticks = u32_at(fixed, base + kRowLevelingDelay);
         if (table.usable) {
             std::vector<std::uint8_t> level_payload;

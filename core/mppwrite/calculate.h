@@ -96,6 +96,14 @@ bool calculate_measured_late(std::uint32_t finish, std::uint32_t duration,
 bool calculate_measured_first_working_start(std::uint32_t props_start,
                                             std::uint32_t& first);
 
+/* W35c-1.7 (R35bG0-5): the measured leaf's Task FixedMeta entry (47 bytes) and VarMeta key
+ * set, shared by the writer's shape check and the plan layer so one pattern pins both.
+ * `calculate_leaf_meta_mismatch` returns -1 when `entry` is the measured entry (bytes 0-3
+ * and 16-46; bytes 4-15 are the row's offset and stamp), the first differing byte
+ * otherwise, and 0 for an entry of another size.  The key set is sorted ascending. */
+int calculate_leaf_meta_mismatch(std::uint8_t const* entry, std::size_t size);
+std::vector<std::uint32_t> const& calculate_leaf_var_keys();
+
 /* What the pending file looks like, as the shape check read it. */
 struct CalculateShape {
     std::uint32_t critical_uid = 0;     /* the leaf that ends the project */

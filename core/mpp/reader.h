@@ -536,6 +536,12 @@ struct Task {
      * task shape no pair measured.  The VALUE is not decoded: no corpus file pairs
      * a stored type with its COM export, so only the block's presence is read. */
     bool type_block_stored = false;
+    /* W35c-1.7 (R35bG0-5): the task's whole FixedMeta entry (empty when the row has no live
+     * entry), and every VarMeta field id the task owns, sorted.  Calculate Project pins both
+     * to the measured control (the effort-driven, task-type and presence bits, and exactly
+     * the keys the control stores), so the plan layer can refuse what the writer refuses. */
+    std::vector<std::uint8_t> fixed_meta_entry;
+    std::vector<std::uint32_t> var_keys;
     /* +120/+124.  Unproven against COM (no oracle export); see the file
      * comment.  A 50 %-complete task has an actual start and no actual
      * finish. */

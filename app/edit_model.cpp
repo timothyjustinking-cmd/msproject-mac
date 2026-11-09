@@ -3674,6 +3674,22 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
             return prefix + "for a task with a stored task type: the measured Project pair "
                             "stores none";
         }
+        // W35c-1.7 (R35bG0-5): the writer pins the leaf's FixedMeta entry (summary,
+        // effort-driven, task-type and presence bits) and its exact VarMeta key set (no
+        // Baseline 1 to 10, interim dates, note or other block).  The reader now carries both,
+        // so the plan layer refuses what the writer refuses.
+        const int meta_byte = mppwrite::calculate_leaf_meta_mismatch(
+            task.fixed_meta_entry.data(), task.fixed_meta_entry.size());
+        if (meta_byte >= 0) {
+            return prefix + "for a task whose FixedMeta flags differ from the measured control "
+                            "(byte " + std::to_string(meta_byte) + ": the summary, "
+                            "effort-driven, task-type and presence bits are not the pair's)";
+        }
+        if (task.var_keys != mppwrite::calculate_leaf_var_keys()) {
+            return prefix + "for a task whose variable records differ from the measured "
+                            "ones: the measured Project pair stores only the keys of its "
+                            "control (no note, calendar, baseline 1 to 10 or interim date)";
+        }
         if (task.summary || task.outline_level != 0) {
             return prefix + "for an outline: the measured Project pair has two "
                             "top-level tasks and no summary";
