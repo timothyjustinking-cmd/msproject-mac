@@ -409,8 +409,11 @@ std::string edl_text(Bytes const& edl, EdlItem const& item) {
     return out;
 }
 
+/* `what` is a char const*, not a std::string const&: the result is a reference
+ * into `items`, and a string literal bound to a reference parameter is a
+ * temporary, which GCC 13 reports as -Werror=dangling-reference (W35c-0.1). */
 EdlItem const& unique_edl_item(std::vector<EdlItem> const& items,
-                               std::uint32_t id, std::string const& what,
+                               std::uint32_t id, char const* what,
                                std::string const& function) {
     EdlItem const* found = nullptr;
     for (EdlItem const& item : items) {
@@ -418,13 +421,13 @@ EdlItem const& unique_edl_item(std::vector<EdlItem> const& items,
             continue;
         }
         if (found != nullptr) {
-            throw Error(function + ": 214/CEdl holds two " + what + " records, "
+            throw Error(function + ": 214/CEdl holds two " + std::string(what) + " records, "
                         "so the applied view is not the measured one");
         }
         found = &item;
     }
     if (found == nullptr) {
-        throw Error(function + ": 214/CEdl holds no " + what + " record, so the "
+        throw Error(function + ": 214/CEdl holds no " + std::string(what) + " record, so the "
                     "applied view is not the measured one");
     }
     return *found;
