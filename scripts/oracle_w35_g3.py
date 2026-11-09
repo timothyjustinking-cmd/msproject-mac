@@ -39,7 +39,7 @@ NEUTRAL = r"C:/w35"
 FIXTURE_DIR = os.path.join(NEUTRAL, "fixtures-g3")
 NULL_DIR = os.path.join(NEUTRAL, "fixtures-g3-null")
 OUT = os.path.join(ROOT, "build", "w35")
-WORK = os.path.join(OUT, "g3-work")
+WORK = os.path.join(NEUTRAL, "work-g3")  # Project opens its copies from the neutral root
 RESULT = os.path.join(OUT, "W35-3-g3.json")
 
 
