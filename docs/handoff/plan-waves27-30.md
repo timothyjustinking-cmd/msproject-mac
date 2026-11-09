@@ -373,3 +373,29 @@ Level 3, 4 and 9), and the Lows in `wave35-verification/close-review-writers.md`
 Auto Schedule and Level All, the extra views, the `constraint-mso` engine case and macOS
 launch and notarisation.  RW35-R1 (the `-Wswitch` break in `app_qt/command_status.h`) is
 closed by `513de29`.
+
+## Queued from wave 35b (CLOSE)
+
+Wave 35b closed on branch `wave35b` (`WAVE-35b-COMPLETE`) with its brief done, but the per-group
+reviews (`docs/handoff/wave35b-verification/review-g0.md` to `review-g3.md`) left two Highs on
+Calculate Project.  A fix-only `wave35c` (or the first group of the next wave) takes them first:
+
+- **R35bG0-1 (High)**: read the `114/Props` project start (`0x02400002`) and require every
+  leaf's Start to equal it in `read_calculate_shape` and `calculate_plan_refusal`, not row 0's
+  roll-up (`core/mppwrite/calculate.cpp`, `app/edit_model.cpp`); a test that moves the project
+  start under manual calculation.
+- **R35bG0-2 (High)**: pin the `114/Props` calculation options (multiple critical paths, the
+  critical-slack limit, minutes per day) to the control's values in both layers.
+
+Then, as `review-g0.md` to `review-g3.md` give them: Mediums R35bG0-3 (two-edit critical-path
+move; record the limit in `spec/writers/calculate.md`), R35bG0-4 (reader tests for the new plan
+fields), R35bG0-5 (plan layer narrower than the writer), R35bG1-1 (`sorted_order_of` reads
+`sorted[index]` after `sorted.clear()`), R35bG1-2 (the 1.6 guard reads FixedMeta byte 12 only),
+R35bG1-3 (one shared guard serves both layers for 1.1, 1.3, 1.6), R35bG2-1 (the tie and
+swapped-order refusals are writer-only), R35bG3-1 (other commands change the outline under a
+queued Show Level); Lows R35bG0-6 to -8, R35bG1-4 to -9, R35bG2-2 to -8 and R35bG3-2 to -5.
+Coordinator mutations that stayed green and need a test: G0 W11; G1 S1, S4 (in the Sort lane),
+A6, Q1, Q2.  Also still queued: R35G3-8 (six wave 35 commits lack the trailer; recorded, no
+rewrite), RW35-W13, and the measuring-wave list at the end of the wave 35b brief.  The
+`9fa599b` blobs (`wave35-g3-notes-generator*.mpp`) still sit in `wave35b` history and fail
+`guard_names`: the operator's and the coordinator's call.

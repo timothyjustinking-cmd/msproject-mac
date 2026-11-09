@@ -5,6 +5,16 @@
 `docs/handoff/wave35-verification/`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
 
+## Wave 35b state (closed on `wave35b`, NOT merged, NOT pushed) — 9 November 2026
+
+Fix-only wave cut from `wave35`; `WAVE-35b-COMPLETE` in `docs/handoff/wave35b-complete.md`.
+Every brief id fixed with a commit or recorded.  Fresh-tree gates at `90d8b4e` green
+(`build/w35b/W35b-CLOSE-fresh-gates.log`) except `guard_names` (the two `9fa599b` blobs).
+**Open Highs:** R35bG0-1 and R35bG0-2 (Calculate Project: Props project start and calculation
+options), queued in `plan-waves27-30.md` ("Queued from wave 35b").  Coordinator still owes the
+`9fa599b` decision, push, both CI dispatches (macos-qt proves W35b-0.1; `app/main.mm` compiles
+only in CI), an independent review of `wave35..wave35b`, and the 4(e) reopen check.
+
 ## Wave 35 state (closed on `wave35`, NOT merged, NOT pushed) — 9 November 2026
 
 `wave35` is cut from `wave34b`.  Built, each for its measured shape only: G0 carry-over

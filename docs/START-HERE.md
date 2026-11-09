@@ -11,6 +11,20 @@ only file a new session must read first._
 
 ## The 30-second state
 
+* **Wave 35b (fix-only) is closed on branch `wave35b`** (cut from `wave35`;
+  `docs/handoff/wave35b-complete.md`, `WAVE-35b-COMPLETE`, builder Claude Sonnet 5.5; records
+  and reviews in `docs/handoff/wave35b-verification/`).  It fixed the wave 35 Highs (Calculate
+  Project deadline, pending-recalculation, leaf-date and parameter refusals; Show Level, Sort
+  and Show Level state pins; port-saved assignment removal; the macOS resource pop-ups and the
+  Qt menu) and the Mediums and Lows, adding no writer.  Fresh-tree gates at `90d8b4e`
+  (`build/w35b/W35b-CLOSE-fresh-gates.log`) are green except `guard_names`, which still names
+  the two `9fa599b` blobs.  **Not mergeable:** the per-group reviews left two Highs on
+  Calculate Project (R35bG0-1: the Props project start is not read; R35bG0-2: the Props
+  calculation options are not pinned), queued in `plan-waves27-30.md` ("Queued from wave
+  35b").  Nothing is pushed; the coordinator's part is the `9fa599b` decision, push, both CI
+  dispatches (CI is the only gate for `app/main.mm` and for macos-qt, W35b-0.1), an
+  independent review of `wave35..wave35b`, and the 4(e) Project reopen check.
+
 * **Wave 35 (the scheduler save path, view-state persistence, the wave-34 deferrals, the macOS
   shell) is closed on branch `wave35`** (`docs/handoff/wave35-complete.md`, builder Claude
   Sonnet 5.5).  **Built and enabled, each for its measured shape only:** G0 the carry-over
