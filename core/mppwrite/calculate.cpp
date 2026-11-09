@@ -243,6 +243,113 @@ bool fail(std::string& error, std::string const& message) {
     return false;
 }
 
+/* W35c-0.3 (R35bG0-2): the project's calculation options (multiple critical paths, the
+ * critical-slack limit, minutes per day and per week, schedule from) live in 114/Props, and
+ * no pair varies them.  The stream is pinned to the measured control's: the same records
+ * in the same order, each with the control's id, kind, length and payload, and the same
+ * opaque tail.  scripts/gen_calculate_props_pin.py writes the table from the control. */
+struct PropsPinRecord {
+    std::uint32_t id;
+    std::uint32_t kind;
+    std::uint32_t length;
+    std::uint64_t payload_hash; /* FNV-1a 64 */
+};
+
+#include "calculate_props_pin.inc"
+
+std::uint64_t fnv1a64(std::uint8_t const* data, std::size_t size) {
+    std::uint64_t value = 0xCBF29CE484222325ULL;
+    for (std::size_t i = 0; i < size; ++i) {
+        value ^= data[i];
+        value *= 0x100000001B3ULL;
+    }
+    return value;
+}
+
+/* Records whose payload the save or a measured relation moves, so the payload is not pinned
+ * (id, kind and length still are): the project finish and the pending flag, which the save
+ * writes; the project start, which 0.2 relates to the leaf Start; and the two GUIDs the
+ * control's null save changes (per-save noise). */
+bool props_payload_is_free(std::uint32_t id) {
+    return id == kPropProjectFinish || id == kPropCalculationPending ||
+           id == kPropProjectStart || id == 0x02400029u || id == 0x024013C2u;
+}
+
+void check_props_pin(std::vector<std::uint8_t> const& props) {
+    constexpr std::size_t kCount = sizeof kPropsPin / sizeof kPropsPin[0];
+    std::string const differs = " differs from the measured control";
+    if (props.size() < 16 || get_u32(props, 8) != kPropsPinHeaderWord8 ||
+        get_u32(props, 12) != kPropsPinHeaderWord12) {
+        throw Error("114/Props header" + differs);
+    }
+    std::size_t at = 16;
+    std::size_t index = 0;
+    while (at + 12 <= props.size()) {
+        std::uint32_t const length = get_u32(props, at);
+        std::uint32_t const id = get_u32(props, at + 4);
+        if ((id & 0x00FF0000u) != 0x00400000u) {
+            break;
+        }
+        if (static_cast<std::uint64_t>(at) + 12u + length > props.size()) {
+            throw Error("a 114/Props record runs past the stream");
+        }
+        if (index >= kCount) {
+            throw Error("114/Props record " + hex(id) + " (the " +
+                        std::to_string(index + 1) + "th) is past the " +
+                        std::to_string(kCount) + " records of the measured control: "
+                        "the stream" + differs);
+        }
+        PropsPinRecord const& want = kPropsPin[index];
+        if (id != want.id || get_u32(props, at + 8) != want.kind || length != want.length) {
+            throw Error("114/Props record " + std::to_string(index) + " is " + hex(id) +
+                        " (kind " + std::to_string(get_u32(props, at + 8)) + ", " +
+                        std::to_string(length) + " bytes), not the control's " + hex(want.id) +
+                        " (kind " + std::to_string(want.kind) + ", " +
+                        std::to_string(want.length) + " bytes): the stream" + differs);
+        }
+        if (!props_payload_is_free(id) && fnv1a64(props.data() + at + 12, length) != want.payload_hash) {
+            throw Error("114/Props record " + hex(id) + differs +
+                        "; the project's calculation options and defaults are stored in "
+                        "these records and no measured Calculate Project pair varies them");
+        }
+        at += 12u + length;
+        ++index;
+    }
+    if (index != kCount) {
+        throw Error("114/Props holds " + std::to_string(index) + " records, the measured "
+                    "control holds " + std::to_string(kCount) + ": the stream" + differs);
+    }
+    /* The opaque tail: the control's, except the one scalar the save itself rewrites (tag
+     * 0x01000100, the Task Var2Data size, which follows the stored names and values). */
+    std::vector<std::uint8_t> tail(props.begin() + static_cast<std::ptrdiff_t>(at), props.end());
+    if (tail.size() != kPropsPinTailBytes) {
+        throw Error("114/Props tail is " + std::to_string(tail.size()) + " bytes, the control's "
+                    "is " + std::to_string(kPropsPinTailBytes) + ": the tail" + differs);
+    }
+    std::size_t key_at = 0;
+    std::size_t keys = 0;
+    for (std::size_t i = 0; i + 16 <= tail.size(); i += 16) {
+        if (get_u32(tail, i) == 4 && get_u32(tail, i + 8) == 4 &&
+            ((static_cast<std::uint32_t>(tail[i + 4]) << 24) |
+             (static_cast<std::uint32_t>(tail[i + 5]) << 16) |
+             (static_cast<std::uint32_t>(tail[i + 6]) << 8) | tail[i + 7]) == 0x01000100u) {
+            key_at = i + 12;
+            ++keys;
+        }
+    }
+    if (keys != 1) {
+        throw Error("114/Props tail holds " + std::to_string(keys) +
+                    " Task size scalars, not one: the tail" + differs);
+    }
+    for (std::size_t i = 0; i < 4; ++i) {
+        tail[key_at + i] = 0;
+    }
+    if (fnv1a64(tail.data(), tail.size()) != kPropsPinTailHash) {
+        throw Error("114/Props tail" + differs + " (a scalar other than the Task size the "
+                    "save writes has another value)");
+    }
+}
+
 std::string props_path() {
     return kPropsBackEnd;
 }
@@ -620,6 +727,8 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "there (Sunday 21:00 to Monday 08:00)");
             }
         }
+        /* W35c-0.3 (R35bG0-2): the project's calculation options, which no pair varies. */
+        check_props_pin(props);
         /* W35b-0.5 (R35G1-3): the parameters no pair varies. */
         check_unvaried_parameters(doc, rows);
         for (std::size_t row = 1; row < kRows; ++row) {

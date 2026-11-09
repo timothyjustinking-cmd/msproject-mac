@@ -213,6 +213,31 @@ void set_props_payload(CfbDocument& doc, std::uint32_t id, Bytes const& payload)
     doc.replace_stream("114/Props", props);
 }
 
+/* The 114/Props framed records as (offset of the length word, id, length), and where the
+ * opaque tail starts. */
+struct PropsFrame {
+    std::size_t at;
+    std::uint32_t id;
+    std::uint32_t length;
+};
+
+std::vector<PropsFrame> props_frames(Bytes const& props, std::size_t& tail_start) {
+    auto const get = [&props](std::size_t at) {
+        return static_cast<std::uint32_t>(props[at]) |
+               (static_cast<std::uint32_t>(props[at + 1]) << 8) |
+               (static_cast<std::uint32_t>(props[at + 2]) << 16) |
+               (static_cast<std::uint32_t>(props[at + 3]) << 24);
+    };
+    std::vector<PropsFrame> frames;
+    std::size_t at = 16;
+    while (at + 12 <= props.size() && (get(at + 4) & 0x00FF0000u) == 0x00400000u) {
+        frames.push_back({at, get(at + 4), get(at)});
+        at += 12 + get(at);
+    }
+    tail_start = at;
+    return frames;
+}
+
 Bytes file_bytes(std::string const& path) {
     std::ifstream in(path, std::ios::binary);
     return Bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
@@ -626,6 +651,88 @@ void refused_requests() {
                                 static_cast<std::uint8_t>((next_day >> 24) & 0xFFu)});
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
                 "project start in 114/Props", "0.2: only the Props project start moved a day");
+    }
+    {
+        /* W35c-0.3 (R35bG0-2): 114/Props is pinned to the measured control's.  Every record
+         * the save does not write (all but the finish, the pending flag, the start the 0.2
+         * relation covers, and the two per-save GUIDs) is refused when one payload byte
+         * changes: the calculation options (multiple critical paths, slack limit, minutes per
+         * day and week, schedule from) are among them, and no pair varies them. */
+        std::size_t tail_start = 0;
+        Bytes const props = control.read_stream("114/Props");
+        std::vector<PropsFrame> const frames = props_frames(props, tail_start);
+        check(frames.size() == 161, "0.3: the control's Props holds 161 framed records");
+        std::size_t flipped = 0;
+        for (PropsFrame const& frame : frames) {
+            bool const written = frame.id == 0x02400003u || frame.id == 0x02400024u ||
+                                 frame.id == 0x02400002u || frame.id == 0x02400029u ||
+                                 frame.id == 0x024013C2u;
+            if (written || frame.length == 0) {
+                continue;
+            }
+            Bytes changed = props;
+            changed[frame.at + 12] ^= 0x01;
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            char needle[96];
+            std::snprintf(needle, sizeof needle, "114/Props record 0x%08X differs from the measured control",
+                          frame.id);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); }, needle,
+                    std::string("0.3: one byte of a non-written Props record flipped, ") + needle);
+            ++flipped;
+        }
+        check(flipped > 100, "0.3: the flip covered the pinned records");
+        /* The records the save writes, or the 0.2 relation covers, are not payload-pinned:
+         * a changed GUID is per-save noise and is accepted. */
+        for (PropsFrame const& frame : frames) {
+            if (frame.id == 0x02400029u || frame.id == 0x024013C2u) {
+                Bytes changed = props;
+                changed[frame.at + 12] ^= 0x01;
+                CfbDocument doc = control;
+                doc.replace_stream("114/Props", changed);
+                mppwrite::CalculateShape shape;
+                std::string reason;
+                check(mppwrite::read_calculate_shape(doc, shape, reason),
+                      "0.3: a per-save GUID record changed is accepted: " + reason);
+            }
+        }
+        /* The record's kind is pinned as well as its payload. */
+        {
+            Bytes changed = props;
+            changed[frames[10].at + 8] ^= 0x01;
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "differs from the measured control", "0.3: a Props record kind changed");
+        }
+        /* The opaque tail: one byte flipped near its end is refused; the one Task Var2Data
+         * size scalar the save rewrites (tag 0x01000100) is not part of the pin. */
+        {
+            Bytes changed = props;
+            changed[changed.size() - 1] ^= 0x01;
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "114/Props tail differs from the measured control", "0.3: a Props tail byte flipped");
+        }
+        {
+            Bytes changed = props;
+            std::size_t keys = 0;
+            for (std::size_t at = tail_start; at + 16 <= changed.size(); at += 16) {
+                if (changed[at + 4] == 0x01 && changed[at + 5] == 0x00 && changed[at + 6] == 0x01 &&
+                    changed[at + 7] == 0x00) {
+                    changed[at + 12] ^= 0x55;
+                    ++keys;
+                }
+            }
+            check(keys == 1, "0.3: the tail holds one Task size scalar");
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            mppwrite::CalculateShape shape;
+            std::string reason;
+            check(mppwrite::read_calculate_shape(doc, shape, reason),
+                  "0.3: the Task size scalar the save rewrites is accepted: " + reason);
+        }
     }
     {
         /* The relation itself, on the measured calendar. */

@@ -253,6 +253,34 @@ matches its pair.
 | Resource variable records | null row `0x0c4002d6`, `2e3` | `stores variable record` |
 | Task.Active | Fixed2Meta +8 bit `0x40` set on every leaf | `is inactive` |
 | Leaf FixedMeta entry | bytes 0-3 `00 00 09 00`; bytes 16-20 `07 48 ef 1f 10`; bytes 21-46 zero (bytes 4-15 are the row's offset and stamp) | `metadata flags differ` |
+| `114/Props` (W35c-0.3, R35bG0-2) | the control's 161 framed records in order (id, kind, length and an FNV-1a 64 of each payload), header words +8 and +12, and the 85,408-byte opaque tail (hash taken with the Task Var2Data size scalar, tag `0x01000100`, zeroed) | `114/Props record 0x........ differs from the measured control` / `114/Props tail differs from the measured control` |
+
+**The Props pin (W35c-0.3, R35bG0-2).** The project's calculation options (multiple critical
+paths, the critical-slack limit, minutes per day and per week, schedule from, and the other
+defaults) live in `114/Props`, and the words the save recomputes (slack, late dates, the
+critical stamp) were measured only with the control's values of those options. No pair
+varies them, so the stream is pinned to the
+control's in `read_calculate_shape` (`check_props_pin`, `core/mppwrite/calculate.cpp`). The
+table is generated from the control by `scripts/gen_calculate_props_pin.py` into
+`core/mppwrite/calculate_props_pin.inc`; `--check` fails when the `.inc` is stale. Only
+what the save or a measured relation moves is exempt from the payload hash (the id, kind and
+length stay pinned): `0x02400003` (project finish) and `0x02400024` (pending flag), which the
+save writes; `0x02400002` (project start), covered by the W35c-0.2 relation; and the two
+16-byte GUID records `0x02400029` and `0x024013c2`, the only records that differ between the
+control and its null save (per-save noise, `tests/save_pair_noise.h`). In the tail only the
+Task Var2Data size scalar differs between the null save and Project's edit save (it follows
+the var appends), so only that one value word is excluded. The test flips one byte of each of
+the 156 payload-pinned records, one record kind and one tail byte, and accepts a changed
+GUID and a changed Task size scalar.
+
+*The plan layer has no Props pin, on purpose.* `PlanInput` carries no Props records, only the
+two dates 0.2 reads, and a Props digest on it would be a field filled by the reader that the
+writer would then have to trust over the file it is about to change. The pin is instead
+writer-only and the plan layer reaches it by construction: `make_calculate_edit` runs
+`read_calculate_shape` on the file, and `save_calculate` compares the request's
+`source_digest` with the file it saves, so a plan that was built from a file with other
+options cannot be saved. What that leaves: `push()` on a hand-built plan edit does not see
+the options and the refusal comes at the save, not at the queue.
 
 Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
 FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded
