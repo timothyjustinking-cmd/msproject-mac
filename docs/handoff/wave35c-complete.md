@@ -170,3 +170,88 @@ No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no
 dispatched, no history rewrite.
 
 WAVE-35c-G2-COMPLETE
+
+## CLOSE
+
+### CLOSE gates
+
+Fresh trees `build/w35c-close-fresh`, `-app` and `-qt` at `319d187` (the last code change is
+`f074f1c`, 2.21; every later commit is a record), configured from scratch with
+`CORE_WARNINGS_AS_ERRORS=ON`; script `build/w35c/W35c-CLOSE-fresh-gates.ps1`, log
+`build/w35c/W35c-CLOSE-fresh-gates.log` (summary: `build/w35c/close_log_summary.py`).
+
+- core build exit 0 with warnings as errors; `ctest -E plan_recalc` 65/65;
+- `plan_recalc_tests` 512 checks with the corpus, 266 with `MPP_NO_CORPUS=1`;
+- engine self-test 265 checks, 0 failures; `engine_diff.py --selftest` 53 checks; engine suite 8
+  scenarios, 7 pass and the expected `constraint-mso` failure (1 of 247 fields);
+- reader tests 1469 checks with the corpus, 789 without; M2 `recalc --compare` 332 of 332 fields;
+- app build exit 0 and ctest 34/34, with and without `MPP_NO_CORPUS=1`;
+- app_qt build exit 0 and ctest 52/52; no run reported "No tests were found";
+- `check_fixtures.py`, `check_markers.py` (self-test 19 checks, worktree, `main..HEAD`) and
+  `check_command_backlog.py` (114 pins, 114 rows) exit 0; `gen_calculate_props_pin.py --check` up
+  to date; `scan_client_names.py` on the head and on the `main..HEAD` messages 0 hits;
+  `guard_names.py main..HEAD` exit 0; the client-string grep finds none; 0 CR in the LF-pinned
+  types; `git diff --check main..HEAD` exit 0.
+- The gcc, clang and AppleClang jobs cannot run here. **CI is the only proof of W35c-0.1** (the
+  GCC 13 `-Wdangling-reference`). `app/main.mm` is not changed in `wave35b..HEAD`.
+- Trailer `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 35c)`: present on all 44 builder
+  commits in `wave35b..HEAD` (checked by script at CLOSE). The two commits without it, `2ceb810`
+  and `47e26a5`, are the coordinator's (the trace capture and the brief), not the builder's.
+
+### Ids, with the commit that closes each
+
+| Group | Ids | Result |
+|---|---|---|
+| G0 | R35bW-CI1 | fixed `9a2c079`; the GCC 13 compile is CI's |
+| G0 | R35bG0-1 (High), R35bG0-2 (High) | fixed `7d923dc` (both layers) and `743ad8b` (writer; the plan layer is writer-only by a stated design, `calculate.md` section 8) |
+| G1 | R35bG3-1, R35bG4-1, R35bW-1, R35bW-2 | fixed `c408a07`, `aa1cef8`, `e439dd2`, `37e0e1f` (R35bW-1: Paste and Fill Down carry the guard with no test of their own) |
+| G1 | R35bG0-3 | fixed `cfe2e8a` with residual limits (two cancelling edits pass; a never-calculated file is refused; a critical bit outside the slack words is unmeasured) |
+| G1 | R35bG0-4, R35bG0-5 | fixed `7853816` (tests only) and `b9588b7` (FixedMeta entry and VarMeta keys; the tie closed by 1.11) |
+| G1 | R35bG1-1, R35bG1-2 | fixed `eee629d` (the Release needle tests are a regression pin; the detector is a Debug build) and `7666219` |
+| G1 | R35bG1-3 | **partly fixed** `4a2133e`: Sort and the removal have a guard in each layer; Show Level's view state is guarded in both layers by one shared predicate, and `push()` has no file to check |
+| G1 | R35bG2-1, R35bG3-2 | fixed `4144385`, both layers |
+| G2 | R35bG0-6, R35bG0-7, R35bG0-8 | fixed `4e957ae`, `ecc51d1`, `8e41da3` (the last in the writer; `push()` has no file) |
+| G2 | R35bG2-2, R35bG2-5 | fixed `21b61d6`, `cb40334` (both also closed incidentally earlier) |
+| G2 | R35bG2-6 | **partly fixed** `fc9cae3`: the second suggestion of the save-time dry run is unreachable through the public API (defence in depth) |
+| G2 | R35bG2-7 | fixed `d8cfb6c` |
+| G2 | R35bG4-2, R35bG4-3, R35bG4-4 | fixed `6f95c27`, `36c1492`, `aab8a26` (the last not reachable today) |
+| G2 | R35bG4-6 | fixed `d776901`; mutation G7c turns it red |
+| G2 | R35bG1-4, -5, -6, -9 | fixed `d829206` (a refusal, not a record), `6f28860`, `cea97e1`, `d0100dd` |
+| G2 | R35bG3-3 | fixed `0222978` |
+| G2 | R35bG3-5 | recorded `8aa61f5`: the second-session Bold pair is a measuring-wave item; no pair taken |
+| G2 | R35bG4-5 | fixed `c235973` |
+| G2 | R35bG1-7, R35bG1-8 | fixed `dbef0ef` (no guard can go red), `e9e4657` (wording; which fields Save writes was not re-traced) |
+| G2 | R35bG2-3, R35bG2-8, R35bG3-4 | fixed `f074f1c` (wording; the plan layer's name trim differs from the writer's, recorded), `b588f05`, `f8be7ba` |
+| G2 | R35bW-4, R35bW-5 | fixed `f4065f2`, `cd7dc10` (records) |
+| G2 | R35bG2-4, R35bW-6 | recorded `4d3c943`, `9a38f2e`; no history rewrite |
+| not this wave's | R35bW-3 | answered by the coordinator's `history-rebuild-wave35b.map` |
+| not this wave's | R35bG2-9 | watch only; the intermittent `qt_assign_resources_gate` is green on macOS at `e95c6ca`, and passed in the CLOSE app_qt run here |
+| not assigned | R35bG0-9, R35bG1-10 | the brief assigns them to no item (the untested guards recorded in the wave 35b `gates-g0.md` and `gates-g1.md`); **still open**, queued, not touched by this wave |
+
+Both wave-35b Highs (R35bG0-1, R35bG0-2) are fixed. Nothing in this wave is deferred. A row marked
+partly fixed keeps its remainder in that row.
+
+**Guards seen red:** per group in the G0, G1 and G2 rows above; the logs are
+`build/w35c/*-red-*.log` and the `N.M-red-*` series. CLOSE adds no guard.
+
+**Found, not fixed** (carried from the group rows; nothing new at CLOSE):
+- Show Level's view-state guard is shared by both layers (1.10); `push()` cannot check a file.
+- 1.5's residual limits; 1.8 is visible only to a Debug or sanitizer build.
+- The Props pin rests on one control and one null save (G0); `push()` does not see it for a
+  hand-built calculate edit. A project start inside the working day is refused by 0.2.
+- The 24 `wave35-g3-*` fixtures' README rows (602 to 605 among them) still say 2026-01-05 08:00
+  while the files store 2026-01-04 13:00.
+- The stale "asks to save or undo" labels in the sort and show_level test names; no guard pins a
+  menu row's gap text; 2.20 did not re-trace which fields Save writes.
+- R35bG0-9 and R35bG1-10 (above).
+
+**For the coordinator, after CLOSE:** push `wave35c` and dispatch `qt.yml` and `ci.yml` (0.1 is
+gated there); mutations at each new refusal's call site and helper; an independent review of
+`wave35b..wave35c`. The 4(e) reopen check is a rerun only if a writer's output changed; this wave
+adds no writer. Merging waves 34 to 35c waits on CI green on all three OSs and no open Critical or
+High.
+
+No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no workflow
+dispatched, no history rewrite.
+
+WAVE-35c-COMPLETE
