@@ -560,6 +560,23 @@ void test_enablement() {
               "Define WBS Code needs no selection");
         check(app::menu_item_enabled(MenuAction::calculate_project, resource_only),
               "Calculate Project is a project-level command in every view");
+
+        // R35G4-3: the permissive half of the three rules.  The resource is chosen in
+        // the dialog and has_selection describes the hidden task sheet, so Resource
+        // Information needs no selection; Define WBS Code and Calculate Project are
+        // project-level, so neither needs a selection nor the task view.
+        MenuState resource_no_selection = resource_only;
+        resource_no_selection.has_selection = false;
+        check(app::menu_item_enabled(MenuAction::resource_information, resource_no_selection),
+              "Resource Information is enabled in the Resource Sheet view with no selection");
+        check(app::menu_item_enabled(MenuAction::define_wbs_code, resource_only),
+              "Define WBS Code is enabled outside the task view");
+        check(app::menu_item_enabled(MenuAction::define_wbs_code, resource_no_selection),
+              "Define WBS Code is enabled outside the task view with no selection");
+        check(app::menu_item_enabled(MenuAction::calculate_project, no_selection),
+              "Calculate Project is enabled with no selection");
+        check(app::menu_item_enabled(MenuAction::calculate_project, resource_no_selection),
+              "Calculate Project is enabled outside the task view with no selection");
     }
     check(app::menu_item_supported(MenuAction::insert_task), "Insert Task is supported");
     check(app::menu_item_supported(MenuAction::delete_task), "Delete Task is supported");
