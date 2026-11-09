@@ -327,6 +327,32 @@ the var appends), so only that one value word is excluded. The test flips one by
 the 156 payload-pinned records, one record kind and one tail byte, and accepts a changed
 GUID and a changed Task size scalar.
 
+**Scope: the measured control only (W35d-1.4, R35cG0-3).** The pin holds more than options.
+Records read from the committed fixtures (read only) that differ from file to file include the
+project title (`0x02400008`, a UTF-16 string: each control carries its own), a creation-like
+system time (`0x02401394`, which the control's null save does NOT change, so it is a per-file
+value and not per-save noise), three dates (`0x02400006`, `0x02400007`, `0x024013b1`) and one
+tail entry (tail offset 81,824, which also differs between the unlinked control and its linked
+and snet siblings).  So **Calculate Project is enabled for the measured control's values only**:
+in practice the control file and its copies.  Every other project, the user's own pending
+two-task project included, is refused at the pin with "114/Props record 0x........ differs from
+the measured control (an option, a default or a per-file value that no measured Calculate
+Project pair varies; Calculate Project is enabled for the measured control's values only)".  A
+second null save cannot lift this: it shows what changes on a resave, and these records do not.
+What could is a measuring wave that saves a second control with every option at its default,
+under another title and at another time, to separate identity records from options; they could
+then be exempted on that evidence.  Until then nothing is lifted.
+
+**Files the port itself saved that are now refused.** A file the port saved after an edit that
+writes `114/Props` no longer matches the control there, and Calculate Project refuses it: Define
+WBS Code (records `0x0240138b` and `0x024013be`), a custom-field set (`0x02401392`,
+`0x024013c5`), Add Resources (tail scalars Resource count `0x02000001`, Resource size
+`0x02000100` and Calendar count `0x03000001`) and Assign Resources and its removal (the four
+`114/Props` assignment scalars: count, freed, dirty and size).  The pin excludes only the Task
+size scalar (`0x01000100`) from the tail hash, so a save that changes only the Task size, such
+as the var-record writers, still matches.  The 4(e) merge check passes because it uses the
+control itself.
+
 *The plan layer has no Props pin, on purpose.* `PlanInput` carries no Props records, only the
 two dates 0.2 reads, and a Props digest on it would be a field filled by the reader that the
 writer would then have to trust over the file it is about to change. The pin is instead

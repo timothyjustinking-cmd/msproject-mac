@@ -31,7 +31,11 @@ date. The measured unlinked pair still writes and matches with effects on.
 - The Props pin rests on one control and one null save (two GUID records are the only noise
   they show). A file saved elsewhere with other per-file values in `114/Props` is refused with
   "differs from the measured control" until a second null-save pair shows them. A refusal, not
-  a wrong write; not measured (no COM).
+  a wrong write; not measured (no COM).  **Correction (W35d-1.4, R35cG0-3):** a null save cannot
+  show them, since the per-file records (the project title, a creation stamp) do not change on a
+  resave; Calculate Project is enabled for the measured control's values only, and files the
+  port saved after a WBS, field-set, Add Resources or Assign Resources edit are refused too (see
+  `spec/writers/calculate.md`, "Scope").
 - `push()` does not see the Props pin for a hand-built calculate edit; the refusal comes at the
   save (`source_digest` ties the edit to the file). Bears on R35bG0-5 (item 1.7).
 - A project start inside the working day (for example Monday 10:30) is refused by 0.2; Project's
