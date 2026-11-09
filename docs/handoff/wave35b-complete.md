@@ -42,21 +42,21 @@ script `build/w35b/W35b-CLOSE-fresh-gates.ps1`, log `build/w35b/W35b-CLOSE-fresh
 | 0.3 | R35G1-2 | fixed `8695ea8` (but see R35bG0-1, open) |
 | 0.4 | RW35-W2 | fixed `cc9b581` |
 | 0.5 | R35G1-3 | fixed `15b9efd` (but see R35bG0-2, open) |
-| 1.1 | R35G2-1 | fixed `114861b` |
+| 1.1 | R35G2-1 | fixed `114861b` (but see R35bG1-3: one shared guard serves both layers) |
 | 1.2 | R35G2-2 | fixed `84a24d1` |
-| 1.3 | R35G2-3 | fixed `b47f343` |
+| 1.3 | R35G2-3 | fixed `b47f343` (but see R35bG1-3: one shared guard serves both layers) |
 | 1.4 | R35G2-4 | fixed `7bd9c5c` |
 | 1.5 | RW35-R2 | fixed `e4a380d` |
-| 1.6 | R35G3-1, RW35-W1 | fixed `e813c11` |
+| 1.6 | R35G3-1, RW35-W1 | fixed `e813c11` (but see R35bG1-2: the guard reads FixedMeta byte 12 only; and R35bG1-3) |
 | 1.7 | R35G4-1 (and R35G4-4) | fixed `48630a4`; macOS part compiled by CI only |
 | 1.8 | R35G4-2, RW35-R1 | fixed `97afeee` |
-| 2.1 to 2.12 | R35G1-4 to -9, RW35-W3, R35G0-2 to -4, R35G3-6, coordinator M5 | fixed `a69943c`, `4a491df`, `38a6c92`, `eb5aa96`, `5284d58`, `e860427`, `93b9524`, `4315ef7`, `b304545`, `06eff3f`, `96d1cd4`, `b179918` |
-| 3.1 to 3.8 | R35G2-5 to -8, R35G3-2 to -5, -7, RW35-W4 to -W7, RW35-R3, -R4, coordinator M13 | fixed or recorded: `961b311`, `8d55b5c`, `980c6fb`, `d3a9fad`, `0476516`, `d3a0a72`, `7b2ad9a`, `6d3a1bd`, `90a3ca9`, `5dd4c10`, `40ab7dd`, `92d2555`, `ea2eb34`, `7519e01`, `2a11fcf`, `64e8572` |
-| G4 | the Lows | table by id in `wave35b-verification/gates-g4.md`; every id fixed with a commit except R35G3-8 (recorded: no history rewrite), RW35-W13 (left, as the row allows), RW35-R6 and RW35-R9 (confirmed as intended) |
+| 2.1 to 2.12 | R35G1-4 to -9, RW35-W3, R35G0-2 to -4, R35G3-6, coordinator M5 | fixed (RW35-W3: but see R35bG2-1, the tie and swapped-order refusals are writer-only; RW35-R5 is closed in 2.5, now `f1a3f5b`, and 3.3, and was in no row) `a69943c`, `4a491df`, `38a6c92`, `eb5aa96`, `5284d58`, `e860427`, `93b9524`, `4315ef7`, `b304545`, `06eff3f`, `96d1cd4`, `b179918` |
+| 3.1 to 3.8 | R35G2-5 to -8, R35G3-2 to -5, -7, RW35-W4 to -W7, RW35-R3, -R4, coordinator M13 | fixed or recorded (R35G2-6: but see R35bG3-1 and R35bG4-1, other paths still change the outline; R35G3-10 was recorded in 3.5, now `9cd003e`, and was in no row): `961b311`, `8d55b5c`, `980c6fb`, `d3a9fad`, `0476516`, `d3a0a72`, `7b2ad9a`, `6d3a1bd`, `90a3ca9`, `5dd4c10`, `40ab7dd`, `92d2555`, `ea2eb34`, `7519e01`, `2a11fcf`, `64e8572` |
+| G4 | the Lows | table by id in `wave35b-verification/gates-g4.md` (R35G1-10 and R35G1-12: but see R35bG4-2 and R35bG4-3, partly closed); every id fixed with a commit except R35G3-8 (recorded: no history rewrite), RW35-W13 (left, as the row allows), RW35-R6 and RW35-R9 (confirmed as intended) |
 
 Nothing in this wave is deferred.  No writer was added, no refusal lifted, no Project pair
 measured, no COM or `oracle_*` script run.  The wave 35 Mediums and Lows are closed by the
-rows above; the per-group coordinator records are `gates-g0.md` to `gates-g4.md`.
+rows above; `gates-g0.md` to `gates-g4.md` are the builder's per-group records (for G3 and G4 they are the builder's, not the coordinator's: the coordinator's are `coord-gates-g3.md`, `coord-gates-g4.md` and `coord-gates-close.md`).  The commit ids in the table are the pre-rebuild ones (R35bW-3, `history-rebuild-wave35b.map`).  This table was corrected by W35c-2.25 (R35bW-5): the "but see" notes, RW35-R5, R35G3-10 and the record names.
 
 ### Open at CLOSE (queued, not for this wave)
 
