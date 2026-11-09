@@ -986,6 +986,38 @@ void refused_requests() {
                 "G1-12: entries are found by row offset");
     }
     {
+        /* W35c-2.9 (R35bG4-3): the two sites of the order-varied lookup.  With the leaf entries
+         * swapped, row 2's FixedMeta entry is at position 4.  (a) Its Fixed2Meta entry is the
+         * one at the same position, so the active bit cleared there is row 2's: a read at the
+         * row's own position would blame row 1.  (b) Byte 20 of that FixedMeta entry, which
+         * the +17/+18 check does not read, is named for row 2 and not for row 1. */
+        CfbDocument swapped = control;
+        Bytes meta = swapped.read_stream("114/TBkndTask/FixedMeta");
+        for (std::size_t i = 0; i < 47; ++i) {
+            std::swap(meta[16 + 4 * 47 + i], meta[16 + 5 * 47 + i]);
+        }
+        swapped.replace_stream("114/TBkndTask/FixedMeta", meta);
+        TaskTable const rows = TaskTable::from_document(swapped);
+        {
+            CfbDocument doc = swapped;
+            Bytes f2meta = doc.read_stream("114/TBkndTask/Fixed2Meta");
+            f2meta[16 + 4 * 96 + 8] &= static_cast<std::uint8_t>(~0x40u);
+            doc.replace_stream("114/TBkndTask/Fixed2Meta", f2meta);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "task uid " + std::to_string(rows.uid(2)) + " is inactive",
+                    "2.9: Fixed2Meta is read at the FixedMeta entry's index");
+        }
+        {
+            CfbDocument doc = swapped;
+            meta[16 + 4 * 47 + 20] = 0x00; /* row 2's entry, now at position 4 */
+            doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "task uid " + std::to_string(rows.uid(2)) +
+                        "'s FixedMeta metadata flags differ",
+                    "2.9: a FixedMeta byte the +17/+18 check does not read");
+        }
+    }
+    {
         CfbDocument doc = control;
         rename_props_record(doc, 0x02400024u, 0x02400FF4u);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
