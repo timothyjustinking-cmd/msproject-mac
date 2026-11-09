@@ -446,6 +446,13 @@ class MainWindow final : public QMainWindow {
     // W33-1.7 (A-8 / D-7): true when this session is read-only; puts the reason
     // on the status line so the caller can simply return.
     bool refuse_read_only();
+    // W35c-1.1 (R35bG3-1): the shared guard over every change to the displayed
+    // outline or order while a Show Level or a Sort is queued.
+    // view_change_refusal() returns the message ("" when nothing is queued);
+    // refuse_view_change() puts it on the status line and returns true so the
+    // caller can simply return.
+    std::string view_change_refusal(const std::string& change) const;
+    bool refuse_view_change(const std::string& change);
     void handle_action(app::MenuAction action);
     // Wave 26: the ribbon controls that are not menu actions (Link/Unlink in
     // W26-1.2; the view/format toggles arrive with W26-1.3/1.4).  Wave 28

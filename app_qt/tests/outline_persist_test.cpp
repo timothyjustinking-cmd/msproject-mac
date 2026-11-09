@@ -19,8 +19,10 @@
 //                            <wave35-viewstate-outline-level1.mpp>
 //                            <wave35-viewstate-outline-level1-control-null.mpp>
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QString>
+#include <QStringList>
 
 #include <array>
 #include <cstddef>
@@ -37,6 +39,7 @@
 #include "entry_columns.h"
 #include "fixture_guard.h"
 #include "main_window.h"
+#include "ribbon_bar.h"
 #include "sheet_table_model.h"
 #include "shell_style.h"
 
@@ -64,6 +67,31 @@ const app::StructuralEdit* queued_level(const msqt::MainWindow& window) {
 
 bool status_contains(const msqt::MainWindow& window, const char* needle) {
     return window.status_left_text().contains(QString::fromUtf8(needle));
+}
+
+// The Gantt Chart Format tab's Project Summary Task check box (nullptr when absent).
+QAbstractButton* project_summary_box(msqt::MainWindow& window) {
+    msqt::RibbonBar* ribbon = window.ribbon();
+    if (ribbon == nullptr) {
+        return nullptr;
+    }
+    const int tab = ribbon->tab_titles().indexOf(QStringLiteral("Gantt Chart Format"));
+    if (tab < 0) {
+        return nullptr;
+    }
+    ribbon->set_active_tab(tab);
+    QApplication::processEvents();
+    const int show_hide = ribbon->group_titles().indexOf(QStringLiteral("Show/Hide"));
+    if (show_hide < 0) {
+        return nullptr;
+    }
+    for (int control = 0; control < ribbon->group_control_count(show_hide); ++control) {
+        auto* button = qobject_cast<QAbstractButton*>(ribbon->group_control(show_hide, control));
+        if (button != nullptr && button->text() == QStringLiteral("Project Summary Task")) {
+            return button;
+        }
+    }
+    return nullptr;
 }
 
 }  // namespace
@@ -153,6 +181,29 @@ int main(int argc, char** argv) {
                 "Expand All with a level queued changes no row");
     gate::check(status_contains(window, "not this expanded state"),
                 "Expand All with a level queued: the status line names the queued level");
+    // W35c-1.1 (R35bG3-1): the Project Summary Task toggle rebuilds the sheet with every
+    // row expanded, so it is refused while a level is queued, and the check box is put
+    // back as it was.
+    {
+        QAbstractButton* summary = project_summary_box(window);
+        gate::check(summary != nullptr, "the Project Summary Task check box is in the page");
+        if (summary != nullptr) {
+            const bool shown_before = window.project_summary_visible();
+            summary->click();
+            QApplication::processEvents();
+            gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                        "the summary toggle leaves the queued Level 1 in place");
+            gate::check(window.sheet_row_count() == level1_rows,
+                        "the summary toggle with a level queued changes no row");
+            gate::check(window.project_summary_visible() == shown_before,
+                        "the summary toggle with a level queued leaves the summary as it was");
+            gate::check(summary->isChecked() == shown_before,
+                        "the summary toggle with a level queued puts the check box back");
+            gate::check(status_contains(window, "not the project summary row shown or hidden"),
+                        "the summary toggle with a level queued: the status line names the "
+                        "queued level");
+        }
+    }
     if (QAction* undo = gate::find_action(window, app::MenuAction::undo)) {
         undo->trigger();
         QApplication::processEvents();

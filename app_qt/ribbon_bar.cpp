@@ -1292,6 +1292,10 @@ void RibbonBar::build_page(int tab_index) {
                     box_check->setObjectName(QStringLiteral("ribbonCheck"));
                     box_check->setFont(ribbon_font(kRibbonPointSize));
                     box_check->setText(label);
+                    // W35c-1.1: set_stack_check() finds a check box by this name; without
+                    // it set_document_state() never moved the box, so a refused toggle
+                    // could not be put back.
+                    box_check->setAccessibleName(label);
                     box_check->setFixedSize(spec.width, kStackRowHeight);
                     box_check->setFocusPolicy(Qt::NoFocus);
                     bool checked = spec.checked == 1;

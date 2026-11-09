@@ -1606,6 +1606,33 @@ bool MainWindow::refuse_read_only() {
     return true;
 }
 
+// W35c-1.1 (R35bG3-1): the one guard over every change to the displayed outline or
+// order while a Show Level or a Sort is queued.  File > Save writes the queued edit,
+// so a change the user makes to the display afterwards would leave the file
+// describing rows the user is no longer looking at.  `change` is the noun phrase
+// the message ends on ("this expanded state").  Empty when nothing is queued.
+std::string MainWindow::view_change_refusal(const std::string& change) const {
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
+        return "outline: a Show Level is queued and File > Save would write it, not " + change +
+               "; choose All Subtasks or another level first";
+    }
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::sort_view)) {
+        return "sort: a Sort is queued and File > Save would write it, not " + change +
+               "; clear the sort or choose another sort first";
+    }
+    return {};
+}
+
+bool MainWindow::refuse_view_change(const std::string& change) {
+    const std::string reason = view_change_refusal(change);
+    if (reason.empty()) {
+        return false;
+    }
+    set_message(reason, true);
+    update_status();
+    return true;
+}
+
 void MainWindow::update_zoom_slider() {
     if (zoom_slider_ == nullptr) {
         return;
@@ -2184,12 +2211,7 @@ void MainWindow::handle_action(app::MenuAction action) {
             return;
         case app::MenuAction::collapse_all:
             if (doc_.sheet() != nullptr && prefs_.view == app::ViewMode::task_sheet) {
-                if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
-                    set_message("outline: a Show Level is queued and File > Save would write "
-                                "it, not this collapsed state; choose All Subtasks or another "
-                                "level first",
-                                true);
-                    update_status();
+                if (refuse_view_change("this collapsed state")) {
                     return;
                 }
                 doc_.sheet()->collapse_all();
@@ -2198,12 +2220,7 @@ void MainWindow::handle_action(app::MenuAction action) {
             return;
         case app::MenuAction::expand_all:
             if (doc_.sheet() != nullptr && prefs_.view == app::ViewMode::task_sheet) {
-                if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
-                    set_message("outline: a Show Level is queued and File > Save would write "
-                                "it, not this expanded state; choose All Subtasks or another "
-                                "level first",
-                                true);
-                    update_status();
+                if (refuse_view_change("this expanded state")) {
                     return;
                 }
                 doc_.sheet()->expand_all();
@@ -2330,6 +2347,14 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             if (!doc_.has_document() || doc_.sheet() == nullptr) {
                 set_message("open a project first", false);
                 update_status();
+                return;
+            }
+            // W35c-1.1 (R35bG3-1): the rebuild below makes a new sheet with every
+            // row expanded, so a queued Show Level would be saved over a display
+            // that no longer shows it.  Refused, with the button put back.
+            if (refuse_view_change("the project summary row shown or hidden")) {
+                ribbon_->set_document_state(true, timeline_visible_,
+                                            doc_.project_summary_visible());
                 return;
             }
             // The RecordSet is rebuilt, so detach the adapter first -- the same
@@ -6087,13 +6112,7 @@ void MainWindow::toggle_outline_row(int display_row) {
     if (row == core::sheet::kNoIndex || doc_.sheet() == nullptr) {
         return;
     }
-    if (!structural_.applied().empty() &&
-        structural_.applied().back().kind == app::StructuralKind::show_level) {
-        set_message("outline: a Show Level is queued and File > Save would write it, not "
-                    "this expanded or collapsed row; choose All Subtasks or another level "
-                    "first",
-                    true);
-        update_status();
+    if (refuse_view_change("this expanded or collapsed row")) {
         return;
     }
     doc_.sheet()->toggle_collapsed(row);
