@@ -285,9 +285,14 @@ that make the same call, so an append is not enabled without a measured pair, an
 sit as a KnownGap that must not enable.  **One rule (W35b-3.8, R35G3-5):** the port pins 0x90 and
 accepts no other top byte, for Bold on and for Bold off alike; Project reads 0x90 back.  The
 existing enabled Bold on one cell matched wave 30 because that session stored 0x90; the spec
-records it.  Font32Ex stores no name or size in the item.  The two-row range stored one item.
-Toolbar Underline was not measured: `FontUnderline(True)` raises "'bool' object is not
-callable" in this COM session.
+records it.  Font32Ex stores no name or size in the item.  **Reworded (W35b-3.8, R35G3-7):
+toolbar Underline and the two-row range are "not yet measured", not findings.**
+`FontUnderline(True)` raised "'bool' object is not callable", a Python `TypeError` from win32com
+late binding, so it is a harness error and says nothing about Project.  The range run stored one
+item, but it never checked that two rows were selected.  Queued for a measuring wave (not
+attempted again in 35b: a measurement, outside the fix-only scope): call Underline through
+`InvokeTypes` or an early-bound wrapper, and check `ActiveSelection.Tasks.Count == 2` before the
+range's font call.
 
 **WBS Renumber (W35-3.4).**  Unavailable in Project without a code definition ("The method is
 not available in this situation", kept as evidence).  On a defined three-task file it is a no-op:
