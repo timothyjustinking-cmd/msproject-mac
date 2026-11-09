@@ -137,9 +137,9 @@ void validate_edit(ViewOutlineEdit const& edit, std::string const& function) {
     }
     if (!outline_shape_measured(edit.rows)) {
         throw Error(function + ": the outline of " + number(edit.rows.size()) +
-                    " tasks is not one the pairs measure (levels 1,2,2,1,1 over "
-                    "five tasks or 1,2,3,3,2,1 over six), so this outline level "
-                    "is refused");
+                    " tasks is not one the pairs measure (0-based levels "
+                    "0,1,1,0,0 over five tasks or 0,1,2,2,1,0 over six), so "
+                    "this outline level is refused");
     }
     std::set<std::uint32_t> uids;
     for (OutlineViewRow const& row : edit.rows) {

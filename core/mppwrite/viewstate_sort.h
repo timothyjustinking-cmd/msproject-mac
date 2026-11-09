@@ -47,7 +47,9 @@
  *                                              evidence only (its secondary key
  *                                              never decided a row)
  *   key field       Name or Duration           refused: ID, Start, Finish, ...
- *   direction       ascending or descending
+ *   direction       Name: ascending or         refused: Duration ascending (no
+ *                   descending; Duration:      pair; the writer's "Duration
+ *                   descending only            ascending is unmeasured")
  *   Outline         true                       Outline = False refused
  *   Renumber        false                      Renumber = True refused
  *   row count       5                          the pairs' row count; the 0x35

@@ -12,7 +12,7 @@ writer or edit-model path is enabled for, and everything else is refused up fron
 
 Pairs: `wave35-viewstate-sort-name-desc`, `-sort-name-asc`, `-sort-duration-desc`
 (enabled), and `-sort-two-keys`, `-sort-flat-name-desc` (evidence only). The base is
-the five-task, three-level project (UniqueID 1 is a summary over UniqueIDs 2 and 3;
+the five-task, two-level project (outline levels 0 and 1; UniqueID 1 is a summary over UniqueIDs 2 and 3;
 UniqueIDs 4 and 5 are top-level leaves), Outline = True, Renumber = False.
 
 ### 1.1 Where a sort lives
@@ -91,7 +91,7 @@ The pairs fix the order for the measured names and durations only. The edit mode
 
 | shape | state | where it is refused |
 |---|---|---|
-| one key, Name or Duration, asc or desc | **enabled** | — |
+| one key: Name ascending, Name descending, Duration descending | **enabled** | — |
 | two keys | refused ("exactly one key") | `make_sort_edit`, `save_view_sort` |
 | ID / Start / Finish / any other key | refused (one reason each) | both |
 | Outline = False ("Keep outline structure" off) | refused | both |
@@ -99,7 +99,7 @@ The pairs fix the order for the measured names and durations only. The edit mode
 | view uid other than 2, or a project whose applied view is not the measured block | refused | writer (digest, view uid) |
 | row count ≠ 5, pending task, unpinned names or durations | refused | edit model; writer for the count |
 | Duration ascending, or an ascending key whose order differs from the file's row order (only Name ascending, which moves no row, is measured) | refused ("Duration ascending is unmeasured", "an ascending sort that moves rows") | edit model, `push()` and writer |
-| an outline other than levels 1, 2, 2, 1, 1 (a three-level, flat or re-nested one), from the plan and from the file's +172 words | refused ("sort one outline") | edit model and writer (`sorted_order_of`) |
+| an outline other than 0-based levels 0, 1, 1, 0, 0 (a three-level, flat or re-nested one), from the plan and from the file's +172 words | refused ("sort one outline") | edit model and writer (`sorted_order_of`) |
 | a file that already carries a sort or a different order | refused ("already carries a sort") | writer |
 
 `wave35-viewstate-sort-flat-name-desc` (Outline = False) saves the same bytes as the

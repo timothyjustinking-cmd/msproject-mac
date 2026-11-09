@@ -443,6 +443,11 @@ void test_refusals(TestContext& t) {
         edit = measured_edit();
         edit.rows[2].level = 2;
         refuses(control, edit, "is not one the pairs measure", "another outline shape refused");
+        /* R35G2-11: the refusal names the measured outlines as the 0-based levels the code and
+         * the constants use, not 1-based ones. */
+        refuses(control, edit,
+                "(0-based levels 0,1,1,0,0 over five tasks or 0,1,2,2,1,0 over six)",
+                "the refusal names the 0-based measured outlines");
         edit = measured_edit();
         edit.rows[4].level = 1;
         refuses(control, edit, "is not one the pairs measure",

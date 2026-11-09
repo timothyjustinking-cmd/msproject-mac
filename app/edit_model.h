@@ -674,9 +674,9 @@ struct SortKeyRequest {
 };
 
 // Builds a ready-to-push sort_view edit (W35-2.1).  The measured shape is Project
-// > Sort with ONE key (Name or Duration), "Keep outline structure" checked and
-// "Permanently renumber tasks" unchecked, on the three-level pair's five saved
-// tasks; two keys, an ID / Start / Finish / other key, Outline = False and
+// > Sort with ONE key (Name ascending or descending, Duration descending only), "Keep
+// outline structure" checked and "Permanently renumber tasks" unchecked, on the
+// two-level (0-based levels 0,1) pair's five saved tasks; two keys, an ID / Start / Finish / other key, Outline = False and
 // Renumber = True are each refused up front with their own reason.  The order
 // the edit queues is computed here under the pins the pairs support: siblings
 // (rows under one parent, from the outline level) are compared; Name only when
@@ -694,7 +694,7 @@ bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
 
 // Builds a ready-to-push show_level edit (W35-2.3): View > Outline > Show > Level
 // `level` (1-based) on the task sheet.  Measured shape: the pairs' five-task
-// outline (levels 1,2,2,1,1) and six-task three-level outline (1,2,3,3,2,1),
+// outline (0-based levels 0,1,1,0,0) and six-task three-level outline (0,1,2,2,1,0),
 // every row shown in the file, Level 1 and Level 2 only.  Refused up front, each
 // with its own reason: a level other than 1 or 2 (the shell keeps it for the
 // session), a pending task, a file that already collapses or hides a row, a
