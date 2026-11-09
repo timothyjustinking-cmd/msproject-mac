@@ -2633,8 +2633,35 @@ void test_remove_port_saved(TestContext& t) {
         {kAssnVar2, 3, 524, 0x12, 0xba},
         /* Project clears a resource flag the port-saved file still carries. */
         {"114/TBkndRsc/Fixed2Meta", 1, 279, 0x2b, 0x0b},
-        /* The displayed-row list Project rebuilds (586 -> 540 B). */
+        /* Project's CEdl is 64 bytes shorter (normalised 430 against the port's 494; raw 540
+         * against 586): the displayed-row list it rebuilds.  A length gap, so the signature's
+         * 0x00 / 0x00 names no differing value (see the pins below). */
         {"214/CEdl/Var2Data", 64, 430, 0x00, 0x00}}};
+    {
+        /* R35G3-12: the CEdl gap above is a LENGTH, not a changed byte.  Compared after
+         * normalise_cedl (the save-path record already swapped for a fixed sentinel, so path
+         * length is not in it), Project's CEdl is 430 bytes (the null save's, and its edit
+         * save's) and the port's is the control's 494: Project rebuilds the displayed-row list
+         * 64 bytes shorter.  Positions 430 to 493 are therefore stored only by the port, which
+         * is why the gap's signature reads port 0x00 / Project 0x00: 0x00 is the control's byte
+         * at 430 and Project's side is past its end, which the harness reports as 0.  The
+         * checks below pin what the signature cannot: the lengths, and that the port leaves
+         * the control's CEdl as it was. */
+        Bytes const port_cedl = save_pair::normalise_cedl(
+            CfbDocument::from_file(out).read_stream("214/CEdl/Var2Data"));
+        Bytes const project_cedl = save_pair::normalise_cedl(
+            doc_from_data(kPortEdit).read_stream("214/CEdl/Var2Data"));
+        Bytes const control_cedl =
+            save_pair::normalise_cedl(control.read_stream("214/CEdl/Var2Data"));
+        t.equal(project_cedl.size(), std::size_t{430},
+                "the CEdl gap: Project's normalised CEdl is 430 bytes");
+        t.equal(port_cedl.size(), std::size_t{494},
+                "the CEdl gap: the port's normalised CEdl is the control's 494 bytes");
+        t.check(port_cedl == control_cedl,
+                "the CEdl gap: the port leaves the control's CEdl as it was");
+        t.check(port_cedl.size() > 430 && port_cedl[430] == 0x00,
+                "the CEdl gap: the port's byte at 430 is the 0x00 the signature names");
+    }
     save_pair::compare_all(t, "assign-remove-port-saved", control, null_save,
                            doc_from_data(kPortEdit), CfbDocument::from_file(out),
                            gaps.data(), gaps.size(), declared.data(),
