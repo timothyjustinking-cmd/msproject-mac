@@ -53,6 +53,7 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "cfb_writer.h"
@@ -167,6 +168,15 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
  * application calls it.
  */
 void set_calculate_fault_after_appends(std::size_t appends);
+
+/*
+ * TEST ONLY (W35d-2.7, R35cG2-6).  A fault seam for the scratch-path probe: when `fault` is set,
+ * save_calculate behaves as if looking at the scratch path had failed with that error and no
+ * file type, so a test can prove the refusal gives the OS message and not "already exists".
+ * A default-constructed error_code turns it off; process-wide, not thread-safe; nothing in the
+ * application calls it.
+ */
+void set_calculate_scratch_probe_fault(std::error_code fault);
 
 } /* namespace mppwrite */
 
