@@ -422,6 +422,49 @@ int main(int argc, char** argv) {
                     "unsaved rename: the status line says session only");
     }
 
+    // W35d-0.4 (R35cG1-1, Show Level counterpart): Level 1, Ctrl+Z, then All Subtasks or a
+    // session-only level, then Ctrl+Y.  apply_outline_level() only clears the redo list when a
+    // level is queued at that moment, so the withdrawn level stays redoable; unlike a Sort it
+    // comes back SHOWN, because every rebuild re-shows a queued level (W35c-1.2).  Pinned as
+    // the invariant that matters: whatever Redo queues, the rows show that level.  This route
+    // does not reproduce the Sort's divergence, so no code changed for it.
+    {
+        gate::check(window.open_file(five, &error), "the five-task fixture reopens (undo first)");
+        QApplication::processEvents();
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(undo != nullptr && redo != nullptr, "Undo and Redo are menu actions");
+        if (undo != nullptr && redo != nullptr) {
+            const std::size_t expanded_rows = window.sheet_row_count();
+            for (const int other : {0, 3}) {
+                window.apply_outline_level(1);
+                QApplication::processEvents();
+                gate::check(queued_level(window) != nullptr, "Undo-first: Level 1 is queued");
+                const std::size_t queued_level_rows = window.sheet_row_count();
+                gate::check(queued_level_rows < expanded_rows, "Undo-first: Level 1 hides rows on this outline");
+                undo->trigger();
+                QApplication::processEvents();
+                gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                            "Undo-first: Undo withdraws Level 1 onto the redo list");
+                window.apply_outline_level(other);
+                QApplication::processEvents();
+                gate::check(window.pending_edits().empty(),
+                            "Undo-first: All Subtasks or Level 3 queues nothing");
+                const std::size_t replaced_rows = window.sheet_row_count();
+                if (redo->isEnabled()) {
+                    redo->trigger();
+                    QApplication::processEvents();
+                }
+                gate::check(queued_level(window) == nullptr ||
+                                window.sheet_row_count() == queued_level_rows,
+                            "Undo-first: a Redo that re-queues Level 1 shows Level 1's rows");
+                gate::check(queued_level(window) != nullptr ||
+                                window.sheet_row_count() == replaced_rows,
+                            "Undo-first: no Redo leaves the rows as they were");
+            }
+        }
+    }
+
     // W35b-3.4: Level 1 on the five-task control, saved through File > Save, is Project's own
     // save of the pair (outline-level1), every stream under the null-save discipline.  The
     // same bytes the core and app tests pin, here through the shell's queue and save path.

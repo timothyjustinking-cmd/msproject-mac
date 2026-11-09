@@ -155,6 +155,7 @@ class PlanDocument {
     void clear_sort();
     bool sort_active() const noexcept { return sort_active_; }
     const std::string& sort_description() const noexcept { return sort_description_; }
+    const core::view::SortDefinition& sort_definition() const noexcept { return sort_definition_; }
     // Wave 31 (W31-1.2): Project's View > Outline > Level 1..9 / All Subtasks,
     // applied SESSION-ONLY through the sheet's collapse state (the file's rows
     // and bytes are untouched).  Level N leaves the rows whose port outline
