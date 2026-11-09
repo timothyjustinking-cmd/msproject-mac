@@ -662,8 +662,10 @@ void refused_requests() {
     }
     {
         /* The flag stays 01 00 (pending) and the project row's finish already equals the latest
-         * leaf finish: nothing to calculate.  Project's own result stops at "not pending" and
-         * never reaches this guard. */
+         * leaf finish.  Project would still rewrite a non-critical leaf's slack and late dates
+         * (R35G1-11), which no pair measures, so the refusal says that rather than "nothing to
+         * calculate".  Project's own result stops at "not pending" and never reaches this
+         * guard. */
         CfbDocument doc = control;
         mppwrite::CalculateShape shape;
         std::string reason;
@@ -672,7 +674,9 @@ void refused_requests() {
         rows.set_u32(0, mppwrite::task_row::kFinish, shape.project_finish);
         rows.store_into(doc);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
-                "already equals the latest task finish", "2.4: project finish already equals");
+                "the pending change does not move the project finish; that recalculation has no "
+                "measured pair",
+                "2.4: project finish already equals");
     }
     {
         CfbDocument doc = control;
