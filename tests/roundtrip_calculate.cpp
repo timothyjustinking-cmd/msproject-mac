@@ -192,6 +192,29 @@ void rename_props_record(CfbDocument& doc, std::uint32_t id, std::uint32_t renam
     doc.replace_stream("114/Props", props);
 }
 
+/* Set the kind word of the 114/Props record `id`. */
+void set_props_kind(CfbDocument& doc, std::uint32_t id, std::uint32_t kind) {
+    Bytes props = doc.read_stream("114/Props");
+    auto const get = [&props](std::size_t at) {
+        return static_cast<std::uint32_t>(props[at]) |
+               (static_cast<std::uint32_t>(props[at + 1]) << 8) |
+               (static_cast<std::uint32_t>(props[at + 2]) << 16) |
+               (static_cast<std::uint32_t>(props[at + 3]) << 24);
+    };
+    bool found = false;
+    for (std::size_t at = 16; at + 12 <= props.size() && (get(at + 4) & 0x00FF0000u) == 0x00400000u;
+         at += 12 + get(at)) {
+        if (get(at + 4) == id) {
+            for (std::size_t i = 0; i < 4; ++i) {
+                props[at + 8 + i] = static_cast<std::uint8_t>((kind >> (8 * i)) & 0xFFu);
+            }
+            found = true;
+        }
+    }
+    check(found, "the Props record whose kind is set exists");
+    doc.replace_stream("114/Props", props);
+}
+
 /* Overwrite the payload of the 114/Props record `id` (same length). */
 void set_props_payload(CfbDocument& doc, std::uint32_t id, Bytes const& payload) {
     Bytes props = doc.read_stream("114/Props");
@@ -1057,6 +1080,52 @@ void refused_requests() {
         refuses([&] { mppwrite::save_calculate(doc, good, target); }, "(0x02400002)",
                 "project start record missing");
         check(file_bytes(target) == before, "project start record missing: target unchanged");
+        std::filesystem::remove(target);
+    }
+    {
+        /* W35c-2.4 (R35bG2-2): the pending flag (0x02400024) of another kind.  Before 0.3's
+         * Props pin this reached save_props_edit after the five appends, and only the scratch
+         * file protected the target; the pin now refuses it up front.  The target already
+         * exists and must be byte-identical, with no scratch file left. */
+        CfbDocument doc = control;
+        set_props_kind(doc, 0x02400024u, 0x0Fu);
+        std::string const target = out_path("w35-calculate-atomic-target4.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        Bytes const before = file_bytes(target);
+        refuses([&] { mppwrite::save_calculate(doc, good, target); },
+                "differs from the measured control", "pending record of another kind");
+        check(file_bytes(target) == before, "pending record of another kind: target unchanged");
+        check(!std::filesystem::exists(target + ".calculate.tmp"),
+              "pending record of another kind: no scratch file left");
+        std::filesystem::remove(target);
+    }
+    {
+        /* W35c-2.4 (R35bG2-2): the scratch indirection itself.  A non-empty directory squats on
+         * the scratch name, so the chain cannot write there: the save fails and the existing
+         * target stays byte-identical.  Written straight to the target (the indirection
+         * reverted) the save would succeed, so this goes red on that revert. */
+        CfbDocument doc = control;
+        std::string const target = out_path("w35-calculate-atomic-target5.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        Bytes const before = file_bytes(target);
+        std::string const squat = target + ".calculate.tmp";
+        std::filesystem::create_directories(squat);
+        {
+            std::ofstream keep(squat + "/keep.txt");
+            keep << "squatter";
+        }
+        bool threw = false;
+        try {
+            mppwrite::save_calculate(doc, good, target);
+        } catch (std::exception const&) {
+            threw = true;
+        }
+        check(threw, "the scratch path is unusable: the save fails");
+        check(file_bytes(target) == before, "the scratch path is unusable: target unchanged");
+        std::error_code ignored;
+        std::filesystem::remove_all(squat, ignored);
         std::filesystem::remove(target);
     }
     {
