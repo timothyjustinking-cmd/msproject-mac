@@ -1203,10 +1203,11 @@ void check_refusals() {
         expect_refused(plan, path.string(), "metadata flags differ",
                        "a file whose task metadata flag byte differs");
     }
-    /* W35b-3.7 (RW35-R3): no pair varies Effort-driven or Task Type, and the plan does not
-     * carry either, so the builder's only gate is the writer's dry run, which pins the
-     * FixedMeta flag byte 16 (0x07 in the control) as one value.  Each bit of it, and a bit
-     * the control does not set, is one refusal with the byte named. */
+    /* W35b-3.7 (RW35-R3): no pair varies Effort-driven or Task Type.  The plan has carried
+     * the entry since W35c-1.7 (`fixed_meta_entry`), but this test passes the clean plan, so
+     * the refusal it reaches is the writer's dry run, which pins the FixedMeta flag byte 16
+     * (0x07 in the control) as one value.  Each bit of it, and a bit the control does not
+     * set, is one refusal with the byte named. */
     for (const int flags : {0x06, 0x05, 0x03, 0x0F, 0x27}) {
         for (const std::size_t entry : {std::size_t{4}, std::size_t{5}}) {
             mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);

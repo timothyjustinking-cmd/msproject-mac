@@ -116,7 +116,7 @@ Builder record: `wave35c-verification/gates-g2.md`. Commits: `4e957ae` (2.1), `e
 | Item | Finding | Status |
 |---|---|---|
 | 2.1 | R35bG0-6 | fixed `4e957ae` |
-| 2.2 | R35bG0-7 | fixed `ecc51d1` |
+| 2.2 | R35bG0-7 | fixed `ecc51d1`; it also closes the writer half of R35cG0-2 (the writer compares +96 and 2.2 makes +104/+108 equal to +96/+100, so `save_calculate` alone refuses a stale +104), recorded by W35d-2.1 (R35cW-3); the plan half stays open, since the plan reads +104 only |
 | 2.3 | R35bG0-8 | fixed `8e41da3` in the writer; `push()` has no file, so the save refuses a hand-built edit |
 | 2.4 | R35bG2-2 | partly fixed `21b61d6` (tests only): `d8cfb6c` (2.7) put the scratch-existence refusal in front of the chain, so no test reached it again and the "two mutations" no longer applied (R35cG2-1); closed by W35d-1.3 `roundtrip_calculate`'s fault-seam test |
 | 2.5 | R35bG2-5 | fixed `cb40334` (statements and a comment; also closed incidentally earlier) |
