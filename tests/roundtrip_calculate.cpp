@@ -1118,6 +1118,14 @@ void refused_requests() {
             std::swap(meta[16 + 4 * 47 + i], meta[16 + 5 * 47 + i]);
         }
         swapped.replace_stream("114/TBkndTask/FixedMeta", meta);
+        /* W35d-2.6 (R35cG2-3): the Fixed2Meta entries move with them, so the file stays
+         * consistent (each Fixed2Meta entry names the Fixed2Data record of the row whose
+         * FixedMeta entry is at its index). */
+        Bytes f2swap = swapped.read_stream("114/TBkndTask/Fixed2Meta");
+        for (std::size_t i = 0; i < 96; ++i) {
+            std::swap(f2swap[16 + 4 * 96 + i], f2swap[16 + 5 * 96 + i]);
+        }
+        swapped.replace_stream("114/TBkndTask/Fixed2Meta", f2swap);
         mppwrite::CalculateShape shape;
         std::string reason;
         check(mppwrite::read_calculate_shape(swapped, shape, reason),
@@ -1144,6 +1152,23 @@ void refused_requests() {
         }
         swapped.replace_stream("114/TBkndTask/FixedMeta", meta);
         TaskTable const rows = TaskTable::from_document(swapped);
+        /* W35d-2.6 (R35cG2-3): swapping the FixedMeta entries alone leaves each Fixed2Meta
+         * entry naming the other row's Fixed2Data record, an inconsistent pairing that task_mode
+         * refuses.  Calculate used to read the flag there and only blame a uid. */
+        {
+            refuses([&] { mppwrite::save_calculate(swapped, good, path); },
+                    "task uid " + std::to_string(rows.uid(1)) +
+                        ": its Fixed2Meta entry does not name Fixed2Data record 4",
+                    "2.9: FixedMeta swapped alone, Fixed2Meta pairing not checked");
+        }
+        /* The consistent swap: the Fixed2Meta entries move with the FixedMeta ones. */
+        {
+            Bytes f2swap = swapped.read_stream("114/TBkndTask/Fixed2Meta");
+            for (std::size_t i = 0; i < 96; ++i) {
+                std::swap(f2swap[16 + 4 * 96 + i], f2swap[16 + 5 * 96 + i]);
+            }
+            swapped.replace_stream("114/TBkndTask/Fixed2Meta", f2swap);
+        }
         {
             CfbDocument doc = swapped;
             Bytes f2meta = doc.read_stream("114/TBkndTask/Fixed2Meta");
