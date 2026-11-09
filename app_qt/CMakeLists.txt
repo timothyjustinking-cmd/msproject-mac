@@ -918,12 +918,16 @@ add_test(NAME qt_data_commands
 # ===========================================================================
 add_executable(qt_sort_persist_tests tests/sort_persist_test.cpp)
 target_link_libraries(qt_sort_persist_tests PRIVATE qt_shell)
+target_include_directories(qt_sort_persist_tests PRIVATE "${QT_REPO_ROOT}/tests")
 qt_set_warnings(qt_sort_persist_tests)
 
 add_test(NAME qt_sort_persist
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_sort_persist_tests>
-                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-sort-name-desc-control.mpp")
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-sort-name-desc-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-sort-name-desc.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-sort-name-desc-control-null.mpp")
 
 # ===========================================================================
 # WAVE 35 (W35-2.3): the Outline menu's result through the shell.  Level 1 or 2
@@ -933,13 +937,17 @@ add_test(NAME qt_sort_persist
 # ===========================================================================
 add_executable(qt_outline_persist_tests tests/outline_persist_test.cpp)
 target_link_libraries(qt_outline_persist_tests PRIVATE qt_shell)
+target_include_directories(qt_outline_persist_tests PRIVATE "${QT_REPO_ROOT}/tests")
 qt_set_warnings(qt_outline_persist_tests)
 
 add_test(NAME qt_outline_persist
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_outline_persist_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-level1-control.mpp"
-                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-deep-level1-control.mpp")
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-deep-level1-control.mpp"
+                 "${QT_TEST_OUT_DIR_CMAKE}"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-level1.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-level1-control-null.mpp")
 
 # ===========================================================================
 # WAVE 31 (G2, W31-2.2): Entire Project and Selected Tasks are fitted to the

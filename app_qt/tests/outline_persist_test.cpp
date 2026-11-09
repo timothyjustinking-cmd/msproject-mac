@@ -9,26 +9,50 @@
 // withdraws a queued level.  The edit model's own rules and the bytes are proven
 // by app_edits_show_level_tests and mppwrite_roundtrip_viewstate_outline.
 //
+// W35b-3.4 (coordinator mutation M13 on G2): the saved file is compared with Project's own
+// save of the pair, stream by stream under the null-save discipline
+// (tests/save_pair_compare.h), not merely checked for a queued edit.
+//
 //   qt_outline_persist_tests <wave35-viewstate-outline-level1-control.mpp>
 //                            <wave35-viewstate-outline-deep-level1-control.mpp>
+//                            <out-dir>
+//                            <wave35-viewstate-outline-level1.mpp>
+//                            <wave35-viewstate-outline-level1-control-null.mpp>
 
 #include <QApplication>
 #include <QString>
 
+#include <array>
 #include <cstddef>
 #include <cstdio>
+#include <exception>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <vector>
 
+#include "cfb_writer.h"
 #include "edit_model.h"
+#include "edl_control_path.h"
 #include "entry_columns.h"
+#include "fixture_guard.h"
 #include "main_window.h"
 #include "sheet_table_model.h"
 #include "shell_style.h"
 
 #include "gate_util.h"
+#include "save_pair_compare.h"
 
 namespace {
+
+struct PairContext {
+    void check(bool ok, const std::string& what) const { gate::check(ok, what.c_str()); }
+    void expected_failure(bool unexpected_pass, const std::string& what) const {
+        gate::check(false, ("unexpected KnownGap report: " + what +
+                            (unexpected_pass ? " (gap gone)" : ""))
+                               .c_str());
+    }
+};
 
 const app::StructuralEdit* queued_level(const msqt::MainWindow& window) {
     const std::vector<app::StructuralEdit>& applied = window.pending_edits().applied();
@@ -47,12 +71,17 @@ bool status_contains(const msqt::MainWindow& window, const char* needle) {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     msqt::configure_application();
-    if (argc < 3) {
-        std::fprintf(stderr, "usage: qt_outline_persist_tests <five-task.mpp> <six-task.mpp>\n");
+    if (argc < 6) {
+        std::fprintf(stderr,
+                     "usage: qt_outline_persist_tests <five-task.mpp> <six-task.mpp> <out-dir> "
+                     "<project-result.mpp> <control-null-save.mpp>\n");
         return 2;
     }
     const QString five = QString::fromLocal8Bit(argv[1]);
     const QString six = QString::fromLocal8Bit(argv[2]);
+    const QString out_dir = QString::fromLocal8Bit(argv[3]);
+    const std::string project_result = argv[4];
+    const std::string null_save_path = argv[5];
 
     msqt::MainWindow window;
     window.resize(msqt::kWindowWidth, msqt::kWindowHeight);
@@ -178,6 +207,53 @@ int main(int argc, char** argv) {
                     "unsaved rename: the status line says save or undo the grid edits first");
         gate::check(status_contains(window, "session only"),
                     "unsaved rename: the status line says session only");
+    }
+
+    // W35b-3.4: Level 1 on the five-task control, saved through File > Save, is Project's own
+    // save of the pair (outline-level1), every stream under the null-save discipline.  The
+    // same bytes the core and app tests pin, here through the shell's queue and save path.
+    {
+        std::error_code file_error;
+        std::filesystem::create_directories(out_dir.toStdString(), file_error);
+        const QString saved_path = out_dir + QStringLiteral("/w35b-qt-outline-level1-saved.mpp");
+        std::filesystem::remove(saved_path.toStdString(), file_error);
+        gate::check(window.open_file(five, &error), "the five-task fixture reopens for the save");
+        QApplication::processEvents();
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                    "Level 1 is queued for the save");
+        QString save_error;
+        const bool saved = window.save_document_path(saved_path, &save_error);
+        gate::check(saved, "the queued Level 1 saves");
+        if (!saved) {
+            std::fprintf(stderr, "note: save error: %s\n", save_error.toStdString().c_str());
+        } else {
+            try {
+                fixture::require_committed(project_result);
+                fixture::require_committed(null_save_path);
+                const mppwrite::CfbDocument control_doc =
+                    mppwrite::CfbDocument::from_file(five.toStdString());
+                const std::size_t control_path_bytes = edl_control_path::path_record_bytes(
+                    control_doc.read_stream(edl_control_path::kEdlVar2));
+                const mppwrite::CfbDocument null_doc =
+                    edl_control_path::with_control_path_size(null_save_path, control_path_bytes);
+                const mppwrite::CfbDocument project_doc =
+                    edl_control_path::with_control_path_size(project_result, control_path_bytes);
+                const mppwrite::CfbDocument saved_doc =
+                    mppwrite::CfbDocument::from_file(saved_path.toStdString());
+                PairContext context;
+                const std::array<const char*, 5> declared{
+                    {"Props14", "114/TBkndTask/FixedMeta", "214/CEdl/Var2Data",
+                     "214/CEdl/VarMeta", "214/Props"}};
+                save_pair::compare_all(context, "qt outline level1", control_doc, null_doc,
+                                       project_doc, saved_doc, nullptr, 0, declared.data(),
+                                       declared.size());
+            } catch (const std::exception& pair_error) {
+                std::fprintf(stderr, "note: pair comparison error: %s\n", pair_error.what());
+                gate::check(false, "the saved file is compared with Project's pair");
+            }
+        }
     }
 
     std::printf("qt_outline_persist: ");
