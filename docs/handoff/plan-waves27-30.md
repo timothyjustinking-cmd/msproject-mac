@@ -405,7 +405,7 @@ Wave 35c closed the G4 and CLOSE review queue (`wave35b-verification/coord-gates
 ## Queued from wave 35c (CLOSE): the fix-only `wave35d` (10 November 2026)
 
 The complete queue is `wave35c-verification/coord-gates-close.md`, Highs first; `wave35d` (branch
-`wave35d`, brief `wave35d-brief.md`, record `wave35d-complete.md`) works it.  State after G2:
+`wave35d`, brief `wave35d-brief.md`, record `wave35d-complete.md`) worked it and closed (`WAVE-35d-COMPLETE`).  State at CLOSE:
 
 - **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (fixed `6458203`).
 - **CI:** R35cW-CI1 (fixed `23de6e2`), R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS is the
