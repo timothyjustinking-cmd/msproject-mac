@@ -37,9 +37,11 @@ void set_calculate_fault_after_appends(std::size_t appends) {
 }
 
 /* W35d-2.7 (R35cG2-6): the test-only fault seam of the scratch-path probe (calculate.h). */
+static std::filesystem::file_type g_scratch_probe_type = std::filesystem::file_type::none;
 static std::error_code g_scratch_probe_fault;
 
-void set_calculate_scratch_probe_fault(std::error_code fault) {
+void set_calculate_scratch_probe_fault(std::filesystem::file_type type, std::error_code fault) {
+    g_scratch_probe_type = type;
     g_scratch_probe_fault = fault;
 }
 
@@ -1056,7 +1058,7 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
      * it cannot look (an unreadable parent, a path error), and that is not "already exists", so
      * the OS message is given and the advice to move a file aside is not. */
     std::filesystem::file_status const scratch_status =
-        g_scratch_probe_fault ? std::filesystem::file_status(std::filesystem::file_type::none)
+        g_scratch_probe_fault ? std::filesystem::file_status(g_scratch_probe_type)
                               : std::filesystem::symlink_status(scratch, ignored);
     if (g_scratch_probe_fault) {
         ignored = g_scratch_probe_fault;

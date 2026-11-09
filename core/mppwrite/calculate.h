@@ -51,6 +51,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <filesystem>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -171,13 +172,15 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
 void set_calculate_fault_after_appends(std::size_t appends);
 
 /*
- * TEST ONLY (W35d-2.7, R35cG2-6).  A fault seam for the scratch-path probe: when `fault` is set,
- * save_calculate behaves as if looking at the scratch path had failed with that error and no
- * file type, so a test can prove the refusal gives the OS message and not "already exists".
- * A default-constructed error_code turns it off; process-wide, not thread-safe; nothing in the
- * application calls it.
+ * TEST ONLY (W35d-2.7, R35cG2-6; the pair is W35e-2.11, R35dG2-4).  A fault seam for the
+ * scratch-path probe: when `fault` is set, save_calculate behaves as if looking at the scratch
+ * path had reported file type `type` with that error, so a test can prove the refusal gives the
+ * OS message and not "already exists" (type none: the probe could not look), and that a
+ * not_found type is a free path even when the error code is set (the save proceeds).  A
+ * default-constructed error_code turns it off whatever `type` is; process-wide, not
+ * thread-safe; nothing in the application calls it.
  */
-void set_calculate_scratch_probe_fault(std::error_code fault);
+void set_calculate_scratch_probe_fault(std::filesystem::file_type type, std::error_code fault);
 
 } /* namespace mppwrite */
 
