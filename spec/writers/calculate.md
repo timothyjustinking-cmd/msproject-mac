@@ -324,8 +324,10 @@ paths, the critical-slack limit, minutes per day and per week, schedule from, an
 defaults) live in `114/Props`, and the words the save recomputes (slack, late dates, the
 critical stamp) were measured only with the control's values of those options. No pair
 varies them, so the stream is pinned to the
-control's in `read_calculate_shape` (`check_props_pin`, `core/mppwrite/calculate.cpp`). The
-table is generated from the control by `scripts/gen_calculate_props_pin.py` into
+control's in `read_calculate_shape` (`check_props_pin`, `core/mppwrite/calculate.cpp`), as its
+last check (W35d-2.8, R35cW-5): the pin also holds per-file identity records, so every file but
+the control fails it, and run first it hid the resource-table, calendar, VarMeta-key, Active,
+FixedMeta and start-anchor reasons behind a text about options. The table is generated from the control by `scripts/gen_calculate_props_pin.py` into
 `core/mppwrite/calculate_props_pin.inc`; `--check` fails when the `.inc` is stale. Only
 what the save or a measured relation moves is exempt from the payload hash (the id, kind and
 length stay pinned): `0x02400003` (project finish) and `0x02400024` (pending flag), which the

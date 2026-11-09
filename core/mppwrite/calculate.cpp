@@ -858,8 +858,6 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "may have moved");
             }
         }
-        /* W35c-0.3 (R35bG0-2): the project's calculation options, which no pair varies. */
-        check_props_pin(props);
         /* W35b-0.5 (R35G1-3): the parameters no pair varies. */
         check_unvaried_parameters(doc, rows);
         for (std::size_t row = 1; row < kRows; ++row) {
@@ -870,6 +868,13 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "anchored leaves");
             }
         }
+        /* W35c-0.3 (R35bG0-2): the project's calculation options, which no pair varies.
+         * W35d-2.8 (R35cW-5): last, not before the parameter checks.  The pin also holds
+         * per-file identity records (R35cG0-3), so every Project-saved file but the control
+         * fails it; run first, it hid the resource-table, calendar, VarMeta, Active, FixedMeta
+         * and start-anchor reasons behind a text about options.  Each of those checks and each
+         * pin test is unchanged: the pin tests alter only a Props record, so they reach it. */
+        check_props_pin(props);
         return true;
     } catch (Error const& caught) {
         error = caught.what();
