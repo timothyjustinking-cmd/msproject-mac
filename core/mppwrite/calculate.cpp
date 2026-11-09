@@ -514,6 +514,20 @@ void check_request(CalculateShape const& shape, TaskTable const& rows,
             throw Error("calculate: uid " + std::to_string(leaf.uid) +
                         " has a late finish after the project finish");
         }
+        /* W35b-2.2 (R35G1-5): the unlinked backward pass gives every leaf the project
+         * finish as its late finish (spec/writers/calculate.md section 8), and the leaf
+         * that ends the project has no slack and starts late where it starts early. */
+        if (leaf.late_finish != request.project_finish) {
+            throw Error("calculate: uid " + std::to_string(leaf.uid) +
+                        " has a late finish before the project finish; the unlinked "
+                        "backward pass gives every leaf the project finish");
+        }
+        if (leaf.uid == shape.critical_uid &&
+            (leaf.total_slack != 0 || leaf.late_start != start)) {
+            throw Error("calculate: uid " + std::to_string(leaf.uid) +
+                        " ends the project, so its slack is 0 and its late start is its "
+                        "early start");
+        }
         if (leaf.free_slack < 0 || leaf.total_slack < 0 ||
             leaf.start_slack != leaf.total_slack ||
             leaf.free_slack != leaf.total_slack) {

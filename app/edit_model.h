@@ -279,6 +279,11 @@ struct StructuralEdit {
     int show_level = 0;
     std::vector<std::uint32_t> outline_uids;
     std::vector<std::uint32_t> outline_levels;
+    // calculate_project (W35b-2.2): an FNV-1a 64 digest of the source file's container as
+    // the edit was built from it.  The save refuses unless the file it opens hashes the
+    // same, so the per-leaf slack the edit carries is proved to belong to that file.
+    // 0 = not set (a hand-built edit), which the save refuses.
+    std::uint64_t source_digest = 0;
 
     // --- set_field / clear_field -------------------------------------------
     // One of the six measured ids (app::is_measured_task_field): Text1,

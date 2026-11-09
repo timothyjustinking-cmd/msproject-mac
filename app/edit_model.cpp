@@ -3561,6 +3561,18 @@ bool make_wbs_code_edit(const PlanInput& plan, std::string_view source_path,
 
 namespace {
 
+// W35b-2.2 (R35G1-5): FNV-1a 64 over the container bytes the writers would re-emit.  The
+// Calculate Project edit records it at build time and the save compares it, so the slack the
+// edit carries is proved to belong to the file being saved.
+std::uint64_t document_digest(const mppwrite::CfbDocument& document) {
+    std::uint64_t hash = 0xcbf29ce484222325ull;
+    for (const std::uint8_t byte : document.to_bytes()) {
+        hash ^= byte;
+        hash *= 0x100000001b3ull;
+    }
+    return hash == 0 ? 1 : hash;
+}
+
 // W35-1.3: the plan-side half of the Calculate Project rule, shared by the
 // builder and push().  wave35-calculate-unlinked holds the project row and two
 // saved top-level automatic leaves with no link, constraint, progress or task
@@ -3792,6 +3804,7 @@ bool make_calculate_edit(const PlanInput& plan, std::string_view source_path,
         return false;
     }
     out.kind = StructuralKind::calculate_project;
+    out.source_digest = document_digest(document);
     out.summary_duration = request.project_duration;
     out.restored_finish = static_cast<date32>(request.project_finish);
     out.slack = std::move(slack);
@@ -6371,11 +6384,20 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         // 5k (wave 35, W35-1.3).  The measured Calculate Project save: the
         // recalculated project row and leaves, five overtime records, the two
         // 114/Props records, the summary and the marker (core/mppwrite/
-        // calculate.h).  The edit is exclusive (checked above); a dry run first
-        // proves the file is still the one the edit was built from, then the
-        // writer re-validates and writes the target once.  A refusal is an
-        // exception, reported as the save error.
+        // calculate.h).  The edit is exclusive (checked above).  The digest of the
+        // file the edit was built from must equal the digest of the file in hand
+        // (W35b-2.2: the per-leaf slack is derived from that file's rows and the
+        // writer cannot recompute it), a dry run then validates the request against
+        // the file, and the writer re-validates and writes the target once.  A
+        // refusal is an exception, reported as the save error.
         if (calculate_edit != nullptr) {
+            if (calculate_edit->source_digest == 0 ||
+                calculate_edit->source_digest != document_digest(document)) {
+                throw mppwrite::Error(
+                    "calculate: the project file has changed since Calculate Project was "
+                    "queued (or the edit was not built from it); the recalculated slack "
+                    "belongs to the earlier file, so build the calculation again");
+            }
             mppwrite::CalculateRequest request;
             request.project_duration = calculate_edit->summary_duration;
             request.project_finish = calculate_edit->restored_finish;

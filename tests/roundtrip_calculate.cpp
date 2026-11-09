@@ -334,6 +334,34 @@ void refused_requests() {
                 "slack the unlinked shape cannot have", "free slack differs");
     }
     {
+        /* W35b-2.2 (R35G1-5): the unlinked backward pass gives every leaf the project finish as
+         * its late finish; a request whose late finish is earlier is the caller's engine
+         * disagreeing with the rule, and the writer does not trust it. */
+        CfbDocument doc = control;
+        mppwrite::CalculateShape shape;
+        std::string reason;
+        check(mppwrite::read_calculate_shape(doc, shape, reason), "2.2: the control reads");
+        std::size_t noncritical = 0;
+        std::size_t critical = 0;
+        for (std::size_t i = 0; i < good.leaves.size(); ++i) {
+            (good.leaves[i].uid == shape.critical_uid ? critical : noncritical) = i;
+        }
+        CalculateRequest bad = good;
+        bad.leaves[noncritical].late_finish -= 0x10000; /* a day earlier, still >= its finish */
+        bad.leaves[noncritical].late_start -= 0x10000;
+        refuses([&] { mppwrite::save_calculate(doc, bad, path); },
+                "late finish before the project finish", "late finish short of the project finish");
+        CalculateRequest slack = good;
+        slack.leaves[critical].total_slack = slack.leaves[critical].free_slack =
+            slack.leaves[critical].start_slack = 4800;
+        refuses([&] { mppwrite::save_calculate(doc, slack, path); }, "ends the project, so its slack is 0",
+                "critical leaf with slack");
+        CalculateRequest late = good;
+        late.leaves[critical].late_start += 0x10000;
+        refuses([&] { mppwrite::save_calculate(doc, late, path); }, "ends the project, so its slack is 0",
+                "critical leaf with a late start after its start");
+    }
+    {
         CfbDocument doc = control;
         refuses([&] { mppwrite::save_calculate(doc, good, ""); },
                 "output path is empty", "empty path");
