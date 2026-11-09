@@ -191,6 +191,7 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     // the project calendar.
     row.calendar_uid = task.calendar_uid;
     row.type_block_stored = task.type_block_stored;
+    row.type_block_known = true;
     // W35b-0.5 (R35G1-3): Task.Active and the stored Baseline 0.
     row.active = task.active;
     row.baseline_stored = task.baseline.stored;

@@ -2926,6 +2926,11 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
                       "implemented in this port: the measured Project pairs "
                       "use an unconstrained task";
     }
+    if (!task->type_block_known) {
+        return what + " on a task whose stored task type was not read from the "
+                      "file is not implemented in this port: the measured Project "
+                      "pairs use a task read with no stored type block";
+    }
     if (task->type_block_stored) {
         return what + " on a task that stores a task type is not implemented in "
                       "this port: the measured Project pairs use a task with no "
