@@ -423,6 +423,11 @@ void check_refusals() {
         expect_refused(moved, source, one_key(app::SortKeyKind::name, true), true, false,
                        "an ascending sort that reorders rows is unmeasured",
                        "a Name ascending sort that would move rows");
+        // W35c-1.8 (R35bG1-1): the message read `sorted[index]` after `sorted.clear()`; it must
+        // name the UniqueID the sort computed (4: "Task 4" now sorts before "Task Z").
+        expect_refused(moved, source, one_key(app::SortKeyKind::name, true), true, false,
+                       "would put UniqueID 4 at row 1 where the file has UniqueID 1",
+                       "the reorder refusal names the UniqueIDs it computed");
 
         app::StructuralEdits edits;
         app::StructuralEdit duration_up = hand_edit(named);
