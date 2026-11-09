@@ -42,6 +42,7 @@
 
 #include "gate_util.h"
 #include "main_window.h"
+#include "prompt_hook.h"
 #include "ribbon_bar.h"
 #include "spelling.h"
 #include "spelling_dialog.h"
@@ -248,25 +249,6 @@ void check_dialog_chrome(const DialogSeen& seen) {
                 "the dialog reports the port's own word-list size");
 }
 
-struct InputDialogResult {
-    bool seen = false;
-};
-
-void accept_input_dialog(InputDialogResult* seen, const QString& text) {
-    QTimer::singleShot(0, [seen, text]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* dialog = qobject_cast<QInputDialog*>(widget);
-            if (dialog == nullptr || !dialog->isVisible()) {
-                continue;
-            }
-            seen->seen = true;
-            dialog->setTextValue(text);
-            dialog->accept();
-            return;
-        }
-    });
-}
-
 void trigger(msqt::MainWindow& window, app::MenuAction id) {
     window.refresh_menu_state();
     QAction* action = gate::find_action(window, id);
@@ -340,9 +322,12 @@ void test_pending_insert(const QString& fixture) {
                 "the fixture opens in the pending-insert window");
     QApplication::processEvents();
     gate::check(window.sheet() != nullptr, "the pending-insert window has a sheet");
-    InputDialogResult input;
-    accept_input_dialog(&input, QStringLiteral("Speling Chek"));
-    trigger(window, app::MenuAction::insert_task);
+    gate::PromptResult input;
+    {
+        // W35b-4.R8: polls until the click returns, then stops with the scope.
+        gate::PromptAnswerer answerer(&input, true, QStringLiteral("Speling Chek"));
+        trigger(window, app::MenuAction::insert_task);
+    }
     gate::check(input.seen, "Insert Task asks for a name");
     QApplication::processEvents();
 

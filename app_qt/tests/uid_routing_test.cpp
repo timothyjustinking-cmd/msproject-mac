@@ -48,6 +48,7 @@
 #include "page_layout.h"
 #include "plan_document.h"
 #include "print_page.h"
+#include "prompt_hook.h"
 #include "reader.h"
 #include "shell_style.h"
 
@@ -123,49 +124,6 @@ void fill_and_accept_task_fields(FieldDialogResult* seen, const QString& text) {
                 dialog->custom_field_inputs().front()->setText(text);
                 seen->filled = true;
             }
-            dialog->accept();
-            return;
-        }
-    });
-}
-
-struct MessageBoxResult {
-    bool seen = false;
-    QString text;
-};
-
-void capture_message_box_and_reject(MessageBoxResult* seen) {
-    QTimer::singleShot(0, [seen]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* box = qobject_cast<QMessageBox*>(widget);
-            if (box == nullptr || !box->isVisible()) {
-                continue;
-            }
-            seen->seen = true;
-            seen->text = box->text();
-            if (QAbstractButton* no = box->button(QMessageBox::No)) {
-                no->click();
-            } else {
-                box->reject();
-            }
-            return;
-        }
-    });
-}
-
-struct InputDialogResult {
-    bool seen = false;
-};
-
-void fill_and_accept_input_dialog(InputDialogResult* seen, const QString& text) {
-    QTimer::singleShot(0, [seen, text]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* dialog = qobject_cast<QInputDialog*>(widget);
-            if (dialog == nullptr || !dialog->isVisible()) {
-                continue;
-            }
-            seen->seen = true;
-            dialog->setTextValue(text);
             dialog->accept();
             return;
         }
@@ -301,11 +259,12 @@ int main(int argc, char** argv) {
     // --- 4. Delete names the selected task ----------------------------------
     window.open_file(fixture, &error);
     select_row(window, 1);
-    MessageBoxResult delete_box;
-    capture_message_box_and_reject(&delete_box);
+    gate::PromptResult delete_box;
     QAction* remove = gate::find_action(window, app::MenuAction::delete_task);
     gate::check(remove != nullptr, "the Delete Task command exists");
     if (remove != nullptr) {
+        // W35b-4.R8: polls until the click returns, then stops with the scope.
+        gate::PromptAnswerer answerer(&delete_box, false, QString());
         remove->trigger();
     }
     gate::check(delete_box.seen, "Delete Task asks for confirmation");
@@ -377,11 +336,11 @@ int main(int argc, char** argv) {
         max_uid = std::max(max_uid, task.uid);
     }
     const std::uint32_t placeholder_uid = max_uid + 1;
-    InputDialogResult input_seen;
-    fill_and_accept_input_dialog(&input_seen, QStringLiteral("Pending Task"));
+    gate::PromptResult input_seen;
     QAction* insert = gate::find_action(window, app::MenuAction::insert_task);
     gate::check(insert != nullptr, "the Insert Task command exists");
     if (insert != nullptr) {
+        gate::PromptAnswerer answerer(&input_seen, true, QStringLiteral("Pending Task"));
         insert->trigger();
     }
     gate::check(input_seen.seen, "Insert Task asks for a name");

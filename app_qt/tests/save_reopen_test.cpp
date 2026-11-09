@@ -59,6 +59,7 @@
 #include "main_window.h"
 #include "menu_model.h"
 #include "preferences_store.h"
+#include "prompt_hook.h"
 #include "props.h"
 #include "reader.h"
 #include "ribbon_bar.h"
@@ -231,26 +232,18 @@ void select_row(msqt::MainWindow& window, std::size_t record_row) {
 }
 
 bool insert_task_named(msqt::MainWindow& window, const QString& name) {
-    bool seen = false;
-    QTimer::singleShot(0, [&seen, name]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* dialog = qobject_cast<QInputDialog*>(widget);
-            if (dialog == nullptr || !dialog->isVisible()) {
-                continue;
-            }
-            seen = true;
-            dialog->setTextValue(name);
-            dialog->accept();
-            return;
-        }
-    });
+    gate::PromptResult prompt;
     QAction* action = find_action(window, app::MenuAction::insert_task);
     if (action == nullptr || !action->isEnabled()) {
         return false;
     }
-    action->trigger();
-    QApplication::processEvents();
-    return seen;
+    {
+        // W35b-4.R8: polls until the click returns, then stops with the scope.
+        gate::PromptAnswerer answerer(&prompt, true, name);
+        action->trigger();
+        QApplication::processEvents();
+    }
+    return prompt.seen;
 }
 
 }  // namespace
@@ -483,45 +476,29 @@ int main(int argc, char** argv) {
         QListWidget* recent = backstage->new_recent_list();
         check(recent != nullptr && recent->count() == 1,
               "the New page lists the local recent file");
-        bool saw_recent_prompt = false;
-        QTimer::singleShot(0, [&saw_recent_prompt]() {
-            auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
-            if (box != nullptr) {
-                saw_recent_prompt = true;
-                if (QAbstractButton* cancel = box->button(QMessageBox::Cancel)) {
-                    cancel->click();
-                } else {
-                    box->reject();
-                }
-            }
-        });
+        // W35b-4.R8: the answerer polls until the click returns, then stops with the
+        // scope; this prompt has no No button, so it answers with reject() (Cancel).
+        gate::PromptResult recent_prompt;
         if (recent != nullptr && recent->count() > 0) {
+            gate::PromptAnswerer answerer(&recent_prompt, false, QString());
             recent->itemActivated(recent->item(0));
             QApplication::processEvents();
         }
-        check(saw_recent_prompt, "a Recent row on a dirty document asks first");
+        check(recent_prompt.seen && recent_prompt.question,
+              "a Recent row on a dirty document asks first");
         check(window.pending_edits().size() == 1 && window.document_dirty(),
               "Cancel on the Recent prompt keeps the pending Text1 edit");
         check(window.loaded_task_count() == 3,
               "Cancel on the Recent prompt keeps the open project");
 
-        bool saw_blank_prompt = false;
-        QTimer::singleShot(0, [&saw_blank_prompt]() {
-            auto* box = qobject_cast<QMessageBox*>(QApplication::activeModalWidget());
-            if (box != nullptr) {
-                saw_blank_prompt = true;
-                if (QAbstractButton* cancel = box->button(QMessageBox::Cancel)) {
-                    cancel->click();
-                } else {
-                    box->reject();
-                }
-            }
-        });
+        gate::PromptResult blank_prompt;
         if (QAbstractButton* blank = backstage->new_blank_button()) {
+            gate::PromptAnswerer answerer(&blank_prompt, false, QString());
             blank->click();
             QApplication::processEvents();
         }
-        check(saw_blank_prompt, "Blank Project on a dirty document asks first");
+        check(blank_prompt.seen && blank_prompt.question,
+              "Blank Project on a dirty document asks first");
         check(window.pending_edits().size() == 1 && window.document_dirty(),
               "Cancel on the Blank Project prompt keeps the pending Text1 edit");
         check(window.loaded_task_count() == 3,

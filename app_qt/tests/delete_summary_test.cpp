@@ -21,11 +21,8 @@
 //
 // Usage: qt_delete_summary <wave28-outline-indent.mpp> <out-dir>
 
-#include <QAbstractButton>
 #include <QAction>
 #include <QApplication>
-#include <QMessageBox>
-#include <QTimer>
 
 #include <cstddef>
 #include <cstdio>
@@ -36,44 +33,12 @@
 #include "layout_model.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "prompt_hook.h"
 #include "reader.h"
 #include "sheet.h"
 #include "shell_style.h"
 
 namespace {
-
-struct MessageBoxResult {
-    bool seen = false;
-    QString text;
-};
-
-// The shell asks with QMessageBox::question (Yes/No).  Accepting is deliberate:
-// if the summary delete still reaches the confirmation, the pre-fix shell queues
-// it and the "queues nothing" checks fail instead of merely observing a dialog.
-void capture_message_box(MessageBoxResult* seen, bool accept) {
-    QTimer::singleShot(0, [seen, accept]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* box = qobject_cast<QMessageBox*>(widget);
-            if (box == nullptr || !box->isVisible()) {
-                continue;
-            }
-            seen->seen = true;
-            seen->text = box->text();
-            if (accept) {
-                if (QAbstractButton* yes = box->button(QMessageBox::Yes)) {
-                    yes->click();
-                } else {
-                    box->accept();
-                }
-            } else if (QAbstractButton* no = box->button(QMessageBox::No)) {
-                no->click();
-            } else {
-                box->reject();
-            }
-            return;
-        }
-    });
-}
 
 std::uint32_t uid_of_id(const mpp::Document& document, std::uint32_t id) {
     for (const mpp::Task& task : document.tasks) {
@@ -165,13 +130,18 @@ int main(int argc, char** argv) {
 
     // --- the summary row is refused before any confirmation -----------------
     select_row(window, row_of_uid(*window.sheet(), summary_uid));
-    MessageBoxResult summary_box;
-    capture_message_box(&summary_box, true);
-    remove->trigger();
-    // A refusal returns without opening a modal loop, so the capture timer
-    // above is still queued.  Run it now: it must find no dialog, and the next
-    // capture (leaf section) must not inherit a stale accept.
-    QApplication::processEvents();
+    // The shell asks with QMessageBox::question (Yes/No).  Accepting is deliberate:
+    // if the summary delete still reaches the confirmation, the pre-fix shell queues
+    // it and the "queues nothing" checks fail instead of merely observing a dialog.
+    // The answerer (W35b-4.R8) polls until the click returns and stops with its
+    // scope, so a refusal that opens no dialog leaves nothing to answer the leaf
+    // section's.
+    gate::PromptResult summary_box;
+    {
+        gate::PromptAnswerer answerer(&summary_box, true, QString());
+        remove->trigger();
+        QApplication::processEvents();
+    }
     gate::check(!summary_box.seen,
                 "the summary delete shows no confirmation dialog");
     gate::check(window.pending_edits().empty(),
@@ -200,10 +170,11 @@ int main(int argc, char** argv) {
                 "the leaf Delete Task command is enabled");
 
     // --- a leaf still reaches the confirmation ------------------------------
-    MessageBoxResult leaf_box;
-    capture_message_box(&leaf_box, false);
+    gate::PromptResult leaf_box;
     if (remove_leaf != nullptr) {
+        gate::PromptAnswerer answerer(&leaf_box, false, QString());
         remove_leaf->trigger();
+        QApplication::processEvents();
     }
     gate::check(leaf_box.seen,
                 "a leaf delete still asks for confirmation");
