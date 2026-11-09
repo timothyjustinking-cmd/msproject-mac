@@ -11,6 +11,17 @@ only file a new session must read first._
 
 ## The 30-second state
 
+* **Wave 35c (fix-only) is closed on branch `wave35c`** (cut from `wave35b` at `2a97272`;
+  `docs/handoff/wave35c-complete.md`, `WAVE-35c-COMPLETE`, builder Claude Sonnet 5.5).  It fixed
+  both Calculate Project Highs (R35bG0-1, R35bG0-2), the GCC 13 `dangling-reference` break
+  (R35bW-CI1, **CI is its only proof**) and the wave 35b Mediums and Lows, adding no writer;
+  partly fixed: R35bG1-3 and R35bG2-6.  Still open and unassigned: R35bG0-9 and R35bG1-10.
+  Fresh-tree gates at `319d187` (`build/w35c/W35c-CLOSE-fresh-gates.log`) are all green,
+  `guard_names` included.  Nothing is pushed: the coordinator pushes `wave35c`, dispatches
+  `qt.yml` and `ci.yml`, runs mutations and an independent review of `wave35b..wave35c`.
+  Waves 34 to 35c are NOT merged until CI is green on all three OSs and no Critical or High is
+  open.
+
 * **Wave 35b (fix-only) is closed on branch `wave35b`** (cut from `wave35`;
   `docs/handoff/wave35b-complete.md`, `WAVE-35b-COMPLETE`, builder Claude Sonnet 5.5; records
   and reviews in `docs/handoff/wave35b-verification/`).  It fixed the wave 35 Highs (Calculate
