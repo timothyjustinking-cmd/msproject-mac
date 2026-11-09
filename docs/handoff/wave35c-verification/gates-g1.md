@@ -13,10 +13,10 @@ Scans each time: `check_fixtures.py`, `check_markers.py --range main..HEAD`, `gu
 
 | Item | Finding | Commit | Status |
 |---|---|---|---|
-| 1.1 | R35bG3-1 | `c408a07` | fixed: one guard over the outline changes while a level is queued |
+| 1.1 | R35bG3-1 | `c408a07` | partly fixed: one guard over the outline changes while a level is queued; remainder R35cG1-4 (W35d-1.2) |
 | 1.2 | R35bG4-1 | `aa1cef8` | fixed: a queued Show Level cannot come back on a Redo unseen |
-| 1.3 | R35bW-1 | `e439dd2` | fixed: a grid edit after a queued Sort or Show Level is refused |
-| 1.4 | R35bW-2 | `37e0e1f` | fixed: a replaced or cleared queued Sort cannot come back on a Redo |
+| 1.3 | R35bW-1 | `e439dd2` | partly fixed: a grid edit after a queued Sort or Show Level is refused; remainders R35cG1-2 (W35d-0.5) and R35cG1-3 (W35d-1.1) |
+| 1.4 | R35bW-2 | `37e0e1f` | partly fixed: a replaced or cleared queued Sort cannot come back on a Redo; remainder R35cG1-1 (W35d-0.4) |
 | 1.5 | R35bG0-3 | `cfe2e8a` | fixed, with residual limits recorded (below) |
 | 1.6 | R35bG0-4 | `7853816` | fixed (tests only) |
 | 1.7 | R35bG0-5 | `b9588b7` | the FixedMeta and VarMeta part fixed; the tie part closed by 1.11 |
