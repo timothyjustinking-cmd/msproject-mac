@@ -670,15 +670,26 @@ bool State::validate(std::uint32_t uid, TaskModeShape& shape,
 } /* namespace */
 
 bool read_task_file_shape(CfbDocument const& doc, std::string& error,
-                          std::string_view table) {
+                          std::string_view table, std::string_view pair) {
     error.clear();
     try {
         State state(doc, table);
-        return state.validate_file(error);
+        if (state.validate_file(error)) {
+            return true;
+        }
     } catch (Error const& caught) {
         error = caught.what();
         return false;
     }
+    /* The shared checks word every refusal for the task-mode pair; name the caller's. */
+    std::string_view const shared = "task-mode pair";
+    if (pair != shared) {
+        for (std::size_t at = error.find(shared); at != std::string::npos;
+             at = error.find(shared, at + pair.size())) {
+            error.replace(at, shared.size(), pair);
+        }
+    }
+    return false;
 }
 
 bool read_task_mode_shape(CfbDocument const& doc, std::uint32_t uid,

@@ -285,9 +285,11 @@ void unlinked_pair() {
 void refused_shapes() {
     for (auto const& [pair, needle] :
          std::vector<std::pair<std::string, std::string>>{
-             {"linked", "link rows"},
-             {"lag", "link rows"},
-             {"snet", "link rows"}}) {
+             /* W35b-4.G1-10 (R35G1-10): the refusal names the Calculate Project pair, not the
+              * task-mode pair the shared check was written for. */
+             {"linked", "link rows; the measured Calculate Project pair has an empty link table"},
+             {"lag", "link rows; the measured Calculate Project pair has an empty link table"},
+             {"snet", "link rows; the measured Calculate Project pair has an empty link table"}}) {
         CfbDocument doc = open("wave35-calculate-" + pair + "-control.mpp");
         CfbDocument const project = open("wave35-calculate-" + pair + ".mpp");
         std::string const path = out_path("w35-calculate-" + pair + "-refused.mpp");

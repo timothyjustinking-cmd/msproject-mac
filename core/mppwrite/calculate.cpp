@@ -366,7 +366,7 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
          * constrained file is refused here (the link table is non-empty) or
          * by the constraint check below. */
         std::string reason;
-        if (!read_task_file_shape(doc, reason, kTable)) {
+        if (!read_task_file_shape(doc, reason, kTable, "Calculate Project pair")) {
             return fail(error, reason);
         }
         std::vector<std::uint8_t> const meta =
