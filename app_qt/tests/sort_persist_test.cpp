@@ -398,6 +398,74 @@ int main(int argc, char** argv) {
         gate::check(queued_sort(window) != nullptr, "the refused cut leaves the Sort queued");
     }
 
+    // W35d-0.5 (R35cG1-2): Cut and Paste are cell edits and end the structural redo list, as
+    // after_cell_commit() does.  Route: Sort Name descending, Ctrl+Z (nothing is queued, so the
+    // cell gate is open), a cut or pasted Name, Ctrl+Y.  Left on the list, Redo re-queued the
+    // Sort over the unsaved name without push() or the builder, and Save wrote the file's own.
+    {
+        gate::check(window.open_file(fixture, &error), "the fixture reopens for the cut and paste gate");
+        QApplication::processEvents();
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        const std::size_t name_column =
+            model->visible_column_for_field(app::task_field_id("Name"));
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        QAction* cut = gate::find_action(window, app::MenuAction::cut);
+        QAction* copy = gate::find_action(window, app::MenuAction::copy);
+        QAction* paste = gate::find_action(window, app::MenuAction::paste);
+        gate::check(undo != nullptr && redo != nullptr && cut != nullptr && copy != nullptr &&
+                        paste != nullptr && name_column != core::sheet::kNoIndex,
+                    "Undo, Redo, Cut, Copy, Paste and a Name column exist");
+        if (undo != nullptr && redo != nullptr && cut != nullptr && copy != nullptr &&
+            paste != nullptr && name_column != core::sheet::kNoIndex) {
+            for (const bool pasting : {false, true}) {
+                const std::string route = pasting ? "Paste" : "Cut";
+                window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                         "Name descending", false);
+                QApplication::processEvents();
+                gate::check(queued_sort(window) != nullptr,
+                            (route + ": Name descending is queued").c_str());
+                undo->trigger();
+                QApplication::processEvents();
+                gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                            (route + ": Undo withdraws the Sort onto the redo list").c_str());
+                const int name_col = static_cast<int>(name_column);
+                if (pasting) {
+                    window.sheet()->select_cell(2, name_column);
+                    window.refresh_menu_state();
+                    QApplication::processEvents();
+                    copy->trigger();
+                    QApplication::processEvents();
+                }
+                window.sheet()->select_cell(1, name_column);
+                window.refresh_menu_state();
+                QApplication::processEvents();
+                gate::check(pasting ? paste->isEnabled() : cut->isEnabled(),
+                            (route + " is enabled on the Name cell").c_str());
+                (pasting ? paste : cut)->trigger();
+                QApplication::processEvents();
+                gate::check(status_contains(window, pasting ? "pasted 1 changed cell(s)"
+                                                            : "cut 1x1 cell(s), values only"),
+                            (route + " is applied to the Name cell").c_str());
+                const std::vector<QString> edited = displayed_names(model, name_col);
+                gate::check(!redo->isEnabled(),
+                            (route + " ends the structural redo list (Redo is disabled)").c_str());
+                redo->trigger();
+                QApplication::processEvents();
+                gate::check(window.pending_edits().empty(),
+                            (route + ": Redo re-queues no Sort over the edited name").c_str());
+                gate::check(displayed_names(model, name_col) == edited,
+                            (route + ": Redo leaves the edited names as they were").c_str());
+                window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+                QApplication::processEvents();
+                gate::check(window.open_file(fixture, &error),
+                            (route + ": the fixture reopens").c_str());
+                QApplication::processEvents();
+                model = window.sheet_table_model();
+            }
+        }
+    }
+
     // W35c-1.3: undo in the sheet, then Sort, then Ctrl+Y.  Queueing the Sort rebuilds the
     // document, and the rebuild's new sheet carries no history, so there is no sheet Redo to
     // re-apply the rename under the queued Sort.  This pins that: Redo is disabled and the

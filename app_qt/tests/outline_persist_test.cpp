@@ -465,6 +465,77 @@ int main(int argc, char** argv) {
         }
     }
 
+    // W35d-0.5 (R35cG1-2): Cut and Paste end the structural redo list.  Route: Level 1,
+    // Ctrl+Z (nothing queued, so the cell gate is open), a cut or pasted Name, Ctrl+Y.  Left on
+    // the list, Redo re-queued the level over the unsaved name without push() or the builder.
+    {
+        gate::check(window.open_file(five, &error), "the five-task fixture reopens (cut and paste)");
+        QApplication::processEvents();
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        const std::size_t name_column =
+            model->visible_column_for_field(app::task_field_id("Name"));
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        QAction* cut = gate::find_action(window, app::MenuAction::cut);
+        QAction* copy = gate::find_action(window, app::MenuAction::copy);
+        QAction* paste = gate::find_action(window, app::MenuAction::paste);
+        gate::check(undo != nullptr && redo != nullptr && cut != nullptr && copy != nullptr &&
+                        paste != nullptr && name_column != core::sheet::kNoIndex,
+                    "Undo, Redo, Cut, Copy, Paste and a Name column exist");
+        if (undo != nullptr && redo != nullptr && cut != nullptr && copy != nullptr &&
+            paste != nullptr && name_column != core::sheet::kNoIndex) {
+            for (const bool pasting : {false, true}) {
+                const std::string route = pasting ? "Paste" : "Cut";
+                window.apply_outline_level(1);
+                QApplication::processEvents();
+                gate::check(queued_level(window) != nullptr,
+                            (route + ": Level 1 is queued").c_str());
+                undo->trigger();
+                QApplication::processEvents();
+                gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                            (route + ": Undo withdraws Level 1 onto the redo list").c_str());
+                const int name_col = static_cast<int>(name_column);
+                const auto names = [&]() {
+                    std::vector<QString> all;
+                    for (int row = 0; row < model->rowCount(); ++row) {
+                        all.push_back(model->data(model->index(row, name_col)).toString());
+                    }
+                    return all;
+                };
+                if (pasting) {
+                    window.sheet()->select_cell(2, name_column);
+                    window.refresh_menu_state();
+                    QApplication::processEvents();
+                    copy->trigger();
+                    QApplication::processEvents();
+                }
+                window.sheet()->select_cell(1, name_column);
+                window.refresh_menu_state();
+                QApplication::processEvents();
+                gate::check(pasting ? paste->isEnabled() : cut->isEnabled(),
+                            (route + " is enabled on the Name cell").c_str());
+                (pasting ? paste : cut)->trigger();
+                QApplication::processEvents();
+                gate::check(status_contains(window, pasting ? "pasted 1 changed cell(s)"
+                                                            : "cut 1x1 cell(s), values only"),
+                            (route + " is applied to the Name cell").c_str());
+                const std::vector<QString> edited = names();
+                gate::check(!redo->isEnabled(),
+                            (route + " ends the structural redo list (Redo is disabled)").c_str());
+                redo->trigger();
+                QApplication::processEvents();
+                gate::check(window.pending_edits().empty(),
+                            (route + ": Redo re-queues no level over the edited name").c_str());
+                gate::check(names() == edited,
+                            (route + ": Redo leaves the edited names as they were").c_str());
+                gate::check(window.open_file(five, &error),
+                            (route + ": the fixture reopens").c_str());
+                QApplication::processEvents();
+                model = window.sheet_table_model();
+            }
+        }
+    }
+
     // W35b-3.4: Level 1 on the five-task control, saved through File > Save, is Project's own
     // save of the pair (outline-level1), every stream under the null-save discipline.  The
     // same bytes the core and app tests pin, here through the shell's queue and save path.

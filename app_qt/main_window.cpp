@@ -5038,6 +5038,10 @@ void MainWindow::cut_selection() {
         update_status();
         return;
     }
+    // W35d-0.5 (R35cG1-2): a cut is a cell edit, so it ends the structural redo list as
+    // after_cell_commit() does.  Left there, Redo re-queued a Sort or Show Level over the
+    // cleared cells without push() or the builder, and Save wrote the file's own values.
+    structural_.clear_redo();
     after_cell_change();
     set_message("cut " + std::to_string(clipboard_.rows) + "x" +
                     std::to_string(clipboard_.columns) + " cell(s), values only",
@@ -5120,6 +5124,10 @@ void MainWindow::paste_selection() {
                     true);
         update_status();
         return;
+    }
+    // W35d-0.5 (R35cG1-2): as Cut above; a paste that changed no cell leaves the list alone.
+    if (result.changed != 0) {
+        structural_.clear_redo();
     }
     after_cell_change();
     select_core_range_in_view();
