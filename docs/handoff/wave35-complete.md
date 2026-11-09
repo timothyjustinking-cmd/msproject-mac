@@ -135,7 +135,7 @@ View-state persistence.  One finding id per commit, in the brief's order.  G2 di
 |---|---|---|
 | W35-2.1 Sort | d6b396f | done: one Name or Duration key on the measured five-task shape (`sort_view` edit, shell queue) |
 | W35-2.2 fixtures | ae8fdc7 | done: two `TableApply` pairs and their null saves |
-| W35-2.2 Applied table | 94b0796 | deferred with evidence (decode and pair reports) |
+| W35-2.2 Applied table | 94b0796 | not attempted: scope decision (decode and pair reports only; no writer was tried, see W35b R35G2-8) |
 | W35-2.3 fixtures | 75b89c0 | done: five `OutlineShowTasks` pairs and their null saves |
 | W35-2.3 Outline level | 707425a | done: Show Level 1 and 2 on the two measured outlines (`save_view_outline`, `show_level` edit, shell queue) |
 | W35-2.4 fixtures | 5c550ed | done: five `ZoomTimescale` pairs and their null saves |
@@ -147,9 +147,9 @@ of 34 and Qt 52 of 52 pass; `plan_recalc` with `MPP_NO_CORPUS=1` passes; `check_
 `mppwrite_roundtrip_viewstate_outline` (1746 checks), `app_edits_show_level` and
 `qt_outline_persist`.
 
-### Deferred, with evidence of the attempt
+### Deferred (Zoom: with evidence of the attempt; Applied table: not attempted)
 
-**Applied table (W35-2.2).**  The two pairs append a built-in table definition blob to
+**Applied table (W35-2.2): not attempted, a scope decision (R35G2-8).**  No writer was attempted and no compare result or log exists, so this is not attempt evidence.  Standing rule 1 would permit the two measured shapes (Cost and Schedule on the measured base) with every other table refused; that attempt is queued for the next measuring wave.  What was done: the decode.  The two pairs append a built-in table definition blob to
 `CTable/Var2Data`, add a table row, and re-lay the view block around a name whose length
 changes.  The only rule available is "replay these blobs", with the view-block re-layout
 measured at two lengths.  `spec/writers/view-state.md` section 2 has the decode; the shell
