@@ -500,15 +500,26 @@ void check_unvaried_parameters(CfbDocument const& doc, TaskTable const& rows) {
 } /* namespace */
 
 int calculate_leaf_meta_mismatch(std::uint8_t const* entry, std::size_t size) {
+    /* Bytes 4-7 are the row's offset.  Bytes 8-11 are e3 ?? fd fe in the control, its null save
+     * and the Project-calculated file, with byte 9 ff on the lengthened leaf and bf on the
+     * other (the save does not change either), so byte 9 takes either value.  Bytes 12-15 are
+     * a per-file stamp (the project row's differs from the leaves'), the only bytes the
+     * measured entries do not constrain. */
     static std::uint8_t const kLeafMeta[kFixedMetaEntry] = {
-        0x00, 0x00, 0x09, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x00, 0x00, 0x09, 0x00, 0, 0, 0, 0, 0xE3, 0x00, 0xFD, 0xFE, 0, 0, 0, 0,
         0x07, 0x48, 0xEF, 0x1F, 0x10};
     if (entry == nullptr || size != kFixedMetaEntry) {
         return 0;
     }
     for (std::size_t i = 0; i < kFixedMetaEntry; ++i) {
-        if (i >= 4 && i < 16) {
-            continue; /* the row's offset and stamp */
+        if ((i >= 4 && i < 8) || (i >= 12 && i < 16)) {
+            continue; /* the row's offset; the per-file stamp */
+        }
+        if (i == 9) {
+            if (entry[i] != 0xBF && entry[i] != 0xFF) {
+                return static_cast<int>(i);
+            }
+            continue;
         }
         if (entry[i] != kLeafMeta[i]) {
             return static_cast<int>(i);
@@ -720,6 +731,27 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "08:00 to 17:00, whole 8-hour days), so the "
                                        "pending recalculation was not caused by a "
                                        "Duration edit alone");
+            }
+        }
+        /* W35c-2.2 (R35bG0-7): the leaf's second date copy (+104/+108) and its Remaining
+         * Duration (+88) equal its Start, Finish and Duration in the control, so a pending
+         * cause that updated one copy and not the other is refused. */
+        for (std::size_t row = 1; row < kRows; ++row) {
+            if (rows.u32(row, task_row::kStart2) != rows.u32(row, task_row::kStart) ||
+                rows.u32(row, task_row::kFinish2) != rows.u32(row, task_row::kFinish)) {
+                return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                       "'s second date copy (+104/+108) differs from its "
+                                       "Start and Finish, so the pending recalculation was "
+                                       "not caused by a Duration edit alone; the measured "
+                                       "Calculate Project save has the copies equal");
+            }
+            if (rows.u32(row, task_row::kRemainingDuration) !=
+                rows.u32(row, task_row::kDuration)) {
+                return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                       "'s remaining duration (+88) differs from its "
+                                       "duration, so the pending recalculation was not "
+                                       "caused by a Duration edit alone; the measured "
+                                       "Calculate Project save has them equal");
             }
         }
         /* W35c-0.2 (R35bG0-1): the leaf Start above is compared with row 0's Start, the

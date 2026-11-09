@@ -624,6 +624,61 @@ void refused_requests() {
                 "is not its start plus its duration", "leaf start edit");
     }
     {
+        /* W35c-2.2 (R35bG0-7): the leaf's second date copy and Remaining Duration equal its
+         * Start, Finish and Duration in the control.  Each is moved alone (the first-copy
+         * relations stay as they were), so only the new guard can refuse. */
+        CfbDocument start2 = control;
+        TaskTable rows = TaskTable::from_document(start2);
+        rows.set_u32(2, mppwrite::task_row::kStart2, 0x3BF312C0u);
+        rows.store_into(start2);
+        refuses([&] { mppwrite::save_calculate(start2, good, path); },
+                "second date copy (+104/+108) differs", "2.2: leaf Start2 moved");
+        CfbDocument finish2 = control;
+        TaskTable rows_f = TaskTable::from_document(finish2);
+        rows_f.set_u32(1, mppwrite::task_row::kFinish2, 0x3BF527D8u);
+        rows_f.store_into(finish2);
+        refuses([&] { mppwrite::save_calculate(finish2, good, path); },
+                "second date copy (+104/+108) differs", "2.2: leaf Finish2 moved");
+        CfbDocument remaining = control;
+        TaskTable rows_r = TaskTable::from_document(remaining);
+        rows_r.set_u32(2, mppwrite::task_row::kRemainingDuration, 4800);
+        rows_r.store_into(remaining);
+        refuses([&] { mppwrite::save_calculate(remaining, good, path); },
+                "remaining duration (+88) differs from its duration", "2.2: leaf remaining duration");
+    }
+    {
+        /* W35c-2.2 (R35bG0-7): FixedMeta bytes 8-11 of a leaf entry (e3 ?? fd fe) are pinned,
+         * byte 9 takes the control's two values (ff on the lengthened leaf, bf on the other),
+         * and bytes 12-15 are the per-file stamp the pin leaves free. */
+        auto meta_case = [&](std::size_t entry, std::size_t byte, std::uint8_t value) {
+            CfbDocument doc = control;
+            Bytes meta = doc.read_stream("114/TBkndTask/FixedMeta");
+            meta[16 + entry * 47 + byte] = value;
+            doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+            return doc;
+        };
+        mppwrite::CalculateShape shape;
+        std::string reason;
+        for (std::size_t entry : {4u, 5u}) {
+            for (std::size_t byte : {8u, 10u, 11u}) {
+                CfbDocument broken = meta_case(entry, byte, 0x00);
+                refuses([&] { mppwrite::save_calculate(broken, good, path); },
+                        "FixedMeta metadata flags differ from the measured entry at byte " +
+                            std::to_string(byte),
+                        "2.2: leaf FixedMeta byte " + std::to_string(byte));
+            }
+            CfbDocument nine = meta_case(entry, 9, 0x00);
+            refuses([&] { mppwrite::save_calculate(nine, good, path); },
+                    "FixedMeta metadata flags differ from the measured entry at byte 9",
+                    "2.2: leaf FixedMeta byte 9");
+            check(mppwrite::read_calculate_shape(meta_case(entry, 9, 0xBF), shape, reason) &&
+                      mppwrite::read_calculate_shape(meta_case(entry, 9, 0xFF), shape, reason),
+                  "2.2: byte 9 takes 0xbf or 0xff: " + reason);
+            check(mppwrite::read_calculate_shape(meta_case(entry, 12, 0x55), shape, reason),
+                  "2.2: the per-file stamp at byte 12 is free: " + reason);
+        }
+    }
+    {
         /* W35c-0.2 (R35bG0-1): ONLY the Props project start (0x02400002) moves, by a week
          * (Sunday 21:00 to the next Sunday 21:00), under manual calculation.  The leaves,
          * row 0 and every date relation are untouched, so the 0.3 and 0.4 checks pass and
