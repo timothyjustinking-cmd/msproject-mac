@@ -334,7 +334,7 @@ int main(int argc, char** argv) {
     // W35b-1.5 (RW35-R2): a grid edit that is not saved yet.  The session plan
     // carries the rename, so Sort would persist an order of names the file does
     // not store; the builder refuses it, nothing is queued, and the status line
-    // says to save or undo the grid edits first.
+    // says to undo the grid edits first (or save them).
     {
         gate::check(window.open_file(fixture, &error),
                     "the fixture reopens for the unsaved-edit gate");
@@ -353,8 +353,8 @@ int main(int argc, char** argv) {
         gate::check(status_contains(window, "Sort is not implemented in this port while the "
                                             "plan carries unsaved edits"),
                     "unsaved rename: the status line names the unsaved edits");
-        gate::check(status_contains(window, "save or undo the grid edits first"),
-                    "unsaved rename: the status line says save or undo the grid edits first");
+        gate::check(status_contains(window, "(or save them, where Save writes that field)"),
+                    "unsaved rename: the status line says undo the grid edits first (or save them)");
         gate::check(status_contains(window, "session only"),
                     "unsaved rename: the status line says session only");
     }
