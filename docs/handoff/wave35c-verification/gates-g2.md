@@ -19,7 +19,7 @@ Scans each time: `check_fixtures.py`, `check_markers.py --range main..HEAD`, `gu
 | 2.3 | R35bG0-8 | `8e41da3` | fixed in the writer; `push()` has no file, so the save refuses a hand-built edit (recorded) |
 | 2.4 | R35bG2-2 | `21b61d6` | partly fixed (tests only); had also been closed incidentally earlier.  Correction (W35d-1.3, R35cG2-1): `d8cfb6c` (2.7) put the up-front scratch refusal ahead of the chain, so no test reached the chain again; the fault-seam test in `roundtrip_calculate` does |
 | 2.5 | R35bG2-5 | `cb40334` | fixed (statements and a comment); no behaviour change |
-| 2.6 | R35bG2-6 | `fc9cae3` | first suggestion fixed (the app test asserts the digest refusal); the second is unreachable and recorded as defence in depth |
+| 2.6 | R35bG2-6 | `fc9cae3` | partly fixed (the app test asserts the digest refusal); the second suggestion is unreachable and recorded as defence in depth (one status for 2.6 here and in `wave35c-complete.md`, W35d-1.6, R35cG2-8) |
 | 2.7 | R35bG2-7 | `d8cfb6c` | fixed: an existing `<target>.calculate.tmp` is refused, not deleted |
 | 2.8 | R35bG4-2 | `6f95c27` | fixed |
 | 2.9 | R35bG4-3 | `36c1492` | fixed, both Fixed2Meta sites |

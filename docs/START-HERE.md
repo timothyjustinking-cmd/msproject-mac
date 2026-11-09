@@ -11,6 +11,20 @@ only file a new session must read first._
 
 ## The 30-second state
 
+* **Wave 35d (fix-only) is in progress on branch `wave35d`** (cut from `wave35c`;
+  `docs/handoff/wave35d-brief.md`, `docs/handoff/wave35d-complete.md`; nothing is pushed).  It
+  works the queue wave 35c left (`wave35c-verification/coord-gates-close.md`, Highs first).
+  State after G1:
+  * **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`) and R35cG1-2 (fixed
+    `6458203`).
+  * **CI:** R35cW-CI1 (fixed `23de6e2`) and R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS
+    is the only proof of each.
+  * **Mediums fixed:** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1 (`41f7a2c`),
+    R35cG0-3 (`6552f11`), R35cW-2 (`454521d`), and R35cW-1 with R35cG2-8 (this list).
+  * **Still open (G2):** the Medium R35cG0-2; the Lows R35cG0-4 to -6, R35cG1-5 to -7,
+    R35cG2-2 to -7 and R35cW-3 to -5.
+  * Every 35d fix still awaits an independent review, so waves 34 to 35d stay NOT merged.
+
 * **Wave 35c (fix-only) is closed on branch `wave35c`** (cut from `wave35b` at `2a97272`;
   `docs/handoff/wave35c-complete.md`, `WAVE-35c-COMPLETE`, builder Claude Sonnet 5.5).  It fixed
   both Calculate Project Highs (R35bG0-1, R35bG0-2), the GCC 13 `dangling-reference` break
@@ -34,7 +48,7 @@ only file a new session must read first._
   calculation options are not pinned), queued in `plan-waves27-30.md` ("Queued from wave
   35b").  Nothing is pushed; the coordinator's part is the `9fa599b` decision, push, both CI
   dispatches (CI is the only gate for `app/main.mm` and for macos-qt, W35b-0.1), an
-  independent review of `wave35..wave35b`, and the 4(e) Project reopen check.  The queue also holds, from the G4 and CLOSE reviews (added by W35c-2.24, R35bW-4; complete in `wave35b-verification/coord-gates-close.md`): R35bW-CI1 (the GCC 13 `dangling-reference` build break); the Mediums R35bG4-1 (Redo and the project-summary toggle still show every row while Save writes the queued Show Level), R35bW-1 (a grid edit made after a Sort or Show Level is queued is accepted) and R35bW-2 (replacing or clearing a queued Sort leaves it on the redo list); the Lows R35bG4-2 to -5, R35bG4-6 (the `TaskRow` `type_block_known` default is untested; mutation G7c stayed green), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS now), R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`) and R35bW-3 to -6.
+  independent review of `wave35..wave35b`, and the 4(e) Project reopen check.  Wave 35c closed the rest of that queue (the G4 and CLOSE review ids, complete in `wave35b-verification/coord-gates-close.md`) except: R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth.  What 35c left open is in the wave 35d line above.
 
 * **Wave 35 (the scheduler save path, view-state persistence, the wave-34 deferrals, the macOS
   shell) is closed on branch `wave35`** (`docs/handoff/wave35-complete.md`, builder Claude

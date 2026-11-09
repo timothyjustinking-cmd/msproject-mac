@@ -400,4 +400,18 @@ rewrite), RW35-W13, and the measuring-wave list at the end of the wave 35b brief
 `9fa599b` blobs (`wave35-g3-notes-generator*.mpp`) still sit in `wave35b` history and fail
 `guard_names`: the operator's and the coordinator's call.
 
-Also open, omitted above because the CLOSE predates the G4 review and the CLOSE review (added by W35c-2.24, R35bW-4; the complete queue is `wave35b-verification/coord-gates-close.md`, "The next fix wave's queue, complete"): R35bW-CI1 (the GCC 13 `dangling-reference` build break); the Mediums R35bG4-1 (Redo and the project-summary toggle still show every row while Save writes the queued Show Level), R35bW-1 (a grid edit made after a Sort or Show Level is queued is accepted) and R35bW-2 (replacing or clearing a queued Sort leaves it on the redo list); the Lows R35bG4-2 to -5, R35bG4-6 (the `TaskRow` `type_block_known` default is untested; mutation G7c stayed green), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS now), R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`) and R35bW-3 to -6.
+Wave 35c closed the G4 and CLOSE review queue (`wave35b-verification/coord-gates-close.md`) except R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth.
+
+## Queued from wave 35c (CLOSE): the fix-only `wave35d` (10 November 2026)
+
+The complete queue is `wave35c-verification/coord-gates-close.md`, Highs first; `wave35d` (branch
+`wave35d`, brief `wave35d-brief.md`, record `wave35d-complete.md`) works it.  State after G1:
+
+- **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (fixed `6458203`).
+- **CI:** R35cW-CI1 (fixed `23de6e2`), R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS is the
+  only proof of each.
+- **Mediums fixed:** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1 (`41f7a2c`), R35cG0-3
+  (`6552f11`), R35cW-2 (`454521d`), R35cW-1 with R35cG2-8 (this list).
+- **Still open (G2):** the Medium R35cG0-2; the Lows R35cG0-4 to -6, R35cG1-5 to -7,
+  R35cG2-2 to -7 and R35cW-3 to -5.
+- Every 35d fix awaits an independent review.
