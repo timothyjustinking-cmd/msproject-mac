@@ -1304,6 +1304,53 @@ void check_calendar_files() {
     }
 }
 
+/* W35b-2.12 (R35G3-6): the edit model's refusal of a removal from a file the port
+ * itself saved, pinned by the writer's specific needle.  The Qt gate checks only the
+ * prefix every writer refusal of this command carries.  The control is the port's own
+ * Assign Resources output on the wave-30 add control (Assn FixedMeta is the append
+ * shape, not the settled (rows - 1) / rows / flag 4 shape of a Project resave); the
+ * null save is Project's resave of it (settled, but its resource entry carries the
+ * session byte 0x5C).  Both are refused by the dry run behind make_assignment_edit. */
+void check_port_saved_removal() {
+    const std::filesystem::path control = data_path("wave35-g3-assign-remove-port-saved-control.mpp");
+    const std::filesystem::path resaved =
+        data_path("wave35-g3-assign-remove-port-saved-control-null.mpp");
+    const std::string prefix = "Removing an assignment is not implemented in this port for this project";
+    struct PortCase {
+        const std::filesystem::path* path;
+        const char* needle;
+        const char* label;
+    };
+    const PortCase cases[] = {
+        {&control, "FixedMeta is not the measured (rows - 1) / rows / flag 4 settled shape",
+         "the port's own save"},
+        {&resaved, "the target resource's FixedMeta byte 12 is 0x5C, not the measured 0x1C",
+         "the file Project resaved"},
+    };
+    for (const PortCase& one : cases) {
+        app::PlanInput plan;
+        try {
+            plan = load_plan(*one.path);
+        } catch (const std::exception&) {
+            check(false, std::string("the port-saved fixture loads: ") + one.label);
+            continue;
+        }
+        app::StructuralEdit edit;
+        std::string error;
+        const bool built = app::make_assignment_edit(plan, one.path->string(), 1, 2, false, edit, error);
+        check(!built, std::string("a removal from ") + one.label + " is refused");
+        check(error.find(prefix) == 0,
+              std::string("the refusal for ") + one.label + " is the dry-run refusal (got \"" +
+                  error + "\")");
+        check(error.find(one.needle) != std::string::npos,
+              std::string("the refusal for ") + one.label + " names \"" + one.needle +
+                  "\" (got \"" + error + "\")");
+        check(edit.kind == app::StructuralKind::insert_task && edit.uid == 0 &&
+                  edit.resource_uid == 0 && edit.assignment_uid == 0,
+              std::string("the refused edit for ") + one.label + " is left default-constructed");
+    }
+}
+
 // W35-4.1: the lookup both shells use to choose between assigning and removing.
 void check_held_assignment_resource() {
     app::PlanInput plan;
@@ -1330,6 +1377,7 @@ int main() {
     check_pair(kRemove);
     check_refusals();
     check_calendar_files();
+    check_port_saved_removal();
     check_held_assignment_resource();
     std::printf("app_edits_assignment_tests: %d checks passed\n", g_checks - g_failures);
     if (g_failures != 0) {
