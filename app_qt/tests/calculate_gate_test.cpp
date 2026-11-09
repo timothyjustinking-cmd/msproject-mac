@@ -150,6 +150,11 @@ int main(int argc, char** argv) {
         gate::check(window.status_left_text().contains(
                         QStringLiteral("Calculate Project is not implemented in this port")),
                     "the status line names the refusal");
+        // W35b-2.5 (RW35-R5): the prefix is on every refusal; the plan-side link gate is the one
+        // that must fire for a linked project.
+        gate::check(window.status_left_text().contains(
+                        QStringLiteral("for a project with links")),
+                    "the status line names the link gate, not another refusal");
     }
 
     // --- 2. the measured control, the save -----------------------------------
