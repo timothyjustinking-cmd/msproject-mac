@@ -1920,6 +1920,48 @@ void test_settled_damaged(TestContext& t) {
                 key(1, 1), "in an order no pair measures",
                 "settled add: a uid below two assigned resources");
     }
+    /* W35b-2.11 (R35G0-4): the new row copies an existing real row, so the
+     * resources already assigned are checked like the new one (resource 2, row 2
+     * of the resource tables, calendar uid 4), and the copied row's date words
+     * must be the task's own.  Each case damages the ALREADY ASSIGNED resource or
+     * row only; resource 1, the one being added, stays the measured shape. */
+    {
+        std::size_t const rsc2 = 48 + 172 * 2;
+        refuses(with_edit(control, kRscFixed,
+                          [&](Bytes& b) { put_f64_at(b, rsc2 + 16, 25.0); }),
+                target, "the resource's standard rate is not the measured one",
+                "settled add: an assigned resource with a standard rate");
+        refuses(with_edit(control, kRscMeta,
+                          [](Bytes& b) { b[16 + 37 * (2 + 3) + 13] = 0x00; }),
+                target, "the resource's FixedMeta entry differs from the measured entry",
+                "settled add: an assigned resource with another FixedMeta flag");
+        refuses(with_edit(control, kCalFixed,
+                          [](Bytes& b) {
+                              for (std::size_t row = 0; (64 + 12 * (row + 1)) <= b.size();
+                                   ++row) {
+                                  if (u32_at(b, 64 + 12 * row + 4) == 2) {
+                                      put_u32_at(b, 64 + 12 * row, 3);
+                                  }
+                              }
+                          }),
+                target, "is based on calendar 3",
+                "settled add: an assigned resource on another base calendar");
+        {
+            CfbDocument exception = doc_from_data(control);
+            add_cal_block(exception, 4, 0x0D400008u, 540);
+            refuses(exception, target, "the resource's calendar stores a block",
+                    "settled add: an assigned resource whose calendar has an exception");
+        }
+        /* Row 3 is the real row.  Its +56 is the finish word and +52 a start word. */
+        refuses(with_edit(control, kAssnFixed,
+                          [](Bytes& b) { put_u32_at(b, 3 * 110 + 56, 0x3bf51c20u); }),
+                target, "is not the task's own Start/Finish",
+                "settled add: a real row whose finish is not the task's");
+        refuses(with_edit(control, kAssnFixed,
+                          [](Bytes& b) { put_u32_at(b, 3 * 110 + 104, 0x3bf21e78u); }),
+                target, "is not the task's own Start/Finish",
+                "settled add: a real row whose start is not the task's");
+    }
     refuses(with_edit(control, kTaskFixed,
                       [](Bytes& b) { put_f64_at(b, 48 + 202 + 8, 1.0); }),
             target, "task row 1's work words", "settled add: the task work");

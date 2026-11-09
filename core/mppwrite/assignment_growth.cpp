@@ -106,6 +106,13 @@ constexpr std::size_t kAssnRowWork = 20;
 constexpr std::size_t kAssnRowZero = 28;
 constexpr std::size_t kAssnRowWorkCopy1 = 36;
 constexpr std::size_t kAssnRowWorkCopy2 = 44;
+/* The row's date words.  MEASURED on every assignment row of the wave30 and wave34
+ * pairs: +52 / +60 / +104 are the task's Start (task_row::kStart2) and +56 is its
+ * Finish (task_row::kFinish2) for a resource on the Standard calendar. */
+constexpr std::size_t kAssnRowStart = 52;
+constexpr std::size_t kAssnRowFinish = 56;
+constexpr std::size_t kAssnRowStart2 = 60;
+constexpr std::size_t kAssnRowStart3 = 104;
 
 /* The task row offsets are task_row::kWork and task_row::kWorkRollup; the
  * measured rows carry the same double at both. */
@@ -925,6 +932,11 @@ void check_project_calendar(CfbDocument const& doc, Bytes const& props,
     }
 }
 
+void check_measured_resource(CfbDocument const& doc, Bytes const& rsc_fixed,
+                             Bytes const& rsc_meta, std::size_t rsc_row,
+                             std::uint32_t resource_uid,
+                             std::string const& function);
+
 /* The task's and the resource's stored images must be the measured ones. */
 void check_measured_shape(CfbDocument const& doc, Bytes const& task_fixed,
                           Bytes const& task_meta, std::size_t task_row,
@@ -1029,10 +1041,22 @@ void check_measured_shape(CfbDocument const& doc, Bytes const& task_fixed,
              "field changes the shape)");
     }
 
+    check_measured_resource(doc, rsc_fixed, rsc_meta, rsc_row, resource_uid, function);
+}
+
+/* The resource's stored images must be the measured ones.  Used for the resource
+ * being assigned and, since W35b-2.11, for each resource a settled add finds
+ * already assigned: the measured pairs' resource rows, FixedMeta entries and
+ * calendars are identical before and after their assignment (the three work
+ * words are skipped), so one image serves both. */
+void check_measured_resource(CfbDocument const& doc, Bytes const& rsc_fixed,
+                             Bytes const& rsc_meta, std::size_t rsc_row,
+                             std::uint32_t resource_uid,
+                             std::string const& function) {
     /* The resource's FixedData row. */
     Bytes const rsc_image =
         slice(rsc_fixed, kRscHeaderBytes + rsc_row * kRscRowBytes, kRscRowBytes);
-    at = first_difference(rsc_image, measured_resource_row(),
+    long at = first_difference(rsc_image, measured_resource_row(),
                           {{0, 8}, {48, 56}, {90, 98}, {106, 114}, {154, 158}});
     if (at >= 0) {
         auto const named = [](long byte) -> char const* {
@@ -1510,7 +1534,14 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
          * tombstone), appends a fresh four-block VarMeta group, appends the
          * task leaf array and re-points its entry, and raises the roll-ups.
          * No existing FixedMeta entry, Fixed2Data record or Var2Data byte
-         * moves. */
+         * moves.
+         *
+         * Unproven: the task's effort-driven flag is not decoded, so the
+         * settled add is measured on the pairs' task only (spec/scheduling.md
+         * says adding a resource to an effort-driven task keeps Work; the
+         * pairs grow it).  The task's FixedMeta entry is compared with the
+         * measured one by check_measured_shape on the first assignment, not
+         * here. */
         if (real_rows.size() > 2) {
             fail(function + ": the task already has " +
                  std::to_string(real_rows.size()) +
@@ -1639,6 +1670,46 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             old_total += get_f64(assn_fixed, r * kAssnRowBytes + kAssnRowWork);
         }
         std::sort(assigned.begin(), assigned.end());
+        /* W35b-2.11 (R35G0-4): the new row is a copy of an existing real row, so
+         * everything that row holds comes from the resources already assigned.
+         * Each of them must be a resource the pairs measured -- the same row
+         * image, FixedMeta entry, stored blocks and Standard-derived calendar the
+         * new resource passed above -- and the copied row's date words must be the
+         * task's own (below).  A resource whose calendar has a day off inside the
+         * task would hold dates no pair measured, and the new row would inherit
+         * them. */
+        for (std::uint32_t const uid : assigned) {
+            check_measured_resource(doc, rsc_fixed, rsc_meta,
+                                    find_resource_row(rsc_fixed, rsc_rows, uid,
+                                                      function),
+                                    uid, function);
+        }
+        {
+            std::size_t const task_at =
+                kTaskHeaderBytes + task_row * kTaskRowBytes;
+            struct DateWord {
+                std::size_t assn;
+                std::size_t task;
+            };
+            static constexpr DateWord kDates[] = {
+                {kAssnRowStart, task_row::kStart2},
+                {kAssnRowFinish, task_row::kFinish2},
+                {kAssnRowStart2, task_row::kStart2},
+                {kAssnRowStart3, task_row::kStart2}};
+            for (std::size_t const r : real_rows) {
+                for (DateWord const& word : kDates) {
+                    if (get_u32(assn_fixed, r * kAssnRowBytes + word.assn) !=
+                        get_u32(task_fixed, task_at + word.task)) {
+                        fail(function + ": the real assignment row " +
+                             std::to_string(r) + "'s date word at row byte " +
+                             std::to_string(word.assn) + " is not the task's "
+                             "own Start/Finish; the measured rows carry the "
+                             "task's dates, and a resource calendar that moves "
+                             "them is a save no pair measured");
+                    }
+                }
+            }
+        }
         /* W35-0.4 (RC-W2): the leaf array is stored sorted and the new row is
          * appended, but only two orders were ever saved by Project:
          * wave34-assign-add-second adds resource 1 to a task holding [2]
