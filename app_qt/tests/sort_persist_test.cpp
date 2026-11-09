@@ -17,8 +17,10 @@
 //                         <wave35-viewstate-sort-name-desc.mpp>
 //                         <wave35-viewstate-sort-name-desc-control-null.mpp>
 
+#include <QAbstractButton>
 #include <QApplication>
 #include <QString>
+#include <QStringList>
 
 #include <array>
 #include <cstddef>
@@ -37,6 +39,7 @@
 #include "fixture_guard.h"
 #include "layout_model.h"
 #include "main_window.h"
+#include "ribbon_bar.h"
 #include "sheet_table_model.h"
 #include "shell_style.h"
 #include "sort.h"
@@ -92,6 +95,31 @@ bool any_row_named(msqt::SheetTableModel* model, int name_column, const QString&
         }
     }
     return false;
+}
+
+// The Gantt Chart Format tab's Project Summary Task check box (nullptr when absent).
+QAbstractButton* project_summary_box(msqt::MainWindow& window) {
+    msqt::RibbonBar* ribbon = window.ribbon();
+    if (ribbon == nullptr) {
+        return nullptr;
+    }
+    const int tab = ribbon->tab_titles().indexOf(QStringLiteral("Gantt Chart Format"));
+    if (tab < 0) {
+        return nullptr;
+    }
+    ribbon->set_active_tab(tab);
+    QApplication::processEvents();
+    const int show_hide = ribbon->group_titles().indexOf(QStringLiteral("Show/Hide"));
+    if (show_hide < 0) {
+        return nullptr;
+    }
+    for (int control = 0; control < ribbon->group_control_count(show_hide); ++control) {
+        auto* button = qobject_cast<QAbstractButton*>(ribbon->group_control(show_hide, control));
+        if (button != nullptr && button->text() == QStringLiteral("Project Summary Task")) {
+            return button;
+        }
+    }
+    return nullptr;
 }
 
 }  // namespace
@@ -423,6 +451,92 @@ int main(int argc, char** argv) {
                         "the refused paste leaves the name as it was");
             gate::check(queued_sort(window) != nullptr, "the refused paste leaves the Sort queued");
         }
+    }
+
+    // W35d-1.2 (R35cG1-4): one rule for the queued-view guard (spec/writers/view-state.md).  While
+    // a Sort is queued Save writes it over the file's own outline, so every other change to the
+    // displayed outline is refused with the queued Sort named: Collapse All, the row toggle, the
+    // Project Summary Task toggle, and a session Show Level or All Subtasks.  Expand All shares
+    // the guard but is unreachable under a Sort: every rebuild (queueing, Redo) shows every row
+    // expanded and the collapsing commands are refused, so Expand All stays disabled.
+    {
+        gate::check(window.open_file(fixture, &error), "the fixture reopens for the outline gate");
+        QApplication::processEvents();
+        const std::size_t full_rows = window.sheet_row_count();
+        // Collapse a summary by hand while nothing is queued: the Sort's rebuild expands it again.
+        for (const int row : {0, 1, 2}) {
+            window.toggle_outline_row(row);
+            QApplication::processEvents();
+            if (window.sheet_row_count() < full_rows) {
+                break;
+            }
+        }
+        gate::check(window.sheet_row_count() < full_rows,
+                    "a hand toggle with nothing queued collapses a summary");
+        window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                 "Name descending", false);
+        QApplication::processEvents();
+        gate::check(queued_sort(window) != nullptr, "Name descending is queued for the outline gate");
+        const std::size_t sorted_rows = window.sheet_row_count();
+        const auto unchanged = [&](const char* label, const char* needle) {
+            gate::check(queued_sort(window) != nullptr,
+                        (std::string(label) + ": the Sort stays queued").c_str());
+            gate::check(window.sheet_row_count() == sorted_rows,
+                        (std::string(label) + ": no row changes").c_str());
+            gate::check(status_contains(window, needle),
+                        (std::string(label) + ": the status line names the queued Sort").c_str());
+        };
+        gate::check(sorted_rows == full_rows, "queueing the Sort shows every row expanded again");
+        if (QAction* expand = gate::find_action(window, app::MenuAction::expand_all)) {
+            gate::check(!expand->isEnabled(), "Expand All is disabled under a queued Sort");
+        } else {
+            gate::check(false, "Expand All is a menu action");
+        }
+        if (QAction* collapse = gate::find_action(window, app::MenuAction::collapse_all)) {
+            gate::check(collapse->isEnabled(), "Collapse All is enabled while a summary is expanded");
+            collapse->trigger();
+            QApplication::processEvents();
+            unchanged("Collapse All", "a Sort is queued and File > Save would write it, not this "
+                                      "collapsed state");
+        } else {
+            gate::check(false, "Collapse All is a menu action");
+        }
+        for (int row = 0; row < static_cast<int>(sorted_rows); ++row) {
+            window.toggle_outline_row(row);
+            QApplication::processEvents();
+        }
+        unchanged("the row toggle", "a Sort is queued and File > Save would write it, not this "
+                                    "expanded or collapsed row");
+        if (QAbstractButton* summary = project_summary_box(window)) {
+            const bool shown_before = window.project_summary_visible();
+            summary->click();
+            QApplication::processEvents();
+            unchanged("the summary toggle", "a Sort is queued and File > Save would write it, not "
+                                            "the project summary row shown or hidden");
+            gate::check(window.project_summary_visible() == shown_before,
+                        "the summary toggle leaves the summary as it was");
+            gate::check(summary->isChecked() == shown_before,
+                        "the summary toggle puts the check box back");
+        } else {
+            gate::check(false, "the Project Summary Task check box is in the page");
+        }
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        unchanged("a session Show Level", "a Sort is queued and File > Save would write it, not "
+                                          "a session Show Level");
+        window.apply_outline_level(0);
+        QApplication::processEvents();
+        unchanged("All Subtasks", "a Sort is queued and File > Save would write it, not all "
+                                  "subtasks shown");
+        // Clearing the Sort is not refused: it withdraws the queued Sort, and the outline
+        // commands work again.
+        window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "clearing the Sort withdraws it");
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(!status_contains(window, "a Sort is queued"),
+                    "with the Sort cleared a session Show Level is not refused");
     }
 
     // W35d-0.5 (R35cG1-2): Cut and Paste are cell edits and end the structural redo list, as
