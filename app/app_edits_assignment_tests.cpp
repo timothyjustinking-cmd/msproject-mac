@@ -1459,11 +1459,20 @@ void check_port_saved_removal() {
               "push() refuses a removal over a plan whose tombstoned resource row is session-saved");
         app::StructuralEdit edit;
         std::string error;
-        app::make_assignment_edit(unmarked_plan, tombstone_unmarked.string(), 1, 2, false, edit,
-                                  error);
+        bool const accepted = app::make_assignment_edit(unmarked_plan, tombstone_unmarked.string(),
+                                                        1, 2, false, edit, error);
         check(error.find("a deleted or unreadable resource row") == std::string::npos,
               "a tombstoned row with the unsaved byte is not blamed by the plan layer (got \"" +
                   error + "\")");
+        /* W35e-2.10 (R35dG2-3): the exact outcome, not only the absence of one text.  The builder
+         * accepts this file (measured: true, no error), so a later refusal of any other text, or
+         * an edit that is not the removal of the pair asked for, fails here. */
+        check(accepted && error.empty(),
+              "the builder accepts the unmarked tombstone file with no refusal (got \"" + error +
+                  "\")");
+        check(edit.kind == app::StructuralKind::unassign_resource && edit.uid == 1 &&
+                  edit.resource_uid == 2,
+              "the accepted edit removes the pair asked for (task 1, resource 2)");
     }
     /* W35c-1.10 (R35bG1-3), the writer's layer on its own: with the plan's session bytes set to
      * the measured value the plan layer passes, push() accepts, and the save's writer refuses
