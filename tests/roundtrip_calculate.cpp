@@ -25,6 +25,7 @@
 #include <iterator>
 #include <string>
 #include <string_view>
+#include <system_error>
 #include <vector>
 
 #include "calculate.h"
@@ -1395,6 +1396,37 @@ void refused_requests() {
               "the scratch path is taken: the squatter is left alone");
         std::error_code ignored;
         std::filesystem::remove_all(squat, ignored);
+        std::filesystem::remove(target);
+    }
+    {
+        /* W35d-2.7 (R35cG2-6): when the scratch path cannot be examined (an unreadable parent,
+         * a path error), symlink_status gives no file type and an error code.  That is not
+         * "already exists": the refusal gives the OS message and not the advice to move a file
+         * aside.  The seam stands in for the failing probe, which no portable test can cause. */
+        CfbDocument doc = control;
+        std::string const target = out_path("w35-calculate-atomic-target6.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        Bytes const before = file_bytes(target);
+        std::error_code const denied = std::make_error_code(std::errc::permission_denied);
+        mppwrite::set_calculate_scratch_probe_fault(denied);
+        std::string text;
+        try {
+            mppwrite::save_calculate(doc, good, target);
+            text = "no refusal";
+        } catch (std::exception const& failure) {
+            text = failure.what();
+        }
+        mppwrite::set_calculate_scratch_probe_fault(std::error_code());
+        check(text.find("cannot check whether the scratch path") != std::string::npos &&
+                  text.find(denied.message()) != std::string::npos,
+              "scratch probe failure: the refusal names the OS error (got: " + text + ")");
+        check(text.find("already exists") == std::string::npos &&
+                  text.find("move it aside") == std::string::npos,
+              "scratch probe failure: the refusal does not say the path exists");
+        check(file_bytes(target) == before, "scratch probe failure: target unchanged");
+        check(!std::filesystem::exists(target + ".calculate.tmp"),
+              "scratch probe failure: no scratch file left");
         std::filesystem::remove(target);
     }
     {

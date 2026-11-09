@@ -35,6 +35,13 @@ void set_calculate_fault_after_appends(std::size_t appends) {
     g_fault_after_appends = appends;
 }
 
+/* W35d-2.7 (R35cG2-6): the test-only fault seam of the scratch-path probe (calculate.h). */
+static std::error_code g_scratch_probe_fault;
+
+void set_calculate_scratch_probe_fault(std::error_code fault) {
+    g_scratch_probe_fault = fault;
+}
+
 bool calculate_measured_finish(std::uint32_t start, std::uint32_t duration,
                                std::uint32_t& finish) {
     constexpr int kDayStartSeconds = 8 * 3600;
@@ -1039,8 +1046,20 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
     /* W35c-2.7 (R35bG2-7): the scratch name is not ours to clear.  A file or directory
      * already there (a user's own, or the leftover of a crashed save) is refused, not
      * deleted; this runs before the try block so the cleanup below never touches it. */
-    if (std::filesystem::symlink_status(scratch, ignored).type() !=
-        std::filesystem::file_type::not_found) {
+    /* W35d-2.7 (R35cG2-6): symlink_status reports file_type::none with the error code set when
+     * it cannot look (an unreadable parent, a path error), and that is not "already exists", so
+     * the OS message is given and the advice to move a file aside is not. */
+    std::filesystem::file_status const scratch_status =
+        g_scratch_probe_fault ? std::filesystem::file_status(std::filesystem::file_type::none)
+                              : std::filesystem::symlink_status(scratch, ignored);
+    if (g_scratch_probe_fault) {
+        ignored = g_scratch_probe_fault;
+    }
+    if (ignored && scratch_status.type() != std::filesystem::file_type::not_found) {
+        throw Error("calculate: cannot check whether the scratch path " + scratch +
+                    " is free: " + ignored.message());
+    }
+    if (scratch_status.type() != std::filesystem::file_type::not_found) {
         throw Error("calculate: the scratch path " + scratch +
                     " already exists; it is not removed, so move it aside and save again");
     }
