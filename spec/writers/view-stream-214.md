@@ -171,6 +171,21 @@ What this settles:
   named expected failure, and a command is not enabled on an expected failure
   (standing rule 1), so none of the append shapes above is enabled.  The
   existing Bold-on writer is unchanged and still matches the wave-30 pair.
+  **One rule for the byte, both directions (W35b-3.8, R35G3-5).**  The port pins
+  `0x90` and accepts no other value: Bold on writes `0x90000001`, and Bold off
+  accepts only a font word whose top byte is `0x90` (the `unbold_cell` item
+  comparison; a `0x80` item is refused as "not the measured Bold item", tested in
+  W35b-3.6).  Project reads `0x90` back: it reopened and resaved the Bold-on file
+  `wave30-textstyle.mpp` as the Bold-off control.  So the byte is not a reason
+  that makes the append shapes above unwritable in principle; it is the reason
+  they are not enabled *without* a measured pair, because a pair that stores
+  another value in a new session cannot match byte for byte and would be a
+  named expected failure.  A shape that is later enabled pins `0x90` the same
+  way and verifies that Project reopens it; a wave that re-measures Bold on in a
+  new session and sees the pair fail at this byte has the rule: the failure is the
+  uninitialised byte, not a writer fault.  (The two statements in the wave-35
+  record, "no append can match" and "the enabled Bold on is unchanged", are both
+  true under this rule and are not two positions.)
 - **Italic** is the same structure with flags `0x02000003` and a font word whose
   low byte is `0x04`; **Bold off** shows the flags byte is a per-attribute
   mask.  Underline, size, name and colour were applied through `Font32Ex`, which
@@ -187,8 +202,9 @@ What this settles:
   by Project) rewrites the existing item in place: flags `0x01000003` ->
   `0x00000003` and font word `0x90000001` -> `0x90000000`, two bytes in all;
   `CV_iew/Var2Data` keeps 100,234 bytes and VarMeta and `214/Props` are
-  untouched.  The top byte of the font word is kept from the control, so this
-  direction has no noise problem.  `core/mppwrite/viewstream_edit` implements
+  untouched.  Only a font word whose top byte is `0x90` is accepted, the same
+  rule as Bold on (see the font word's top byte above; W35b-3.6 tests that
+  `0x80` is refused).  `core/mppwrite/viewstream_edit` implements
   exactly this (`ViewCellStyleEdit::enabled = false`) and the pair test proves it
   with zero KnownGaps; the edit model and the shells do not build such an edit
   yet.
