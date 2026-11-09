@@ -215,6 +215,13 @@ std::size_t item_of(Bytes const& edl, std::uint32_t id) {
  * with the control's path record: the same normalisation, in the same spirit,
  * that save_pair_noise.h applies to the path record inside the stream.  The
  * writer's own size words are asserted separately against the stream length.
+ *
+ * Evidence that this is a test-side edit of a word that tracks the path, not of
+ * one that hides a difference (RW35-W11): Project's null save is the control
+ * re-saved under another name with no edit, and its two size words equal its own
+ * CEdl length, as the control's do.  with_control_path_size asserts that of every
+ * save it rewrites (R35G2-9), so the edit changes a word only by the path-length
+ * difference and would throw on any other value.
  */
 std::size_t path_record_bytes(Bytes const& edl) {
     std::size_t const at = item_of(edl, 0x26400031u);
