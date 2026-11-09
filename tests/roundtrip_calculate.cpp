@@ -987,6 +987,30 @@ void refused_requests() {
         std::uint32_t none = 0;
         check(!mppwrite::calculate_measured_first_working_start(0xFFFFFFFFu, none),
               "0.2 first working start: no date is refused");
+        /* W35d-2.3 (R35cG0-5): a time word of 24:00 or later is no time of day (a tick is six
+         * seconds, so 14,400 ticks is 24:00).  It used to count as "at or after 17:00" and map
+         * to the next working day, so a Sunday-dated word with ticks 14,400 or 0xFFFF passed
+         * as Monday 08:00. */
+        std::uint32_t const sunday = mppwrite::pack_date_ymd(2026, 1, 4, 0);
+        check(mppwrite::calculate_measured_first_working_start(sunday | 14399u, none),
+              "0.2 first working start: the last tick of the day (23:59:54) is a time");
+        check(!mppwrite::calculate_measured_first_working_start(sunday | 14400u, none),
+              "0.2 first working start: 24:00 (14,400 ticks) is refused");
+        check(!mppwrite::calculate_measured_first_working_start(sunday | 0xFFFFu, none),
+              "0.2 first working start: ticks 0xFFFF are refused");
+    }
+    {
+        /* The same word through the writer: only the Props project start is out of range; the
+         * leaves hold Monday 08:00, which the old rule would have mapped it to. */
+        CfbDocument doc = control;
+        std::uint32_t const bad = mppwrite::pack_date_ymd(2026, 1, 4, 0) | 0xFFFFu;
+        set_props_payload(doc, 0x02400002u,
+                          Bytes{static_cast<std::uint8_t>(bad & 0xFFu),
+                                static_cast<std::uint8_t>((bad >> 8) & 0xFFu),
+                                static_cast<std::uint8_t>((bad >> 16) & 0xFFu),
+                                static_cast<std::uint8_t>((bad >> 24) & 0xFFu)});
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "project start in 114/Props", "0.2: a Props project start with ticks 0xFFFF");
     }
     {
         /* A leaf with its own calendar. */
