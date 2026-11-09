@@ -398,6 +398,12 @@ void check_refusals() {
         check(error.find("not implemented in this port") != std::string::npos,
               std::string("the ") + pair + " refusal uses the decision-9 text (got \"" + error +
                   "\")");
+        // W35b-2.5 (R35G1-8): all three pairs hold a link row, so the plan-side link gate is
+        // the one that refuses them; the writer's "link rows" text carries the same prefix and
+        // would otherwise pass this loop.
+        check(error.find("for a project with links") != std::string::npos,
+              std::string("the ") + pair + " refusal is the plan-side link gate (got \"" + error +
+                  "\")");
     }
 
     /* The plan-side population. */
@@ -435,7 +441,19 @@ void check_refusals() {
     {
         app::PlanInput changed = plan;
         changed.tasks[0].constraint_type = 4;
-        expect_refused(changed, source, "a constraint", "a constrained task");
+        expect_refused(changed, source, "for a task with a constraint", "a constrained task");
+    }
+    {
+        // W35b-2.5 (R35G1-8): an SNET-only file (no link row, the control with one leaf
+        // constrained) against the clean plan, so the writer's own constraint check names it.
+        mppwrite::CfbDocument snet = mppwrite::CfbDocument::from_file(source);
+        mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(snet);
+        rows.set_u16(1, mppwrite::task_row::kConstraintType, 4);
+        rows.store_into(snet);
+        const std::filesystem::path snet_path = out_path("app-calculate-snet-only.mpp");
+        snet.save(snet_path.string());
+        expect_refused(plan, snet_path.string(), "carries a constraint",
+                       "a file whose leaf carries an SNET constraint and no link");
     }
     {
         app::PlanInput changed = plan;
