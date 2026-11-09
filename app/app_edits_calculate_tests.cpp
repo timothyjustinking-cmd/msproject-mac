@@ -869,6 +869,41 @@ void check_refusals() {
         expect_refused(plan, path.string(), "metadata flags differ",
                        "a file whose task metadata flag byte differs");
     }
+    /* W35b-3.7 (RW35-R3): no pair varies Effort-driven or Task Type, and the plan does not
+     * carry either, so the builder's only gate is the writer's dry run, which pins the
+     * FixedMeta flag byte 16 (0x07 in the control) as one value.  Each bit of it, and a bit
+     * the control does not set, is one refusal with the byte named. */
+    for (const int flags : {0x06, 0x05, 0x03, 0x0F, 0x27}) {
+        for (const std::size_t entry : {std::size_t{4}, std::size_t{5}}) {
+            mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+            Bytes meta = doc.read_stream("114/TBkndTask/FixedMeta");
+            meta[16 + entry * 47 + 16] = static_cast<std::uint8_t>(flags);
+            doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+            const std::filesystem::path path = out_path("app-calculate-flags-" +
+                                                        std::to_string(flags) + "-" +
+                                                        std::to_string(entry) + ".mpp");
+            doc.save(path.string());
+            expect_refused(plan, path.string(), "measured entry at byte 16 (summary, effort-driven",
+                           "a file whose FixedMeta flag byte 16 is " +
+                               std::to_string(flags) + " on entry " +
+                               std::to_string(entry) + " (the effort-driven and task-type bits)");
+        }
+    }
+    {
+        /* A zero duration, which is a milestone, and a duration of a day the Finish does
+         * not follow: both are refused by the one start-plus-duration rule. */
+        app::PlanInput milestone = plan;
+        milestone.tasks[1].duration_ticks = 0;
+        expect_refused(milestone, source, "is not its start plus its duration",
+                       "a milestone leaf, duration zero (plan)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(milestone), &milestone),
+              "push() refuses a Calculate edit over a plan with a zero-duration leaf");
+        app::PlanInput negative = plan;
+        negative.tasks[1].duration_ticks = -4800;
+        expect_refused(negative, source, "is not its start plus its duration",
+                       "a leaf with a negative duration (plan)");
+    }
     {
         mppwrite::CfbDocument manual = mppwrite::CfbDocument::from_file(source);
         Bytes meta = manual.read_stream(kTaskFixed2Meta);
