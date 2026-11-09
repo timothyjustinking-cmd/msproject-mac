@@ -733,6 +733,12 @@ void test_refusals(TestContext& t) {
             "uid 0 is the project row", "the project row refused");
     refuses("wave30-notes-control.mpp", append_edit(2, 0, {1, 2}),
             "field key 0", "key 0 refused");
+    /* W35b-4.G0-9 (R35G0-9): the task WBS key (0x0B40018D) is measured on task rows only;
+     * on uid 0 it is the project row's, whose only measured appends are the project WBS and
+     * the five overtime records. */
+    refuses("wave30-notes-control.mpp",
+            append_edit(0, mppwrite::kTaskWbsFieldId, {'1', 0, 0, 0}),
+            "uid 0 is the project row", "a task WBS append on the project row refused");
 
     /* W35b-3.7 (RW35-W6): the project-row keys are measured on the project row only and
      * with their own payload; the whitelist alone took any uid and any bytes. */
