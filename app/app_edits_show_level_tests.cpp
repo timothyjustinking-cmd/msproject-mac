@@ -458,7 +458,7 @@ void check_refusals() {
     expect_refused(plan, collapsed_path.string(), 1, "already collapsed or hidden",
                    "a file that already hides rows");
     expect_refused(plan, data_path("wave31-resource-sheet.mpp").string(), 1,
-                   "not implemented in this port for this project",
+                   "task rows (with the project row)",
                    "a file whose tasks are not the plan's");
     /* W35b-1.1 (R35G2-1): Project saves that differ from the control only in their
      * view state.  Each has the same five tasks as the plan, so only the writer's

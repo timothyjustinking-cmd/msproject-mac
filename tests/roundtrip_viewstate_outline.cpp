@@ -43,7 +43,9 @@
 #include <utility>
 #include <vector>
 
+#include "cfb_stream_removal.h"
 #include "cfb_writer.h"
+#include "edl_damage.h"
 #include "fixture_guard.h"
 #include "save_pair_compare.h"
 #include "table.h"
@@ -387,6 +389,9 @@ void test_dry_run(TestContext& t) {
 
 /* ---- refusals ----------------------------------------------------------- */
 
+using edl_damage::duplicate_item;
+using edl_damage::resize_item;
+
 void test_refusals(TestContext& t) {
     std::string const missing = missing_path();
     auto refuses = [&](CfbDocument const& source, ViewOutlineEdit const& edit,
@@ -602,6 +607,13 @@ void test_refusals(TestContext& t) {
                 "a CEdl that already lists fewer rows refused");
     }
 
+    /* W35b-3.3 (R35G2-7): a document that lacks one of the streams the write needs. */
+    for (char const* stream : {"114/TBkndTask/FixedData", kMetaPath, kEdlVar2, kEdlMeta, kProps}) {
+        refuses(cfb_test::without_stream(control, stream), measured_edit(),
+                std::string("the document has no ") + stream,
+                std::string("a document without ") + stream + " refused");
+    }
+
     /* The edit list: every damaged shape. */
     {
         auto damaged = [&](CfbDocument const& source, auto&& mutate) {
@@ -628,16 +640,6 @@ void test_refusals(TestContext& t) {
                 measured_edit(), "0 first-row records", "no first-row record refused");
         /* A length word that is only changed misparses the list; to reach the
          * writer's own length check the item is resized with the stream. */
-        auto resize_item = [](Bytes& e, std::size_t item, std::size_t new_length) {
-            std::size_t const old_length = u32_at(e, item);
-            e.erase(e.begin() + static_cast<std::ptrdiff_t>(item + 12),
-                    e.begin() + static_cast<std::ptrdiff_t>(item + 12 + old_length));
-            e.insert(e.begin() + static_cast<std::ptrdiff_t>(item + 12), new_length, 0);
-            put_u32_at(e, item, static_cast<std::uint32_t>(new_length));
-            put_u32_at(e, 0, static_cast<std::uint32_t>(e.size() - 4));
-            put_u32_at(e, 4, static_cast<std::uint32_t>(e.size() - 8));
-            put_u32_at(e, 8, static_cast<std::uint32_t>(e.size() - 8));
-        };
         refuses(damaged(control, [&](Bytes& e) { resize_item(e, first, 8); }), measured_edit(),
                 "first-row record holds 8 bytes", "a first-row record of another length refused");
         refuses(damaged(control, [&](Bytes& e) { resize_item(e, copy, 60); }), measured_edit(),
@@ -655,6 +657,16 @@ void test_refusals(TestContext& t) {
                         }),
                 measured_edit(), "does not end at its last item",
                 "bytes after the last item refused");
+        /* W35b-3.3 (R35G2-7): a doubled record, each with its own count. */
+        refuses(damaged(control, [&](Bytes& e) { duplicate_item(e, order); }), measured_edit(),
+                "holds 2 order records, 1 first-row records, 1 order copies and 0 row-layout",
+                "a doubled order record refused");
+        refuses(damaged(control, [&](Bytes& e) { duplicate_item(e, first); }), measured_edit(),
+                "holds 1 order records, 2 first-row records, 1 order copies and 0 row-layout",
+                "a doubled first-row record refused");
+        refuses(damaged(control, [&](Bytes& e) { duplicate_item(e, copy); }), measured_edit(),
+                "holds 1 order records, 1 first-row records, 2 order copies and 0 row-layout",
+                "a doubled order copy refused");
         refuses(damaged(control, [&](Bytes& e) { put_u32_at(e, order + 12 + 8, 9); }),
                 measured_edit(), "does not hold the expected UniqueID at row 3",
                 "a displayed row that is not the file's refused");
@@ -681,6 +693,23 @@ void test_refusals(TestContext& t) {
         bad.replace_stream(kEdlVar2, edl);
         refuses(bad, deep_edit, "row-layout record is not the measured layout at byte 8",
                 "a row layout with another row height refused");
+        /* W35b-3.3 (R35G2-7): a layout record of another length, and a doubled one. */
+        std::size_t const layout_length = u32_at(deep_edl, layout);
+        bad = deep;
+        edl = deep_edl;
+        resize_item(edl, layout, layout_length + 4);
+        bad.replace_stream(kEdlVar2, edl);
+        refuses(bad, deep_edit,
+                "row-layout record holds " + std::to_string(layout_length + 4) +
+                    " bytes, not " + std::to_string(layout_length) + " for 6 displayed rows",
+                "a row layout of another length refused");
+        bad = deep;
+        edl = deep_edl;
+        duplicate_item(edl, layout);
+        bad.replace_stream(kEdlVar2, edl);
+        refuses(bad, deep_edit,
+                "holds 1 order records, 1 first-row records, 1 order copies and 2 row-layout",
+                "a doubled row layout refused");
         bad = deep;
         edl = deep_edl;
         put_u32_at(edl, layout + 12, 5);
