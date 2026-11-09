@@ -1,6 +1,6 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-11-10, wave 35e (fix-only) in progress on branch `wave35e` (cut from `wave35d`,
+_Updated 2026-11-10, wave 35e (fix-only) closed on branch `wave35e` (cut from `wave35d`,
 `wave35c`, `wave35b`, `wave35`, `wave34b`, `wave34`, from `main` = `4fd9b90`).  Waves 34 to 35d
 are NOT merged: CI on all three OSs is not yet green for them and the coordinator's open queue
 (below) stands.  Nothing is pushed.  Keep this file current at every wave close; it is the only
@@ -8,9 +8,12 @@ file a new session must read first._
 
 ## The 30-second state
 
-* **Wave 35e (fix-only) is in progress on branch `wave35e`** (cut from `wave35d` at `2ea87e5`;
-  `docs/handoff/wave35e-brief.md`, `docs/handoff/wave35e-complete.md`, builder Claude Sonnet 5.5;
-  nothing is pushed).  It works the open queue wave 35d left, which is
+* **Wave 35e (fix-only) is closed on branch `wave35e`** (cut from `wave35d` at `2ea87e5`;
+  `docs/handoff/wave35e-brief.md`, `docs/handoff/wave35e-complete.md`, `WAVE-35e-COMPLETE`,
+  builder Claude Sonnet 5.5; fresh-tree gates at `2dbb5d9` in
+  `build/w35e/W35e-CLOSE-fresh-gates.log`, all green; nothing is pushed).  The coordinator pushes
+  `wave35e`, dispatches `qt.yml` and `ci.yml` and runs mutations and an independent review of
+  `wave35d..wave35e`.  It works the open queue wave 35d left, which is
   `wave35d-verification/coord-gates-close.md` (the coordinator's list; this file does not
   shorten it).  **The queue, High first:**
   * **High:** R35dG0-1 (a partly applied Task Information or Task Form edit keeps the structural
@@ -20,7 +23,7 @@ file a new session must read first._
   * **Mediums:** R35dG0-2, R35dG1-1, R35dG1-2, R35dG1-3, R35dW-2, R35dW-3.  G1's items 1.1
     (R35dG1-1, `39c8e37`), 1.2 (R35dG1-2 with R35dW-4, `1da3997`) and 1.3 (R35dG1-3, R35dW-2,
     R35dW-3: these records) are fixed in the builder's tree and await the same review.
-  * **Lows:** R35dG0-3 to -5, R35dG1-4 to -7, R35dG2-1 to -5, R35dW-4 to -6 (G2).
+  * **Lows:** R35dG0-3 to -5, R35dG1-4 to -7, R35dG2-1 to -5, R35dW-4 to -6 (G2, `wave35e-complete.md`: all fixed in the builder's tree except R35dG2-1, partly fixed because Fill Down's guard has no test route, and R35dW-5, fixed in source with CI as its gate).
   * **CI:** R35cW-CI1 and R35cW-CI2 are **fixed in source; CI is their gate** until the
     coordinator's run is green (`wave35d` was pushed and dispatched at 18:11 UTC on 9 November,
     and GitHub's Actions incident left `ubuntu-gcc`, `windows-qt` and `macos-qt` unrun).
