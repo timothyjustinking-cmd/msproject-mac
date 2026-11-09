@@ -60,7 +60,8 @@ rows above; the per-group coordinator records are `gates-g0.md` to `gates-g4.md`
 
 ### Open at CLOSE (queued, not for this wave)
 
-The per-group reviews (`wave35b-verification/review-g0.md` to `review-g3.md`) found, after the
+The per-group reviews (`wave35b-verification/review-g0.md` to `review-g4.md`; the CLOSE text first said
+`review-g3.md`, corrected by W35c-2.24, R35bW-4) found, after the
 fixes above, **two Highs, both in G0 and both on Calculate Project**:
 
 - **R35bG0-1 (High)**: item 0.3's "leaf starts at the project start" compares against row 0's
@@ -74,6 +75,8 @@ R35bG2-2 to -8, R35bG3-2 to -5 are queued in `plan-waves27-30.md` ("Queued from 
 with the coordinator mutations that stayed green (G0 W11; G1 S1, S4, A6, Q1, Q2).  The wave 35b
 reviews were of each group's diff; no separate CLOSE review was run in this session, so the
 coordinator's independent review of `wave35..wave35b` remains to do.
+
+Also open, found by the G4 review and the CLOSE review after this section was written (added by W35c-2.24, R35bW-4): R35bW-CI1 (the GCC 13 `dangling-reference` build break); the Mediums R35bG4-1 (Redo and the project-summary toggle still show every row while Save writes the queued Show Level), R35bW-1 (a grid edit made after a Sort or Show Level is queued is accepted) and R35bW-2 (replacing or clearing a queued Sort leaves it on the redo list); the Lows R35bG4-2 to -5, R35bG4-6 (the `TaskRow` `type_block_known` default is untested; mutation G7c stayed green), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS now), R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`) and R35bW-3 to -6.
 
 ### Push and CI
 

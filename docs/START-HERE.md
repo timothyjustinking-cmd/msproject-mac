@@ -23,7 +23,7 @@ only file a new session must read first._
   calculation options are not pinned), queued in `plan-waves27-30.md` ("Queued from wave
   35b").  Nothing is pushed; the coordinator's part is the `9fa599b` decision, push, both CI
   dispatches (CI is the only gate for `app/main.mm` and for macos-qt, W35b-0.1), an
-  independent review of `wave35..wave35b`, and the 4(e) Project reopen check.
+  independent review of `wave35..wave35b`, and the 4(e) Project reopen check.  The queue also holds, from the G4 and CLOSE reviews (added by W35c-2.24, R35bW-4; complete in `wave35b-verification/coord-gates-close.md`): R35bW-CI1 (the GCC 13 `dangling-reference` build break); the Mediums R35bG4-1 (Redo and the project-summary toggle still show every row while Save writes the queued Show Level), R35bW-1 (a grid edit made after a Sort or Show Level is queued is accepted) and R35bW-2 (replacing or clearing a queued Sort leaves it on the redo list); the Lows R35bG4-2 to -5, R35bG4-6 (the `TaskRow` `type_block_known` default is untested; mutation G7c stayed green), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS now), R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`) and R35bW-3 to -6.
 
 * **Wave 35 (the scheduler save path, view-state persistence, the wave-34 deferrals, the macOS
   shell) is closed on branch `wave35`** (`docs/handoff/wave35-complete.md`, builder Claude
