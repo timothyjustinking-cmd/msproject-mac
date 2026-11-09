@@ -727,6 +727,38 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "there (Sunday 21:00 to Monday 08:00)");
             }
         }
+        /* W35c-1.5 (R35bG0-3): the finish-position guard above cannot tell one Duration edit
+         * from two (A shortened below the stored finish and B lengthened past it has the
+         * measured pair's signature with the critical path moved).  The stored Free Slack
+         * (+74) is the before-state: manual calculation leaves it as the last calculation
+         * wrote it (the control's B holds 9600, two days, and F9 rewrites it to seven).  The
+         * leaf that ends the project now must have been critical (free slack 0), and every
+         * other leaf must still have the slack its unchanged finish leaves before the stored
+         * project finish; a leaf that fails either was edited too. */
+        for (std::size_t row = 1; row < kRows; ++row) {
+            std::uint32_t expected = 0;
+            if (rows.uid(row) != shape.critical_uid) {
+                std::uint32_t late_start = 0;
+                if (!calculate_measured_late(rows.u32(row, task_row::kFinish),
+                                             rows.u32(row, task_row::kDuration),
+                                             rows.u32(0, task_row::kFinish), expected,
+                                             late_start)) {
+                    return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                           "'s slack before the stored project finish cannot "
+                                           "be worked out on the measured calendar");
+                }
+            }
+            if (rows.u32(row, task_row::kFreeSlack) != expected) {
+                return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                       "'s stored free slack (+74) is " +
+                                       std::to_string(rows.u32(row, task_row::kFreeSlack)) +
+                                       " ticks, not the " + std::to_string(expected) +
+                                       " the measured Calculate Project save has before the "
+                                       "change; more than one leaf was edited, or not the "
+                                       "leaf that ended the project, so the critical path "
+                                       "may have moved");
+            }
+        }
         /* W35c-0.3 (R35bG0-2): the project's calculation options, which no pair varies. */
         check_props_pin(props);
         /* W35b-0.5 (R35G1-3): the parameters no pair varies. */

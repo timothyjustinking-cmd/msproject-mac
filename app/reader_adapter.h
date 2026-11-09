@@ -195,6 +195,9 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     // W35b-0.5 (R35G1-3): Task.Active and the stored Baseline 0.
     row.active = task.active;
     row.baseline_stored = task.baseline.stored;
+    // W35c-1.5 (R35bG0-3): the stored Free Slack, the pending recalculation's before-state.
+    row.free_slack_ticks = task.free_slack_ticks;
+    row.free_slack_stored = true;
     // Wave 12: the stored custom fields (W48's measured decodings, in the
     // reader's order).  Absent values are absent here too; app::make_record_set
     // turns each into a RecordSet value.
