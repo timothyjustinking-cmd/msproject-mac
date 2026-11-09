@@ -495,6 +495,15 @@ bool SheetTableModel::setData(const QModelIndex& index, const QVariant& value, i
         report_commit(false, read_only_reason_);
         return false;
     }
+    // W35c-1.3 (R35bW-1): the shell refuses a cell edit while a Show Level or a Sort
+    // is queued, so the grid cannot move away from what File > Save writes.
+    if (edit_gate_) {
+        const std::string refusal = edit_gate_();
+        if (!refusal.empty()) {
+            report_commit(false, refusal);
+            return false;
+        }
+    }
     const std::size_t row = record_row(index.row());
     const std::size_t column = column_for_display(index.column());
     if (row == core::sheet::kNoIndex || column == core::sheet::kNoIndex) {

@@ -34,6 +34,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "dialogs.h"
 #include "edit_model.h"
 #include "edl_control_path.h"
 #include "entry_columns.h"
@@ -67,6 +68,16 @@ const app::StructuralEdit* queued_level(const msqt::MainWindow& window) {
 
 bool status_contains(const msqt::MainWindow& window, const char* needle) {
     return window.status_left_text().contains(QString::fromUtf8(needle));
+}
+
+// True when some displayed row of the Name column reads `text`.
+bool any_row_named(msqt::SheetTableModel* model, int name_column, const QString& text) {
+    for (int row = 0; row < model->rowCount(); ++row) {
+        if (model->data(model->index(row, name_column)).toString() == text) {
+            return true;
+        }
+    }
+    return false;
 }
 
 // The Gantt Chart Format tab's Project Summary Task check box (nullptr when absent).
@@ -320,6 +331,71 @@ int main(int argc, char** argv) {
                 "Collapse All with a level queued changes no row");
     gate::check(status_contains(window, "not this collapsed state"),
                 "Collapse All with a level queued: the status line names the queued level");
+
+    // W35c-1.3 (R35bW-1): a grid edit made AFTER a Show Level is queued is refused with the
+    // queued level named, and so is the sheet's Redo of an earlier one.
+    {
+        gate::check(window.open_file(five, &error), "the five-task fixture reopens (later edits)");
+        QApplication::processEvents();
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(queued_level(window) != nullptr, "Level 1 is queued for the later-edit gate");
+        const std::size_t queued_rows = window.sheet_row_count();
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        const int duration_column = msqt::entry_column_index(msqt::EntryCellKind::duration);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        gate::check(name_column >= 0 && duration_column >= 0, "the Entry table has Name and Duration");
+        const QString name_before = model->data(model->index(1, name_column)).toString();
+        gate::check(!model->setData(model->index(1, name_column),
+                                    QStringLiteral("Renamed after the level"), Qt::EditRole),
+                    "a rename after a queued level is refused");
+        gate::check(model->data(model->index(1, name_column)).toString() == name_before,
+                    "the refused rename leaves the name as it was");
+        gate::check(status_contains(window, "a Show Level is queued and File > Save would write "
+                                            "it, not an edited cell"),
+                    "a rename after a queued level: the status line names the queued level");
+        gate::check(!model->setData(model->index(1, duration_column), QStringLiteral("9d"),
+                                    Qt::EditRole),
+                    "a Duration edit after a queued level is refused");
+        window.sheet()->select_cell(1, 0);
+        msqt::TaskInformationValues values;
+        gate::check(window.task_information_values(&values), "a task is selected for the form");
+        values.name = "Renamed in the form";
+        gate::check(!window.apply_task_information(values),
+                    "a task form edit after a queued level is refused");
+        gate::check(status_contains(window, "not an edited task field"),
+                    "a task form edit after a queued level: the status line names the level");
+        gate::check(queued_level(window) != nullptr && window.sheet_row_count() == queued_rows,
+                    "the refused edits leave the level queued and the rows as they were");
+
+        // Undo in the sheet, then the level, then Ctrl+Y: queueing the level rebuilds the
+        // document with a sheet that has no history, so there is no Redo to re-apply the
+        // rename under it.  Pinned.
+        gate::check(window.open_file(five, &error), "the five-task fixture reopens (sheet redo)");
+        QApplication::processEvents();
+        model = window.sheet_table_model();
+        gate::check(model->setData(model->index(1, name_column),
+                                   QStringLiteral("Renamed then undone"), Qt::EditRole),
+                    "a rename commits with nothing queued");
+        if (QAction* undo = gate::find_action(window, app::MenuAction::undo)) {
+            undo->trigger();
+            QApplication::processEvents();
+        }
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(queued_level(window) != nullptr,
+                    "Level 1 queues after the sheet's Undo (the plan is clean)");
+        if (QAction* redo = gate::find_action(window, app::MenuAction::redo)) {
+            gate::check(!redo->isEnabled(), "the queued level's rebuild leaves no sheet Redo");
+            redo->trigger();
+            QApplication::processEvents();
+        } else {
+            gate::check(false, "Redo is a menu action");
+        }
+        gate::check(!any_row_named(model, name_column, QStringLiteral("Renamed then undone")),
+                    "Redo does not re-apply the rename under the queued level");
+        gate::check(queued_level(window) != nullptr, "Redo leaves the level queued");
+    }
 
     // W35b-1.5 (RW35-R2): a grid edit that is not saved yet.  Show Level is built
     // from the session plan, which carries the rename; the builder refuses it,

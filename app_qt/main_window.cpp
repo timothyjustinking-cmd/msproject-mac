@@ -737,6 +737,8 @@ void MainWindow::build_central_widget() {
     // Gantt/status WITHOUT resetting the model from inside setData().
     sheet_model_.set_commit_handler(
         [this](bool ok, const std::string& error) { after_cell_commit(ok, error); });
+    // W35c-1.3 (R35bW-1): a queued Show Level or Sort refuses a later cell edit.
+    sheet_model_.set_edit_gate([this]() { return view_change_refusal("an edited cell"); });
 
     // A click selects through the sheet model (the single source of truth), then
     // mirrors the selection onto the Gantt bar.  Shift-click extends the model's
@@ -4922,6 +4924,9 @@ void MainWindow::cut_selection() {
     if (refuse_read_only()) {
         return;
     }
+    if (refuse_view_change("a cut cell")) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("cutting is available in the Task Sheet view", false);
@@ -5015,6 +5020,9 @@ void MainWindow::paste_selection() {
     if (refuse_read_only()) {
         return;
     }
+    if (refuse_view_change("a pasted cell")) {
+        return;
+    }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
         set_message("pasting is available in the Task Sheet view", false);
@@ -5096,6 +5104,9 @@ void MainWindow::paste_selection() {
 
 void MainWindow::fill_down() {
     if (refuse_read_only()) {
+        return;
+    }
+    if (refuse_view_change("a filled cell")) {
         return;
     }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
@@ -5657,6 +5668,11 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
     // W33-1.7 (A-8 / D-7): the Task Form's commits land here too, so the
     // read-only refusal is this model's, not just the dialog's.
     if (refuse_read_only()) {
+        return false;
+    }
+    // W35c-1.3 (R35bW-1): the form's fields commit through the sheet, so the same
+    // queued Show Level or Sort refuses them.
+    if (refuse_view_change("an edited task field")) {
         return false;
     }
     // The status prefix names the surface: Task Information's dialog or (W28-4.1)
