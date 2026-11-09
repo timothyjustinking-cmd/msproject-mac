@@ -3777,6 +3777,22 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
             latest = task.finish;
         }
     }
+    // W35c-1.11 (R35bG2-1): equal leaf finishes are a tie no pair measures (which leaf is
+    // critical is then open, and the writer's critical-leaf pick would hand it to the later
+    // row).  The writer refuses it from the file; the plan layer refuses it from the plan.
+    {
+        std::size_t ending = 0;
+        for (const TaskRow& task : plan.tasks) {
+            if (latest != kDateNa && task.finish == latest) {
+                ++ending;
+            }
+        }
+        if (ending > 1) {
+            return prefix + "for two leaves that end on the same day (a tie for the project "
+                            "finish): the measured Project pair has exactly one leaf ending "
+                            "the project";
+        }
+    }
     if (latest != kDateNa && plan.project_finish != kDateNa && latest < plan.project_finish) {
         return prefix + "for a recalculation that would shorten the project: the "
                         "measured Project pair lengthens it";
@@ -3791,6 +3807,25 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
                 return prefix + "for a recalculation that moves the critical path: the "
                                 "measured Project pair leaves the critical flags as "
                                 "they were";
+            }
+        }
+    }
+    // W35c-1.11 (R35bG2-1): the leaf that ends the project is the first leaf row in the
+    // measured pair; the leaf stamp is not measured the other way round.  The plan's own
+    // check of the file order (file_row), separate from the writer's uid comparison.
+    {
+        std::uint32_t first_row = 0;
+        for (const TaskRow& task : plan.tasks) {
+            if (first_row == 0 || task.file_row < first_row) {
+                first_row = task.file_row;
+            }
+        }
+        for (const TaskRow& task : plan.tasks) {
+            if (task.finish == latest && task.file_row != first_row) {
+                return prefix + "for a recalculation where the leaf that ends the project is "
+                                "not the first leaf row (task uid " + std::to_string(task.uid) +
+                                "): the measured Project pair has the first leaf ending the "
+                                "project";
             }
         }
     }

@@ -845,8 +845,8 @@ void check_refusals() {
         set_planned_work(tie, 2, d1);
         const std::filesystem::path tie_path = out_path("app-calculate-leaf-tie.mpp");
         tie.save(tie_path.string());
-        expect_refused(plan, tie_path.string(), "finish together",
-                       "a file whose two leaves finish together");
+        expect_refused(plan, tie_path.string(), "finish together; the measured Calculate Project save",
+                       "a file whose two leaves finish together (the writer's text)");
 
         mppwrite::CfbDocument swapped = mppwrite::CfbDocument::from_file(source);
         mppwrite::TaskTable swap_rows = mppwrite::TaskTable::from_document(swapped);
@@ -859,8 +859,56 @@ void check_refusals() {
         set_planned_work(swapped, 2, d1);
         const std::filesystem::path swapped_path = out_path("app-calculate-leaf-swapped.mpp");
         swapped.save(swapped_path.string());
-        expect_refused(plan, swapped_path.string(), "is not the first leaf row",
-                       "a file whose second leaf ends the project");
+        expect_refused(plan, swapped_path.string(),
+                       "is not the first leaf row; the measured Calculate Project save",
+                       "a file whose second leaf ends the project (the writer's text)");
+    }
+    {
+        /* W35c-1.11 (R35bG2-1): the plan layer refuses the tie and the swapped order from the
+         * PLAN, the file untouched, so only calculate_plan_refusal can be the source (the
+         * writer's own texts, "finish together; the measured Calculate Project save" and "is
+         * not the first leaf row; the measured Calculate Project save", are pinned in
+         * roundtrip_calculate).  Each plan is built to pass every other plan guard: the tie has
+         * equal durations and finishes and no slack on either leaf; the swapped order has the
+         * critical leaf second with the slack of the shorter one first. */
+        const char* const writer_tie = "finish together; the measured Calculate Project save";
+        const char* const writer_swap = "is not the first leaf row; the measured Calculate Project save";
+        {
+            app::PlanInput tied = plan;
+            tied.tasks[1].duration_ticks = tied.tasks[0].duration_ticks;
+            tied.tasks[1].finish = tied.tasks[0].finish;
+            tied.tasks[1].free_slack_ticks = 0;
+            app::StructuralEdit edit;
+            std::string error;
+            check(!app::make_calculate_edit(tied, source, edit, error),
+                  "a plan whose two leaves end on the same day is refused");
+            check(error.find("end on the same day") != std::string::npos &&
+                      error.find(writer_tie) == std::string::npos,
+                  "the tie refusal is the plan layer's own text (got \"" + error + "\")");
+            app::StructuralEdits edits;
+            check(!edits.push(hand_edit(tied), &tied),
+                  "push() refuses a Calculate edit over a plan whose two leaves tie");
+        }
+        {
+            app::PlanInput swapped = plan;
+            swapped.tasks[0].duration_ticks = plan.tasks[1].duration_ticks;
+            swapped.tasks[0].finish = plan.tasks[1].finish;
+            swapped.tasks[0].free_slack_ticks = plan.tasks[1].free_slack_ticks;
+            swapped.tasks[1].duration_ticks = plan.tasks[0].duration_ticks;
+            swapped.tasks[1].finish = plan.tasks[0].finish;
+            swapped.tasks[1].free_slack_ticks = plan.tasks[0].free_slack_ticks;
+            app::StructuralEdit edit;
+            std::string error;
+            check(!app::make_calculate_edit(swapped, source, edit, error),
+                  "a plan whose second leaf ends the project is refused");
+            check(error.find("is not the first leaf row") != std::string::npos &&
+                      error.find(writer_swap) == std::string::npos,
+                  "the swapped-order refusal is the plan layer's own text (got \"" + error +
+                      "\")");
+            app::StructuralEdits edits;
+            check(!edits.push(hand_edit(swapped), &swapped),
+                  "push() refuses a Calculate edit over a plan whose second leaf ends the project");
+        }
     }
     {
         mppwrite::CfbDocument shorter = mppwrite::CfbDocument::from_file(source);

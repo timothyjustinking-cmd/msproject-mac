@@ -242,7 +242,7 @@ is the writer for the first one; the other three are refused.
   whose free slack was never calculated (a stored 0 on a non-critical leaf) is refused rather
   than saved; and whether Project stores a critical bit outside the slack words is still
   unmeasured (R35G1-2). The tie (two leaves ending the project) stays W35b-2.7's refusal in
-  the writer; the plan layer's tie refusal is W35c-1.11.
+  the writer, and the plan layer refuses it too (W35c-1.11).
 - **The plan layer pins the leaf's FixedMeta entry and VarMeta keys too (W35c-1.7,
   R35bG0-5).** W35b-0.5's "pinned ... in both layers" held for the writer only for these
   shapes: the effort-driven and task-type bits (FixedMeta byte 16, `0x07` in the control) and
@@ -256,12 +256,24 @@ is the writer for the first one; the other three are refused.
   "stores variable records other than the measured ones" in the writer. A plan whose entry or
   keys were not read (a row not built by the reader) is refused. MPP12 rows leave both empty
   and are refused, as Calculate Project is measured on MPP14 only. The third R35bG0-5 gap, the
-  tie, is W35c-1.11's.
+  tie, is closed by W35c-1.11 (below).
 - **One arrangement is measured (W35b-2.7, RW35-W3).** In the unlinked pair the first leaf row
   ends the project and the other leaf finishes before the stored project finish; the leaf stamp
   `0x30` is measured for that arrangement alone (the linked pair stores `0x30` and `0x28`). Two
   leaves that finish together, and the second leaf row ending the project, are refused
   ("finish together", "is not the first leaf row") rather than saved with the constant.
+- **The plan layer refuses both too (W35c-1.11, R35bG2-1; also R35bG3-2 and the tie of
+  R35bG0-5).** W35b-2.7 put both refusals in the writer only, so the builder and `push()`
+  accepted a plan in which the two leaves end on the same day, or the second leaf ends the
+  project, and the writer's dry run was the only guard. `calculate_plan_refusal` now counts the
+  leaves whose finish is the latest ("for two leaves that end on the same day"), and refuses a
+  project-ending leaf whose `file_row` is not the smallest leaf row ("is not the first leaf
+  row (task uid N)"). The tie check runs before the critical-path loop (which skips the leaf
+  that ends the project, so a tie passed it), the order check after it and before the 0.4 and
+  1.5 loops. The texts differ from the writer's ("finish together; the measured Calculate
+  Project save ...", "is not the first leaf row; the measured Calculate Project save ..."),
+  so a test can tell which layer refused; the app tests mutate the plan with the file
+  untouched and pin `push()`, `roundtrip_calculate` pins the writer's.
 
 What stays refused: any link (the linked, lag and snet pairs), a constraint, a manual
 row, a summary beyond the project row, progress, a task calendar, any row count other than
