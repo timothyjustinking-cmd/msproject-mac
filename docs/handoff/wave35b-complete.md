@@ -78,6 +78,20 @@ coordinator's independent review of `wave35..wave35b` remains to do.
 
 Also open, found by the G4 review and the CLOSE review after this section was written (added by W35c-2.24, R35bW-4): R35bW-CI1 (the GCC 13 `dangling-reference` build break); the Mediums R35bG4-1 (Redo and the project-summary toggle still show every row while Save writes the queued Show Level), R35bW-1 (a grid edit made after a Sort or Show Level is queued is accepted) and R35bW-2 (replacing or clearing a queued Sort leaves it on the redo list); the Lows R35bG4-2 to -5, R35bG4-6 (the `TaskRow` `type_block_known` default is untested; mutation G7c stayed green), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS now), R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`) and R35bW-3 to -6.
 
+### Process defects, recorded and not fixed
+
+- **Missing trailer on eleven G2 builder commits (R35bG2-4, Low; recorded by W35c-2.26).**
+  Brief section 1 of wave 35b requires `Generated-By: Claude Sonnet 5.5 via Claude Code (wave
+  35b)` on every commit.  The eleven G2 builder commits carry only `Co-Authored-By: Claude
+  Sonnet 5.5`: the ten item commits 2.3 to 2.12 (`6035aff`, `98ef680`, `f1a3f5b`, `34b88bc`,
+  `11ffe7b`, `29adb21`, `87b5ed2`, `1db1aa8`, `8696150`, `a5ac1c9`) and the group's completion
+  commit `1505896`.  The model is named correctly; the standing form is missing.  G1's nine
+  commits and every G3 and G4 builder commit carry it, so it is restored from G3 on (checked
+  by script over `main..HEAD` on 10 November 2026).  The ids are the current ones; the
+  pre-rebuild ones are in `wave35b-verification/history-rebuild-wave35b.map`.  **No history
+  rewrite**: wave 35b brief section 0 and the wave 35c brief (G2, Records) forbid it, and a rewrite
+  would change every later id.  Wave 35c's own commits carry the trailer.
+
 ### Push and CI
 
 Push and CI: by the coordinator, once the operator settles `9fa599b`.  Nothing is pushed and no
