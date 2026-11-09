@@ -850,6 +850,58 @@ void refused_requests() {
             refuses([&] { mppwrite::save_calculate(doc, good, path); },
                     "differs from the measured control", "0.3: a Props record kind changed");
         }
+        /* W35d-0.3 (R35cG0-1): the three branches of check_props_pin that no payload flip can
+         * reach, each with a needle only its own branch produces (the generic "differs from
+         * the measured control" text is shared with the record checks, so it is not used).
+         * An option Project stores only when it is not the default shows up as a record added
+         * or dropped, or a changed header word, not as a payload change. */
+        for (std::size_t word : {8u, 12u}) {
+            Bytes changed = props;
+            changed[word] ^= 0x01;
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "114/Props header differs from the measured control",
+                    "0.3: Props header word +" + std::to_string(word) + " changed");
+        }
+        {
+            /* Fewer records: the last framed record is cut out, so the tail follows the 160th
+             * and only the record-count check can refuse (the tail keeps its length and hash). */
+            PropsFrame const& last = frames.back();
+            Bytes changed(props.begin(), props.begin() + static_cast<std::ptrdiff_t>(last.at));
+            changed.insert(changed.end(), props.begin() + static_cast<std::ptrdiff_t>(tail_start),
+                           props.end());
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "114/Props holds 160 records, the measured control holds 161",
+                    "0.3: the last Props record removed");
+        }
+        {
+            /* More records: one 2-byte record appended after the 161st (length, id, kind, two
+             * payload bytes) and before the tail.  Only the past-the-table check refuses; the
+             * table is indexed by it, so without the check the read runs off its end. */
+            Bytes extra;
+            auto const put = [&extra](std::uint32_t value) {
+                for (int i = 0; i < 4; ++i) {
+                    extra.push_back(static_cast<std::uint8_t>((value >> (8 * i)) & 0xFFu));
+                }
+            };
+            put(2);
+            put(0x024013FCu);
+            put(1);
+            extra.push_back(0x00);
+            extra.push_back(0x00);
+            Bytes changed(props.begin(), props.begin() + static_cast<std::ptrdiff_t>(tail_start));
+            changed.insert(changed.end(), extra.begin(), extra.end());
+            changed.insert(changed.end(), props.begin() + static_cast<std::ptrdiff_t>(tail_start),
+                           props.end());
+            CfbDocument doc = control;
+            doc.replace_stream("114/Props", changed);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                    "is past the 161 records of the measured control",
+                    "0.3: one Props record appended after the 161st");
+        }
         /* The opaque tail: one byte flipped near its end is refused; the one Task Var2Data
          * size scalar the save rewrites (tag 0x01000100) is not part of the pin. */
         {
