@@ -472,6 +472,22 @@ void refused_requests() {
                 "carries a deadline", "deadline");
     }
     {
+        /* W35c-2.3 (R35bG0-8): the project summary task's Deadline and constraint, which the
+         * leaf loops never read. */
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(0, mppwrite::task_row::kDeadline, 0x3BFD27D8u);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "the project summary task carries a deadline", "project row deadline");
+        CfbDocument constrained = control;
+        TaskTable crows = TaskTable::from_document(constrained);
+        crows.set_u16(0, mppwrite::task_row::kConstraintType, 4);
+        crows.store_into(constrained);
+        refuses([&] { mppwrite::save_calculate(constrained, good, path); },
+                "the project summary task carries a constraint", "project row constraint");
+    }
+    {
         /* W35b-0.3 (R35G1-2) case 2: the recalculation would shorten the project. */
         CfbDocument doc = control;
         TaskTable rows = TaskTable::from_document(doc);

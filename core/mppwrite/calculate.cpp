@@ -556,6 +556,17 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
         if (!read_task_file_shape(doc, reason, kTable, "Calculate Project pair")) {
             return fail(error, reason);
         }
+        /* W35c-2.3 (R35bG0-8): the loops below start at the first leaf.  A Deadline (or a
+         * constraint) can be set on the project summary task, and whether Project carries it
+         * into the leaves' late dates is not measured, so row 0 is checked too. */
+        if (is_date(rows.u32(0, task_row::kDeadline))) {
+            return fail(error, "the project summary task carries a deadline; the measured "
+                               "Calculate Project save has none");
+        }
+        if (rows.u16(0, task_row::kConstraintType) != 0) {
+            return fail(error, "the project summary task carries a constraint; the "
+                               "measured Calculate Project save has none");
+        }
         std::vector<std::uint8_t> const meta =
             doc.read_stream(std::string(kTable) + "/FixedMeta");
         for (std::size_t row = 1; row < kRows; ++row) {
