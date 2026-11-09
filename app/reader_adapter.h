@@ -308,6 +308,15 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     for (const mpp::Resource& resource : document.resources) {
         input.resources.push_back(resource_row_from_mpp(resource));
     }
+    // W35d-2.12 (R35cG1-6): the rows the reader skipped (tombstones and the like) are not in
+    // `resources`, yet the assignment writer reads their session byte; carry whether each was
+    // read and is the unsaved 0x1C.
+    input.skipped_resource_sessions_unsaved = true;
+    for (const mpp::SkippedRow& skipped : document.skipped_resources) {
+        if (!skipped.fixed_meta_session_stored || skipped.fixed_meta_session != 0x1C) {
+            input.skipped_resource_sessions_unsaved = false;
+        }
+    }
     input.calendars.reserve(document.calendars.size());
     for (const mpp::Calendar& calendar : document.calendars) {
         CalendarRow row;

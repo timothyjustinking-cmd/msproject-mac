@@ -293,6 +293,12 @@ struct PlanInput {
     // the Gantt do not read them).
     std::vector<ResourceRow> resources;
     std::vector<AssignmentRow> assignments;
+    // W35d-2.12 (R35cG1-6): `resources` holds the live rows only, while the assignment writer reads
+    // the session byte of every physical resource row.  True when every resource row the reader
+    // skipped (a tombstone, a row with no FixedMeta entry, uid 0) was read and carries the
+    // unsaved-session byte 0x1C, or there is none.  The default is the refused value, so a plan
+    // not built by the reader adapter fails closed in the removal rule.
+    bool skipped_resource_sessions_unsaved = false;
     // W35b-0.5: the calendar table, in file order; empty for a producer that has none.
     std::vector<CalendarRow> calendars;
     // W35b-2.9 (R35G0-2): the project's default calendar (114/Props 0x0240000E name

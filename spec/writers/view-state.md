@@ -334,7 +334,15 @@ has a guard of its own, and `app_edits_*` and `roundtrip_*` pin each on its own 
   (FixedMeta byte 12 of each resource row) and `ResourceRow` carries it;
   `assignment_plan_refusal` refuses a removal over any resource row that is not the measured
   0x1C or was not read ("a Project session has saved it"), in the builder and in `push()`.  The
-  writer keeps its own loop over every resource row.
+  writer keeps its own loop over every resource row.  *W35d-2.12 (R35cG1-6):* the two layers
+  did not read the same rows: the plan's `resources` are the live rows (the reader skips uid 0
+  and tombstones), the writer's loop is every physical row 1..N.  `SkippedRow` now carries the
+  session byte of a skipped resource row, `PlanInput::skipped_resource_sessions_unsaved` says
+  whether every skipped row was read and is 0x1C (false by default), and
+  `assignment_plan_refusal` refuses on it ("a deleted or unreadable resource row").  A row whose
+  FixedMeta entry is absent has no byte to read, so it is refused by the plan too; the writer
+  reads that row by entry index and may name a different byte.  `app_edits_assignment` has a
+  tombstoned row with 0x5C (both layers) and one with 0x1C (not blamed by the plan).
 - **Show Level's view state (R35G2-1).**  Here the plan cannot be the guard: the applied view,
   the table, its columns and the uid-2 view block are in the file.  `make_show_level_edit` now
   calls `mppwrite::require_measured_outline_view` itself, before the dry run, and says
