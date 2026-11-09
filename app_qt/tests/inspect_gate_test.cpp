@@ -31,12 +31,10 @@
 #include <QApplication>
 #include <QDir>
 #include <QFileInfo>
-#include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
 #include <QModelIndex>
 #include <QTableView>
-#include <QTimer>
 #include <QToolButton>
 // Qt 6.5.3's qtestmouse.h trips MSVC /W4 C4701 (an uninitialised local in the
 // inline mouse helper).  The gate builds with /WX, so scope the warning off for
@@ -61,6 +59,7 @@
 #include "gate_util.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "prompt_hook.h"
 #include "ribbon_bar.h"
 #include "sheet.h"
 #include "shell_style.h"
@@ -227,25 +226,6 @@ bool show_project_summary(msqt::MainWindow& window) {
         return window.project_summary_visible();
     }
     return false;
-}
-
-struct InputDialogResult {
-    bool seen = false;
-};
-
-void accept_input_dialog(InputDialogResult* seen, const QString& text) {
-    QTimer::singleShot(0, [seen, text]() {
-        for (QWidget* widget : QApplication::topLevelWidgets()) {
-            auto* dialog = qobject_cast<QInputDialog*>(widget);
-            if (dialog == nullptr || !dialog->isVisible()) {
-                continue;
-            }
-            seen->seen = true;
-            dialog->setTextValue(text);
-            dialog->accept();
-            return;
-        }
-    });
 }
 
 std::set<std::uint32_t> uids_in_sheet(msqt::MainWindow& window) {
@@ -518,9 +498,13 @@ int main(int argc, char** argv) {
             const std::set<std::uint32_t> before = uids_in_sheet(insert_window);
             gate::check(click_task(insert_window, 3),
                         "uid 3 (the last live row) is selected for the insert");
-            InputDialogResult seen;
-            accept_input_dialog(&seen, QStringLiteral("Inspector Pending Row"));
-            trigger(insert_window, app::MenuAction::insert_task);
+            gate::PromptResult seen;
+            {
+                // W35b-4.R8: polls until the click returns, then stops with the scope.
+                gate::PromptAnswerer answerer(&seen, true,
+                                              QStringLiteral("Inspector Pending Row"));
+                trigger(insert_window, app::MenuAction::insert_task);
+            }
             gate::check(seen.seen, "Insert Task asks for a name");
             insert_sheet = insert_window.sheet();  // the insert rebuilds the rows
             std::uint32_t pending_uid = 0;
