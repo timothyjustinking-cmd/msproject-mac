@@ -734,6 +734,38 @@ void test_refusals(TestContext& t) {
     refuses("wave30-notes-control.mpp", append_edit(2, 0, {1, 2}),
             "field key 0", "key 0 refused");
 
+    /* W35b-3.7 (RW35-W6): the project-row keys are measured on the project row only and
+     * with their own payload; the whitelist alone took any uid and any bytes. */
+    {
+        std::uint32_t const kOvertimeWork = mppwrite::kTaskActualOvertimeWorkFieldId;
+        std::vector<std::uint8_t> const zeros(8, 0);
+        char const* const project_row_only = "is measured on the project row (uid 0) only";
+        refuses("wave30-notes-control.mpp", append_edit(2, kOvertimeWork, zeros),
+                project_row_only, "an overtime append on a task row refused");
+        refuses("wave30-notes-control.mpp",
+                append_edit(2, mppwrite::kTaskProjectWbsFieldId, {'0', 0, '3', 0, 0, 0}),
+                project_row_only, "a project WBS append on a task row refused");
+        for (std::uint32_t const key :
+             {mppwrite::kTaskActualOvertimeWorkFieldId, mppwrite::kTaskRemainingOvertimeWorkFieldId,
+              mppwrite::kTaskOvertimeCostFieldId, mppwrite::kTaskActualOvertimeCostFieldId,
+              mppwrite::kTaskRemainingOvertimeCostFieldId}) {
+            refuses("wave30-notes-control.mpp",
+                    append_edit(0, key, {0, 0, 0, 0, 0, 0, 0, 1}), "is measured as eight zero bytes",
+                    "an overtime append with a non-zero payload refused");
+        }
+        refuses("wave30-notes-control.mpp", append_edit(0, kOvertimeWork, {0, 0, 0, 0}),
+                "is measured as eight zero bytes", "an overtime append of four bytes refused");
+        char const* const wbs_shape = "is measured as two ASCII digits in UTF-16LE and a NUL";
+        refuses("wave30-notes-control.mpp", append_edit(0, mppwrite::kTaskProjectWbsFieldId, {1, 2}),
+                wbs_shape, "a project WBS append of two bytes refused");
+        refuses("wave30-notes-control.mpp",
+                append_edit(0, mppwrite::kTaskProjectWbsFieldId, {'A', 0, '3', 0, 0, 0}),
+                wbs_shape, "a project WBS append of a letter refused");
+        refuses("wave30-notes-control.mpp",
+                append_edit(0, mppwrite::kTaskProjectWbsFieldId, {'0', 0, '3', 0, 0, 1}),
+                wbs_shape, "a project WBS append that is not NUL-terminated refused");
+    }
+
     /* W35-0.4 (RC-W6): only the keys a pair measured for the shape are taken,
      * whatever the payload; each case is refused before a stream is read. */
     char const* const unmeasured = "is not one a committed pair measured";

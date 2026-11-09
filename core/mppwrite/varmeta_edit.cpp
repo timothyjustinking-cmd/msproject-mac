@@ -182,6 +182,58 @@ void check_measured_key(TableShape const& shape, VarRecordEdit const& edit,
                 "0x0C400001); refused");
 }
 
+/* W35b-3.7 (RW35-W6): the project-row keys are measured on the project row only, and
+ * with the payload their pair stores.  The whitelist above is keyed on (table, shape,
+ * field) and says nothing of the row or the bytes, so a Task-row uid or any payload under
+ * one of these keys reached a save:
+ *  - the project WBS record (0x0B40019F) is the last-issued number, two ASCII digits as
+ *    UTF-16LE and a NUL (wave30-wbs-code stores "03");
+ *  - Calculate Project's five overtime records are eight zero bytes each
+ *    (wave35-calculate-unlinked). */
+bool is_overtime_key(std::uint32_t field_id) {
+    return field_id == kTaskActualOvertimeWorkFieldId ||
+           field_id == kTaskRemainingOvertimeWorkFieldId ||
+           field_id == kTaskOvertimeCostFieldId ||
+           field_id == kTaskActualOvertimeCostFieldId ||
+           field_id == kTaskRemainingOvertimeCostFieldId;
+}
+
+void check_project_row_key(TableShape const& shape, VarRecordEdit const& edit,
+                           std::string const& function) {
+    if (std::string_view(shape.table) != kVarTaskTable ||
+        edit.shape != VarRecordShape::append ||
+        !(edit.field_id == kTaskProjectWbsFieldId || is_overtime_key(edit.field_id))) {
+        return;
+    }
+    char hex[16];
+    std::snprintf(hex, sizeof hex, "0x%08X", edit.field_id);
+    if (edit.uid != 0) {
+        throw Error(function + ": field key " + hex + " is measured on the project row "
+                    "(uid 0) only, not on task uid " + std::to_string(edit.uid) +
+                    "; refused");
+    }
+    if (is_overtime_key(edit.field_id)) {
+        bool const zeros =
+            edit.payload.size() == 8 &&
+            std::all_of(edit.payload.begin(), edit.payload.end(),
+                        [](std::uint8_t byte) { return byte == 0; });
+        if (!zeros) {
+            throw Error(function + ": the project-row overtime record " + hex +
+                        " is measured as eight zero bytes, not " +
+                        std::to_string(edit.payload.size()) + " bytes; refused");
+        }
+        return;
+    }
+    Bytes const& p = edit.payload;
+    auto const digit = [](std::uint8_t byte) { return byte >= '0' && byte <= '9'; };
+    if (p.size() != 6 || !digit(p[0]) || p[1] != 0 || !digit(p[2]) || p[3] != 0 ||
+        p[4] != 0 || p[5] != 0) {
+        throw Error(function + ": the project WBS record " + hex + " is measured as two "
+                    "ASCII digits in UTF-16LE and a NUL (six bytes), not a " +
+                    std::to_string(p.size()) + "-byte payload of another shape; refused");
+    }
+}
+
 /* '114/TBkndTask' -> '114/Props' (the directory stream, not the per-table
  * registry). */
 std::string props_path_for(std::string const& table) {
@@ -1032,6 +1084,7 @@ VarRecordWrite save_var_record(CfbDocument& doc, std::string_view table,
                     "resource value); refused");
     }
     check_measured_key(shape, edit, function);
+    check_project_row_key(shape, edit, function);
 
     CfbDocument const opened = doc;
     TableState state = load_table(doc, table_path, function);
