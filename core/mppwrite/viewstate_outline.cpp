@@ -467,11 +467,20 @@ std::size_t meta_flag_at(std::size_t row) {
 
 } /* namespace */
 
-void require_measured_outline_view(CfbDocument const& doc) {
+/* W35c-2.12 (R35bG1-4): the pairs measure the six-task outline on both text styles
+ * (deep-level1 on the first, deep-level2 on the second) and the five-task outline on the
+ * first only, so the second digest is accepted for the six-task shape alone. */
+static bool alt_digest_measured_for(std::vector<OutlineViewRow> const& rows) {
+    return levels_match(rows, kDeepLevels.data(), kDeepLevels.size());
+}
+
+void require_measured_outline_view(CfbDocument const& doc,
+                                   std::vector<OutlineViewRow> const& rows) {
     std::string const function = "view outline write";
     Bytes const edl = doc.read_stream(kEdlVar2);
     require_applied_view(edl, function);
-    require_measured_view_block(doc, function, "this outline level");
+    require_measured_view_block(doc, function, "this outline level",
+                                alt_digest_measured_for(rows));
 }
 
 bool outline_shape_measured(std::vector<OutlineViewRow> const& rows) {
@@ -569,7 +578,8 @@ ViewOutlineWrite save_view_outline(CfbDocument& doc, ViewOutlineEdit const& edit
     /* W35b-1.1: the view the level is persisted on is the measured one, the
      * Gantt Chart on the Entry table with the control's uid-2 block and no sort. */
     require_applied_view(edl, function);
-    require_measured_view_block(doc, function, "this outline level");
+    require_measured_view_block(doc, function, "this outline level",
+                                alt_digest_measured_for(edit.rows));
     Bytes const edl_meta = doc.read_stream(kEdlMeta);
     if (edl_meta.size() < kVarMetaHeaderSize ||
         get_u32(edl_meta, kVarMetaVar2SizeOffset) != edl.size()) {

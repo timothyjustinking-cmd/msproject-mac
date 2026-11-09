@@ -3451,7 +3451,7 @@ bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, i
     // call site of its own, so removing the writer's check does not remove this one.  The
     // predicate is the core's: the view block lives in the file and the plan does not carry it.
     try {
-        mppwrite::require_measured_outline_view(document);
+        mppwrite::require_measured_outline_view(document, view_edit.rows);
     } catch (const std::exception& refusal) {
         error = std::string("the view Show Level would persist on is not the measured one: ") +
                 refusal.what();

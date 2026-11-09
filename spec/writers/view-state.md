@@ -235,6 +235,7 @@ is claimed for these pairs.
 |---|---|
 | Show Level 1 or 2 on the five-task base (levels 0, 1, 1, 0, 0) | Level 1 enabled; Level 2 **refused** by the edit model (nothing hidden, nothing to persist; the writer reproduces Project's marker-only save and is tested on it) |
 | Show Level 1 or 2 on the six-task outline (0, 1, 2, 2, 1, 0) | enabled |
+| the five-task outline in a file whose view block carries the second text style (digest `6f6082994d512927`, the flat sort control's) | **refused** (W35c-2.12, R35bG1-4): the five-task pairs are measured on the first style (`b2a54e044baa30a2`) only; the six-task outline is measured on both (deep-level1 on the first, deep-level2 on the second), so both are accepted there |
 | Show Level 3 and deeper; Show Level 0 or negative | **refused** (unmeasured) |
 | Show All Subtasks | session only; withdraws a queued level (the control is already fully expanded; a file that already hides rows is refused) |
 | any other task count or level shape; a pending (unsaved) task; the view uid other than 2 | **refused** |

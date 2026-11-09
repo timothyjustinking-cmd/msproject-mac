@@ -550,6 +550,30 @@ void test_refusals(TestContext& t) {
             ViewOutlineEdit const deep_edit = make_edit(2, kDeepLevels);
             (void)mppwrite::save_view_outline(deep, deep_edit, "", true);
         }
+        /* W35c-2.12 (R35bG1-4): the second text style is measured for the six-task outline
+         * only.  The flat sort control is a five-task file carrying it; Show Level on it was
+         * accepted although no pair measured that combination, and the writer and the
+         * builder's own view check (require_measured_outline_view) now both refuse it. */
+        {
+            fixture::require_committed(
+                join(MPPWRITE_TEST_DATA, control_name("sort-flat-name-desc")));
+            CfbDocument flat = doc_from_data(control_name("sort-flat-name-desc"));
+            refuses(flat, measured_edit(),
+                    "no pair measured for this shape (digest mismatch for the first text style only)",
+                    "R35bG1-4: the five-task outline on the second text style refused");
+            expect_error(
+                t, [&] { mppwrite::require_measured_outline_view(flat, measured_edit().rows); },
+                "no pair measured for this shape (digest mismatch for the first text style only)",
+                "R35bG1-4: the builder's view check refuses the five-task outline too");
+            bool six_task_passes = true;
+            try {
+                mppwrite::require_measured_outline_view(flat, make_edit(2, kDeepLevels).rows);
+            } catch (std::exception const&) {
+                six_task_passes = false;
+            }
+            t.check(six_task_passes,
+                    "R35bG1-4: the second text style is still accepted for the six-task outline");
+        }
     }
 
     /* W35b-1.2 (R35G2-2): the request's outline is the file's own.  The request

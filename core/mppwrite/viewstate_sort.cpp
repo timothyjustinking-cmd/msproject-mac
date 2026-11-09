@@ -533,10 +533,15 @@ std::uint64_t sort_block_digest(Bytes const& var2, std::size_t block_offset) {
 }
 
 void require_measured_view_block(CfbDocument const& doc, std::string const& function,
-                                 std::string const& refused) {
+                                 std::string const& refused, bool alt_digest_measured) {
     SortBlock const block = locate_block(doc, function);
     Bytes const var2 = doc.read_stream(std::string(kViewTable) + "/Var2Data");
     std::uint64_t const digest = sort_block_digest(var2, block.offset);
+    if (!alt_digest_measured && digest == kMeasuredBlockDigestAlt) {
+        throw Error(function + ": the view-state block is the second measured text style's, "
+                    "which no pair measured for this shape (digest mismatch for the first "
+                    "text style only), so " + refused + " is refused");
+    }
     if (digest != kMeasuredBlockDigest && digest != kMeasuredBlockDigestAlt) {
         throw Error(function + ": the view-state block is not one of the two "
                     "measured controls' outside its sort spec (digest mismatch: "

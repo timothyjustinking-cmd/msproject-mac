@@ -134,7 +134,8 @@ bool outline_shape_measured(std::vector<OutlineViewRow> const& rows);
  * call of its own so the edit model's builder can refuse a view no pair measured at its
  * own call site rather than only through the writer's dry run.  save_view_outline still
  * makes these checks itself.  Throws Error. */
-void require_measured_outline_view(CfbDocument const& doc);
+void require_measured_outline_view(CfbDocument const& doc,
+                                   std::vector<OutlineViewRow> const& rows);
 
 /*
  * Apply `edit` to `doc`, write the package to `path`, re-open it and prove the
