@@ -194,10 +194,21 @@ What this settles:
   yet.
 - **Block digest.**  A control saved by another Project session differs from the
   wave-30 control at payload offset 42,678 (`0x18` -> `0x26`) and nowhere else
-  in the block; the byte holds six values (`0x15 0x16 0x17 0x18 0x1c 0x26`)
-  across the 258 committed saves that share the rest of the block, so it is
-  per-save noise, and the writer's pinned block digest now masks it
-  (`0xd2f37d751e6e8333`, the value all 258 share).
+  in the block.  The byte is **not per-save noise** (W35b-3.5, R35G3-10): it is
+  the third byte of the little-endian float32 at payload offset 42,676, inside
+  item `0x22400015` (`0x3d1512c0` .. `0x3d2612c0`).  It is constant within a
+  session and rises with the session's calendar date: `0x15` in the wave-23/24
+  files, `0x16` wave 25, `0x17` wave 28, `0x18` wave 30, `0x19` two wave-31 files,
+  `0x1c` wave 34, `0x26` wave 35.  Project rewrites it on every save, and the
+  port keeps the input's value.  The writer's pinned block digest masks this one
+  byte (`0xd2f37d751e6e8333`, the value every committed save of the block shares),
+  for Bold on and Bold off alike; the mask is exactly one byte wide, and
+  `roundtrip_viewstream` flips payload bytes 42,677 and 42,679 in both directions
+  and requires the refusal.  Bold on has no pair measured from a second session,
+  so its acceptance of another session's block rests on that one byte being the
+  only difference.  When the third byte carries into 42,679 every control from a
+  newer session is refused ("differs from the measured control's") until a
+  measured pair covers it; the mask is not to be widened without one.
 
 **Renumber** (`wave35-g3-wbs-renumber-defined`: `wave30-wbs-code.mpp` resaved,
 then `WBSCodeRenumber(All=True)`): on the three-task file whose numbers already

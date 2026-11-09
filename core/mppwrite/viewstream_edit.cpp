@@ -388,11 +388,16 @@ ViewState load_view(CfbDocument const& doc, std::uint32_t view_uid,
  * every other item are in that digest; the font word 0x90000001 is undecoded, so
  * a view with any other style is not a shape the pair measured. */
 constexpr std::size_t kMeasuredViewBlockBytes = 42692;
-/* W35-3.4: one byte of the block, payload offset 42,678, is per-save noise.  It
- * holds six values (0x15 0x16 0x17 0x18 0x1c 0x26) across the 258 committed
- * saves that share the rest of the block, so a control saved by another Project
- * session differs there and nowhere else.  It is masked, and the digest below
- * is taken with it masked; all 258 digest to this one value. */
+/* W35-3.4, corrected W35b-3.5 (R35G3-10): one byte of the block, payload offset
+ * 42,678, differs between Project sessions and nowhere else in the block.  It is
+ * not per-save noise: it is the third byte of the little-endian float32 at payload
+ * 42,676 inside item 0x22400015 (0x3d1512c0 .. 0x3d2612c0), constant within a
+ * session and rising with the session's calendar date (0x15 0x16 0x17 0x18 0x19
+ * 0x1c 0x26 across the committed saves).  The digest below is taken with this one
+ * byte masked, for Bold on and Bold off alike, and tests flip both neighbours
+ * (42,677 and 42,679) to pin the mask's width.  When the byte carries into 42,679
+ * every control from a newer session is refused ("differs from the measured
+ * control's") until a measured pair covers it; the mask is not widened silently. */
 constexpr std::size_t kViewBlockNoiseAt = 42678;
 constexpr std::uint64_t kMeasuredViewBlockDigest = 0xd2f37d751e6e8333ULL;
 
