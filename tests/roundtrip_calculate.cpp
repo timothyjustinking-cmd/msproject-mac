@@ -1212,10 +1212,52 @@ void refused_requests() {
         std::filesystem::remove(target);
     }
     {
-        /* W35c-2.4 (R35bG2-2), 2.7 (R35bG2-7): the scratch indirection itself.  A non-empty
-         * directory squats on the scratch name.  The save is refused and neither the existing
-         * target nor the squatter is touched; before 2.7 the squatter was deleted first, and
-         * with the indirection reverted the save would succeed. */
+        /* W35d-1.3 (R35cG2-1): the scratch chain itself.  Since 2.7 the squat test below stops at
+         * the up-front existence check, and no other test reaches a refusal after the first
+         * append (the Props pin refuses first), so this uses the test-only fault seam: the save
+         * throws after the first append, and after the last, once each has been written to the
+         * scratch file.  With the five appends and the Props edit writing `path` instead, the
+         * target would hold a partly calculated file; it must be byte-identical, with no scratch
+         * file left. */
+        for (std::size_t const appends : {std::size_t{1}, std::size_t{3}, std::size_t{5}}) {
+            std::string const label = "fault after append " + std::to_string(appends);
+            CfbDocument doc = control;
+            std::string const target = out_path("w35-calculate-fault-target.mpp");
+            std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"),
+                                       target, std::filesystem::copy_options::overwrite_existing);
+            Bytes const before = file_bytes(target);
+            mppwrite::set_calculate_fault_after_appends(appends);
+            bool refused_by_seam = false;
+            try {
+                mppwrite::save_calculate(doc, good, target);
+            } catch (std::exception const& failure) {
+                refused_by_seam =
+                    std::string(failure.what()).find("injected fault after append " +
+                                                     std::to_string(appends)) != std::string::npos;
+            }
+            mppwrite::set_calculate_fault_after_appends(0);
+            check(refused_by_seam, label + ": the seam fires after that append");
+            check(file_bytes(target) == before, label + ": target unchanged");
+            check(!std::filesystem::exists(target + ".calculate.tmp"),
+                  label + ": no scratch file left");
+            std::filesystem::remove(target);
+        }
+        /* The seam is off again: the same save succeeds. */
+        CfbDocument doc = control;
+        std::string const target = out_path("w35-calculate-fault-target.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        mppwrite::save_calculate(doc, good, target);
+        check(file_bytes(target) != file_bytes(fixture_path("wave35-calculate-unlinked-control.mpp")),
+              "the seam off: the save writes the target");
+        std::filesystem::remove(target);
+    }
+    {
+        /* W35c-2.4 (R35bG2-2), 2.7 (R35bG2-7): the scratch name is not ours to clear.  A
+         * non-empty directory squats on it.  The save is refused up front and neither the
+         * existing target nor the squatter is touched; before 2.7 the squatter was deleted
+         * first.  This stops at the existence check, so it does NOT reach the chain: that is
+         * the fault-seam test above (W35d-1.3, R35cG2-1). */
         CfbDocument doc = control;
         std::string const target = out_path("w35-calculate-atomic-target5.mpp");
         std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,

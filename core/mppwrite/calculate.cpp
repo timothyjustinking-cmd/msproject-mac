@@ -28,6 +28,13 @@
 
 namespace mppwrite {
 
+/* W35d-1.3 (R35cG2-1): the test-only fault seam of save_calculate (calculate.h).  0 is off. */
+static std::size_t g_fault_after_appends = 0;
+
+void set_calculate_fault_after_appends(std::size_t appends) {
+    g_fault_after_appends = appends;
+}
+
 bool calculate_measured_finish(std::uint32_t start, std::uint32_t duration,
                                std::uint32_t& finish) {
     constexpr int kDayStartSeconds = 8 * 3600;
@@ -1026,6 +1033,10 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
             }
             save_var_record(work, kVarTaskTable, {edit}, scratch);
             ++result.var_records_appended;
+            if (g_fault_after_appends != 0 && result.var_records_appended == g_fault_after_appends) {
+                throw Error("calculate: injected fault after append " +
+                            std::to_string(result.var_records_appended) + " (test seam)");
+            }
         }
 
         /* 114/Props: the project finish and the pending flag, in place. */
