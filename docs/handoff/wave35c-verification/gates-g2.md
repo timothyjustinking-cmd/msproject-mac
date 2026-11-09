@@ -143,6 +143,19 @@ the item says so.
 - The 24 `wave35-g3-*` fixtures store project start 2026-01-04 13:00 (Props `781ef13b`), not the
   `3831f13b` of the viewstate fixtures; their README rows (602 to 605 among them) still say
   2026-01-05 08:00.
+  **Corrected by W35d-2.15 (R35cG2-7)**, from a decode of the Props record 0x02400002 in each
+  file (key, length 4, value; `build/w35d/props_scan.py`, output `build/w35d/2.15-g3-scan.tsv`),
+  not a substring scan: it is 12 pairs (36 files, the control, its null save and the result of
+  each) at `781ef13b` (2026-01-04 13:00) and 5 pairs (15 files) at `3831f13b` (2026-01-04
+  21:00), and no file has both.  `781ef13b`: `assign-remove-port-saved`, `font-bold-off`,
+  `font-bold-range`, `font-bold-row2`, `font-bold-start`, `font-colour`, `font-italic`,
+  `font-name`, `font-size`, `font-underline`, `notes-generator`, `wbs-renumber-defined`.
+  `3831f13b`: `baseline-set-nested`, `insert-milestone-first`, `insert-milestone-last`,
+  `insert-milestone-nested`, `insert-summary-nested`.  The 51 `wave35-viewstate-*` files all
+  carry `3831f13b`.  README rows 602 to 605 are four of the `insert-*` pairs, which are in the
+  second group; they say Start 2026-01-05 08:00 (the leaf's Start, the first working instant
+  after either Props start), not the Props word, so they are not shown wrong by this.  No
+  fixture or README row was changed.
 - The plan layer trims the Props calendar name and the writer does not (2.21): the writer is
   the stricter, and the builder's dry run reaches it, so no file is mis-written.
 - The stale "asks to save or undo" labels in the sort and show_level test names remain.
