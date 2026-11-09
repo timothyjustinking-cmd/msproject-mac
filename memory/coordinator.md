@@ -16,11 +16,11 @@ options), queued in `plan-waves27-30.md` ("Queued from wave 35b").  Coordinator 
 only in CI), an independent review of `wave35..wave35b`, and the 4(e) reopen check.
 Wave 35c closed the rest of the G4 and CLOSE review queue (`docs/handoff/wave35b-verification/coord-gates-close.md`) except R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth.  What 35c left open is in the wave 35d state below.
 
-## Wave 35d state (in progress on `wave35d`, NOT merged, NOT pushed) — 10 November 2026
+## Wave 35d state (closed on `wave35d`, `WAVE-35d-COMPLETE`, NOT merged, NOT pushed) — 10 November 2026
 
 Fix-only wave cut from `wave35c`; brief `docs/handoff/wave35d-brief.md`, record
-`docs/handoff/wave35d-complete.md` (`WAVE-35d-G0-COMPLETE`, then G1 and G2).  It works the wave 35c queue
-in `docs/handoff/wave35c-verification/coord-gates-close.md`, Highs first.  State after G2:
+`docs/handoff/wave35d-complete.md` (`WAVE-35d-G0-COMPLETE` to `-G2-COMPLETE`, then `WAVE-35d-COMPLETE`).  It worked the wave 35c queue
+in `docs/handoff/wave35c-verification/coord-gates-close.md`, Highs first.  State at CLOSE:
 **Highs** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`), R35cG1-2 (fixed `6458203`).
 **CI** R35cW-CI1 (fixed `23de6e2`), R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS is the
 only proof of each.  **Mediums fixed** R35cG1-3 (`e967858`), R35cG1-4 (`e2eca38`), R35cG2-1

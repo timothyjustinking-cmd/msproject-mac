@@ -11,10 +11,13 @@ only file a new session must read first._
 
 ## The 30-second state
 
-* **Wave 35d (fix-only) is in progress on branch `wave35d`** (cut from `wave35c`;
-  `docs/handoff/wave35d-brief.md`, `docs/handoff/wave35d-complete.md`; nothing is pushed).  It
-  works the queue wave 35c left (`wave35c-verification/coord-gates-close.md`, Highs first).
-  State after G2:
+* **Wave 35d (fix-only) is closed on branch `wave35d`** (cut from `wave35c`;
+  `docs/handoff/wave35d-brief.md`, `docs/handoff/wave35d-complete.md`, `WAVE-35d-COMPLETE`,
+  builder Claude Sonnet 5.5; nothing is pushed).  It worked the queue wave 35c left
+  (`wave35c-verification/coord-gates-close.md`, Highs first); the fresh-tree gates are in the
+  CLOSE section of the record (`build/w35d/W35d-CLOSE-fresh-gates.log`).  The coordinator pushes
+  `wave35d`, dispatches `qt.yml` and `ci.yml` (R35cW-CI1 and R35cW-CI2 are gated only there) and
+  runs mutations and an independent review of `wave35c..wave35d`.  State at CLOSE:
   * **Highs:** R35cG0-1 (fixed `abc8a60`), R35cG1-1 (fixed `61a451b`) and R35cG1-2 (fixed
     `6458203`).
   * **CI:** R35cW-CI1 (fixed `23de6e2`) and R35cW-CI2 (fixed `171831b`); CI on GCC 13 and macOS

@@ -142,3 +142,87 @@ No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no
 dispatched. Every 35d fix still awaits an independent review.
 
 WAVE-35d-G2-COMPLETE
+
+## CLOSE
+
+### CLOSE gates
+
+Fresh trees `build/w35d-close-fresh`, `-app` and `-qt` at `d335791` (the last code change is
+`a85d8b3`, 2.14; every later commit is a record), configured from scratch with
+`CORE_WARNINGS_AS_ERRORS=ON`; script `build/w35d/W35d-CLOSE-fresh-gates.ps1`, log
+`build/w35d/W35d-CLOSE-fresh-gates.log` (summary: `build/w35d/close_log_summary.py`). The
+START-HERE, `memory/coordinator.md` and `plan-waves27-30.md` state lines changed after that run;
+they are documents and no gate reads them.
+
+- core build exit 0 with warnings as errors; `ctest -E plan_recalc` 65/65;
+- `plan_recalc_tests` 512 checks with the corpus, 266 with `MPP_NO_CORPUS=1`;
+- engine self-test 265 checks, 0 failures; `engine_diff.py --selftest` 53 checks; engine suite 8
+  scenarios, 7 pass and the expected `constraint-mso` failure (1 of 247 fields);
+- reader tests 1469 checks with the corpus, 789 without; M2 `recalc --compare` 332 of 332 fields;
+- app build exit 0 and ctest 34/34, with and without `MPP_NO_CORPUS=1`;
+- app_qt build exit 0 and ctest 52/52; no run reported "No tests were found";
+- `check_fixtures.py`, `check_markers.py` (self-test 19 checks, worktree, `main..HEAD`) and
+  `check_command_backlog.py` (114 pins, 114 rows) exit 0; `gen_calculate_props_pin.py --check` up
+  to date; `scan_client_names.py` on the head and on the `main..HEAD` messages 0 hits;
+  `guard_names.py main..HEAD` exit 0; the client-string grep finds none; 0 CR in the LF-pinned
+  types; `git diff --check main..HEAD` exit 0.
+- The gcc, clang and AppleClang jobs cannot run here. **CI is the only proof of W35d-0.1** (the GCC
+  `-Wmissing-field-initializers`) **and of W35d-0.2** (macos-qt's About box). `app/main.mm` is not
+  changed in `wave35c..HEAD`.
+- Trailer `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 35d)`: present on all 29 builder
+  commits in `wave35c..HEAD` (checked by script at CLOSE). The one commit without it, `e17ddb7`, is
+  the coordinator's wave 35d brief.
+
+### Ids, with the commit that closes each
+
+| Group | Ids | Result |
+|---|---|---|
+| G0 | R35cW-CI1, R35cW-CI2 | fixed `23de6e2`, `171831b`; CI is the gate for both |
+| G0 | R35cG0-1 (High) | fixed `abc8a60` |
+| G0 | R35cG1-1 (High) | fixed `61a451b`, both halves |
+| G0 | R35cG1-2 (High) | fixed `6458203` |
+| G1 | R35cG1-3, R35cG1-4 | fixed `e967858`, `e2eca38` |
+| G1 | R35cG2-1 | fixed `41f7a2c` |
+| G1 | R35cG0-3 | fixed `6552f11` (a record and a refusal text; no refusal lifted) |
+| G1 | R35cW-2, R35cW-1 with R35cG2-8 | fixed `454521d`, `4410935` (records) |
+| G2 | R35cG0-2, R35cW-3 | **partly fixed** `6f5cc18`: the plan half remains (the plan reads Start word +104 only; the writer half is closed and refused) |
+| G2 | R35cG0-4 | **partly fixed** `caa6cb1`: the plan has no Props digest, a recorded gap; the save is refused at the writer |
+| G2 | R35cG0-5, R35cG0-6 | fixed `ec2429c`, `7d908c6` |
+| G2 | R35cG2-2, -3, -6 | fixed `fc12254`, `f3c38d9`, `51c474b` |
+| G2 | R35cW-5 | fixed `492f10c` |
+| G2 | R35cG2-4, R35cG2-5 | fixed `bb4a398`, `e415fe2` |
+| G2 | R35cW-4 | fixed `4dcfcd7` |
+| G2 | R35cG1-6 | fixed `f9771b6` (one gap recorded: a row with no FixedMeta entry) |
+| G2 | R35cG1-5, R35cG1-7, R35cG2-7 | fixed `c250aef`, `a85d8b3`, `6652ded` |
+
+Every id in `wave35c-verification/` appears in this file. Two are only partly fixed (R35cG0-2 and
+R35cG0-4); each keeps its remainder in its row and in `spec/writers/calculate.md`. Nothing in this
+wave is deferred. The wave 35c ids that 35c recorded as partly fixed (R35bW-1, R35bW-2, R35bG2-2,
+R35bG3-1) have each had their remainder closed by 35d (see the 35c CLOSE table).
+
+**Guards seen red:** per group in the G0, G1 and G2 rows above; the logs are
+`build/w35d/*-red-*.log`. CLOSE adds no guard.
+
+**Found, not fixed** (carried from the group rows; nothing new at CLOSE):
+- Whether Redo should end the list for a Show Level, as it does for a Sort (the 0.4 route does not
+  diverge for a level), is the coordinator's decision.
+- The queued-Sort re-apply in `after_structural_change` is reachable only by a mutation run.
+- `qt_resource_add_gate` failed once in 0.65 s at `-j2` during 1.2 and passed alone and in every
+  later full run, CLOSE included; watch.
+- 1.4 names the port saves now refused from the Props records each writer touches; none was
+  re-saved through Project (no COM).
+- 2.12: a resource row with no FixedMeta entry has no session byte.
+- 2.11: Cut, Paste, Fill and the task form share the Calculate guard but only the cell gate has a
+  Calculate-queued test.
+- The plan half of R35cG0-2 and the plan-side Props digest of R35cG0-4 (above).
+
+**For the coordinator, after CLOSE:** push `wave35d` and dispatch `qt.yml` and `ci.yml` (0.1 and
+0.2 are gated there); mutations at each new guard, including re-runs of P3 (0.3) and Q10 (1.1); an
+independent review of `wave35c..wave35d`. The 4(e) reopen check is a rerun only if a writer's
+output changed; this wave adds no writer. Merging waves 34 to 35d waits on CI green on all three
+OSs and no open Critical or High.
+
+No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no workflow
+dispatched, no history rewrite.
+
+WAVE-35d-COMPLETE
