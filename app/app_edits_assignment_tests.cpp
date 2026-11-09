@@ -700,16 +700,20 @@ void check_refusals() {
         };
         const std::vector<ProjectCalendarCase> project_cases = {
             {"a default calendar named another calendar",
-             "the project's default calendar is not the Standard base calendar",
+             "is not implemented in this port: the project's default calendar is not the "
+             "Standard base calendar",
              [](app::PlanInput& changed) { changed.default_calendar_name = "Night Shift"; }},
             {"a default calendar the file does not store",
-             "the project's default calendar is not the Standard base calendar",
+             "is not implemented in this port: the project's default calendar is not the "
+             "Standard base calendar",
              [](app::PlanInput& changed) { changed.default_calendar_name_stored = false; }},
             {"a default week that is not stored",
-             "the project's default working week differs from the measured",
+             "is not implemented in this port: the project's default working week differs "
+             "from the measured",
              [](app::PlanInput& changed) { changed.default_week_stored = false; }},
             {"a default week with one byte changed",
-             "the project's default working week differs from the measured",
+             "is not implemented in this port: the project's default working week differs "
+             "from the measured",
              [](app::PlanInput& changed) {
                  changed.default_week_record.at(changed.default_week_record.size() / 2) ^= 0x01;
              }},

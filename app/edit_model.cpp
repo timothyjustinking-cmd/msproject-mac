@@ -2998,7 +2998,12 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
     // writer's check_project_calendar refuses it: the project's default calendar
     // is the Standard base calendar and its default week is the stock Monday to
     // Friday week.  A project on another calendar or week schedules the task
-    // differently and no pair measured it.
+    // differently and no pair measured it.  W35c-2.21 (R35bG2-3): both refusals now read
+    // like every other return here ("... is not implemented in this port: ..."), and the
+    // names are compared as the reader gives them (space-trimmed), where the writer compares
+    // the stored bytes with only trailing NULs stripped.  The two can differ on a name with
+    // a trailing space; the writer is the stricter, and the dry run reaches it, so no file
+    // is mis-written.
     std::string standard_name;
     for (const CalendarRow& calendar : plan.calendars) {
         if (calendar.uid == 1) {
@@ -3006,15 +3011,16 @@ std::string assignment_plan_refusal(const PlanInput& plan, std::uint32_t task_ui
         }
     }
     if (!plan.default_calendar_name_stored || plan.default_calendar_name != standard_name) {
-        return what + ": the project's default calendar is not the Standard base "
-                      "calendar (114/Props 0x0240000E names another calendar); the "
-                      "measured Project pairs schedule the task on Standard";
+        return what + " is not implemented in this port: the project's default calendar "
+                      "is not the Standard base calendar (114/Props 0x0240000E names "
+                      "another calendar); the measured Project pairs schedule the task "
+                      "on Standard";
     }
     if (!plan.default_week_stored ||
         plan.default_week_record != mppwrite::measured_default_week_record()) {
-        return what + ": the project's default working week differs from the "
-                      "measured Monday to Friday 08:00-12:00 + 13:00-17:00 week "
-                      "(114/Props 0x02401388)";
+        return what + " is not implemented in this port: the project's default working "
+                      "week differs from the measured Monday to Friday 08:00-12:00 + "
+                      "13:00-17:00 week (114/Props 0x02401388)";
     }
     std::size_t real = 0;
     bool names_resource = false;
