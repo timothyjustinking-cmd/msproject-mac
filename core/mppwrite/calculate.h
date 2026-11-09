@@ -73,6 +73,18 @@ inline constexpr std::uint8_t kCalculateLeafStamp = 0x30;
 bool calculate_measured_finish(std::uint32_t start, std::uint32_t duration,
                                std::uint32_t& finish);
 
+/* RW35-R4: the unlinked backward pass on the same calendar, for a leaf that finishes at
+ * `finish` (17:00 on a working day) and lasts `duration` (whole 8-hour days) in a project
+ * that finishes at `project_finish` (17:00 on a working day, not before `finish`).  The
+ * leaf's slack is 4800 ticks for each working day after `finish` up to `project_finish`,
+ * and its late start is 08:00 on the working day its duration's working days back from
+ * `project_finish`.  Returns false for any other input.  The writer's request check and
+ * the edit model's push() both call it, so the slack words a hand-built edit carries are
+ * the measured ones or refused. */
+bool calculate_measured_late(std::uint32_t finish, std::uint32_t duration,
+                             std::uint32_t project_finish, std::uint32_t& slack,
+                             std::uint32_t& late_start);
+
 /* What the pending file looks like, as the shape check read it. */
 struct CalculateShape {
     std::uint32_t critical_uid = 0;     /* the leaf that ends the project */

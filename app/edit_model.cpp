@@ -3733,6 +3733,50 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
     return {};
 }
 
+// W35b-3.7 (RW35-R4): the edit-side half of the Calculate Project rule, for push().  The
+// recalculated words the builder derived from the file are recomputed from the plan on
+// the measured calendar and compared, as sort_view and show_level recompute their orders,
+// so a hand-built edit that carries other slack, late dates, project finish or project
+// duration is refused here and not only by the writer's request check.
+std::string calculate_slack_refusal(const PlanInput& plan, const StructuralEdit& edit) {
+    const std::string prefix = "Calculate Project is not implemented in this port ";
+    date32 latest = kDateNa;
+    std::int64_t critical_duration = 0;
+    for (const TaskRow& task : plan.tasks) {
+        if (latest == kDateNa || (task.finish != kDateNa && task.finish > latest)) {
+            latest = task.finish;
+            critical_duration = task.duration_ticks;
+        }
+    }
+    if (latest == kDateNa || edit.restored_finish != latest ||
+        static_cast<std::int64_t>(edit.summary_duration) != critical_duration) {
+        return prefix + "for an edit whose project finish or duration is not the plan's latest "
+                        "leaf finish and its duration";
+    }
+    if (edit.slack.size() != plan.tasks.size()) {
+        return prefix + "for an edit with a recalculated entry count other than the plan's tasks";
+    }
+    for (std::size_t i = 0; i < plan.tasks.size(); ++i) {
+        const TaskRow& task = plan.tasks[i];
+        const OutlineSlackEntry& entry = edit.slack[i];
+        std::uint32_t slack = 0;
+        std::uint32_t late_start = 0;
+        if (entry.uid != task.uid ||
+            !mppwrite::calculate_measured_late(static_cast<std::uint32_t>(task.finish),
+                                               static_cast<std::uint32_t>(task.duration_ticks),
+                                               static_cast<std::uint32_t>(latest), slack,
+                                               late_start) ||
+            entry.free_slack != slack || entry.start_slack != slack ||
+            entry.total_slack != slack ||
+            entry.late_start != static_cast<date32>(late_start) || entry.late_finish != latest) {
+            return prefix + "for an edit whose slack or late dates for task uid " +
+                   std::to_string(task.uid) +
+                   " are not the working time to the project finish on the measured calendar";
+        }
+    }
+    return {};
+}
+
 }  // namespace
 
 bool make_calculate_edit(const PlanInput& plan, std::string_view source_path,
@@ -4295,7 +4339,8 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             // not is not the measured edit.
             if (plan == nullptr || edit.uid != 0 || !edit.name.empty() ||
                 !calculate_plan_refusal(*plan).empty() ||
-                edit.slack.size() != plan->tasks.size()) {
+                edit.slack.size() != plan->tasks.size() ||
+                !calculate_slack_refusal(*plan, edit).empty()) {
                 return false;
             }
             edit.anchor_uid = 0;

@@ -359,11 +359,31 @@ void expect_refused(const app::PlanInput& plan, const std::string& source, const
 app::StructuralEdit hand_edit(const app::PlanInput& plan) {
     app::StructuralEdit hand;
     hand.kind = app::StructuralKind::calculate_project;
-    hand.summary_duration = 1;
-    hand.restored_finish = 1;
+    /* W35b-3.7 (RW35-R4): the measured words for this plan, so a hand-built edit differs from
+     * the built one only where a test changes it. */
+    app::date32 latest = app::kDateNa;
+    for (const app::TaskRow& task : plan.tasks) {
+        if (latest == app::kDateNa || (task.finish != app::kDateNa && task.finish > latest)) {
+            latest = task.finish;
+            hand.summary_duration = static_cast<std::uint32_t>(task.duration_ticks);
+        }
+    }
+    hand.restored_finish = latest;
     for (const app::TaskRow& task : plan.tasks) {
         app::OutlineSlackEntry entry;
         entry.uid = task.uid;
+        std::uint32_t slack = 0;
+        std::uint32_t late_start = 0;
+        if (mppwrite::calculate_measured_late(static_cast<std::uint32_t>(task.finish),
+                                              static_cast<std::uint32_t>(task.duration_ticks),
+                                              static_cast<std::uint32_t>(latest), slack,
+                                              late_start)) {
+            entry.free_slack = slack;
+            entry.start_slack = slack;
+            entry.total_slack = slack;
+            entry.late_start = static_cast<app::date32>(late_start);
+            entry.late_finish = latest;
+        }
         hand.slack.push_back(entry);
     }
     return hand;
@@ -931,6 +951,53 @@ void check_refusals() {
         short_slack.slack.pop_back();
         check(!edits.push(std::move(short_slack), &plan),
               "push() refuses a Calculate edit with a missing leaf result");
+        /* W35b-3.7 (RW35-R4): the recalculated words are recomputed from the plan, so a
+         * hand-built edit that differs from them in any one is refused, and the same edit
+         * with the measured words is accepted. */
+        {
+            app::StructuralEdits fresh;
+            check(fresh.push(hand_edit(plan), &plan),
+                  "push() accepts a hand-built Calculate edit that carries the measured words");
+        }
+        {
+            /* each case on a queue of its own: an accepted edit would otherwise make the
+             * later ones refuse on exclusivity and hide a missing check */
+            auto refused = [&](app::StructuralEdit candidate) {
+                app::StructuralEdits fresh;
+                return !fresh.push(std::move(candidate), &plan);
+            };
+            app::StructuralEdit bad = hand_edit(plan);
+            bad.slack[1].free_slack += 4800;
+            bad.slack[1].start_slack += 4800;
+            bad.slack[1].total_slack += 4800;
+            check(refused(std::move(bad)),
+                  "push() refuses a Calculate edit with a day too much slack on a leaf");
+            app::StructuralEdit unequal = hand_edit(plan);
+            unequal.slack[1].free_slack += 1;
+            check(refused(std::move(unequal)),
+                  "push() refuses a Calculate edit whose free slack differs from its total slack");
+            app::StructuralEdit late = hand_edit(plan);
+            late.slack[0].late_start += 1;
+            check(refused(std::move(late)),
+                  "push() refuses a Calculate edit with another late start");
+            app::StructuralEdit late_finish = hand_edit(plan);
+            late_finish.slack[1].late_finish -= 1;
+            check(refused(std::move(late_finish)),
+                  "push() refuses a Calculate edit with a late finish before the project finish");
+            app::StructuralEdit finish = hand_edit(plan);
+            finish.restored_finish += 1;
+            check(refused(std::move(finish)),
+                  "push() refuses a Calculate edit whose project finish is not the latest leaf");
+            app::StructuralEdit duration = hand_edit(plan);
+            duration.summary_duration += 4800;
+            check(refused(std::move(duration)),
+                  "push() refuses a Calculate edit whose project duration is not the critical "
+                  "leaf's");
+            app::StructuralEdit swapped = hand_edit(plan);
+            std::swap(swapped.slack[0], swapped.slack[1]);
+            check(refused(std::move(swapped)),
+                  "push() refuses a Calculate edit whose entries are not in the plan's order");
+        }
         app::PlanInput fewer = plan;
         fewer.tasks.pop_back();
         check(!edits.push(hand_edit(fewer), &fewer), "push() refuses another task count");

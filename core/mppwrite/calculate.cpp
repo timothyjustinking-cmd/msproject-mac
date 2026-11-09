@@ -64,6 +64,53 @@ bool calculate_measured_finish(std::uint32_t start, std::uint32_t duration,
     return true;
 }
 
+bool calculate_measured_late(std::uint32_t finish, std::uint32_t duration,
+                             std::uint32_t project_finish, std::uint32_t& slack,
+                             std::uint32_t& late_start) {
+    constexpr int kDayStartSeconds = 8 * 3600;
+    constexpr int kDayFinishSeconds = 17 * 3600;
+    constexpr std::uint32_t kDayTicks = 4800; /* 8 hours */
+    constexpr int kSaturday = 0;
+    constexpr int kSunday = 1;
+    if (!is_date(finish) || !is_date(project_finish) || duration == 0 ||
+        duration % kDayTicks != 0) {
+        return false;
+    }
+    PackedDate const first = unpack_date(finish);
+    PackedDate last = unpack_date(project_finish);
+    if (first.seconds_of_day != kDayFinishSeconds ||
+        last.seconds_of_day != kDayFinishSeconds || last.day < first.day ||
+        first.day % 7 == kSaturday || first.day % 7 == kSunday ||
+        last.day % 7 == kSaturday || last.day % 7 == kSunday) {
+        return false;
+    }
+    /* the working days after the leaf's finish up to the project finish */
+    std::uint32_t days = 0;
+    for (int day = first.day + 1; day <= last.day; ++day) {
+        if (day % 7 != kSaturday && day % 7 != kSunday) {
+            ++days;
+        }
+    }
+    /* the leaf's late start: its duration's working days back from the project finish */
+    std::uint32_t remaining = duration / kDayTicks - 1;
+    if (remaining > 0xFFFFu) {
+        return false;
+    }
+    while (remaining > 0) {
+        --last.day;
+        if (last.day < 0) {
+            return false;
+        }
+        if (last.day % 7 != kSaturday && last.day % 7 != kSunday) {
+            --remaining;
+        }
+    }
+    last.seconds_of_day = kDayStartSeconds;
+    slack = days * kDayTicks;
+    late_start = pack_date(last);
+    return true;
+}
+
 namespace {
 
 constexpr char const* kTable = "114/TBkndTask";
@@ -573,6 +620,20 @@ void check_request(CalculateShape const& shape, TaskTable const& rows,
             throw Error("calculate: uid " + std::to_string(leaf.uid) +
                         " has slack the unlinked shape cannot have (free, "
                         "start and total slack are equal and not negative)");
+        }
+        /* W35b-3.7 (RW35-R4): the slack and the late start are the measured calendar's
+         * working time between the leaf's finish and the project finish, not any
+         * non-negative number. */
+        std::uint32_t slack = 0;
+        std::uint32_t late_start = 0;
+        if (!calculate_measured_late(finish, rows.u32(row, task_row::kDuration),
+                                     request.project_finish, slack, late_start) ||
+            static_cast<std::uint32_t>(leaf.free_slack) != slack ||
+            leaf.late_start != late_start) {
+            throw Error("calculate: uid " + std::to_string(leaf.uid) +
+                        " has slack or a late start that is not the working time between "
+                        "its finish and the project finish on the measured calendar "
+                        "(Monday to Friday, 08:00 to 17:00)");
         }
     }
 }

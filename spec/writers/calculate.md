@@ -247,3 +247,12 @@ FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather tha
 (the only precedent, `assignment_growth.cpp`, compares the same entry for them and is
 inferred from its comment, not from a pair). A pair that varies either would let this table
 decode them.
+
+The recalculated words themselves are recomputed, not trusted (W35b-3.7, RW35-R4):
+`calculate_measured_late` gives each leaf's slack (4,800 ticks per working day after its
+Finish up to the project finish, on the Monday to Friday 08:00 to 17:00 calendar) and its late
+start (its duration's working days back from the project finish).  The writer's request check
+refuses a leaf whose slack or late start differs (`is not the working time between its finish
+and the project finish`), and `push()` recomputes the same words from the plan and refuses a
+hand-built edit whose project finish, project duration, slack, late start or late finish
+differs, so a hand-built edit is refused at the queue and not only at the save.
