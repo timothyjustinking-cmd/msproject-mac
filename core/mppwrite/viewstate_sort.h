@@ -172,10 +172,13 @@ void require_measured_view_block(CfbDocument const& doc, std::string const& func
 
 /*
  * Apply `edit` to `doc`, write the package to `path`, re-open it and prove the
- * state from the bytes.  Throws Error on a refusal or a mismatch; then neither
- * `doc` nor a new output file has been left behind.  `dry_run` runs every
- * check and builds and re-checks the staged streams but writes nothing (`path`
- * may be empty) and leaves `doc` as it was.
+ * state from the bytes.  Throws Error on a refusal or a mismatch.  A refusal, or a
+ * mismatch in the staged streams, throws before anything is written: `doc` is as it
+ * was and `path` is untouched.  `dry_run` runs exactly those checks (`path` may be
+ * empty).  The write itself is atomic (a temporary file, then a rename), but the
+ * proofs on the re-read file come after it: a mismatch they find throws with `doc`
+ * as it was and `path` already holding the new bytes (R35G2-10), so a throw from
+ * this function does not promise that `path` was left alone.
  */
 ViewSortWrite save_view_sort(CfbDocument& doc, ViewSortEdit const& edit,
                              std::string const& path, bool dry_run = false);
