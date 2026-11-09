@@ -441,25 +441,53 @@ void check_account(msqt::MainWindow& window, const QJsonObject& measures,
     gate::check(about != nullptr && about->isEnabled(),
                 "the Account page has an enabled About button");
     if (about != nullptr) {
-        // W35c-2.18 (R35bG4-5): the one-look QTimer::singleShot(0) this check used to
-        // carry is the platform-sensitive look CI-4 was about (two earlier macOS
-        // failures), and it filled nothing, so gate::PromptAnswerer polls for the box,
-        // records its text and rejects it.  Identify the box by its TEXT, not its
+        bool saw_dialog = false;
+        QString title;
+        QString about_text;
+        // W35d-0.2 (R35cW-CI2): restored as it stood before W35c-2.18 (c235973), which moved
+        // this case to gate::PromptAnswerer and turned macos-qt red on exactly these two
+        // checks.  The top-level walk is the repo's cross-platform dialog idiom
+        // (dialog_gate_test.cpp); QApplication::activeModalWidget() returned
+        // null for this QMessageBox on the macOS offscreen run
+        // (qt-shell 40054734014).  Identify the box by its TEXT, not its
         // windowTitle(): the macOS runs do not carry the title the Windows run does
-        // (qt-shell 40054734014 and 40055403392), and the content is the stronger claim
-        // anyway -- the port's product name and version, not the system About panel.
-        // The title is printed for the record.
-        gate::PromptResult about_prompt;
-        {
-            gate::PromptAnswerer answerer(&about_prompt, false, QString());
-            about->click();
-            QApplication::processEvents();
-        }
-        const QString title = about_prompt.title;
-        const QString about_text = about_prompt.text;
+        // (qt-shell 40054734014 and 40055403392), and the content is
+        // the stronger claim anyway -- the port's product name and version,
+        // not the system About panel.  The title is printed for the record.
+        QTimer::singleShot(0, [&saw_dialog, &title, &about_text]() {
+            QMessageBox* found = nullptr;
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                auto* dialog = qobject_cast<QDialog*>(widget);
+                if (dialog == nullptr || !dialog->isVisible()) {
+                    continue;
+                }
+                if (auto* message = qobject_cast<QMessageBox*>(widget)) {
+                    found = message;
+                    break;
+                }
+            }
+            if (found != nullptr) {
+                saw_dialog = true;
+                title = found->windowTitle();
+                about_text = found->text();
+                found->close();
+                return;
+            }
+            // Not a message box: close the first visible dialog so exec()
+            // returns and the failure below is honest.
+            for (QWidget* widget : QApplication::topLevelWidgets()) {
+                auto* dialog = qobject_cast<QDialog*>(widget);
+                if (dialog != nullptr && dialog->isVisible()) {
+                    title = dialog->windowTitle();
+                    dialog->close();
+                    return;
+                }
+            }
+        });
+        about->click();
+        QApplication::processEvents();
         std::fprintf(stderr, "note: About dialog title \"%s\"\n", qPrintable(title));
-        gate::check(about_prompt.seen && about_prompt.question,
-                    "the About button opens a modal About box");
+        gate::check(saw_dialog, "the About button opens a modal About box");
         gate::check(about_text.startsWith(QStringLiteral("MS Project Shell ")) &&
                         about_text.contains(version),
                     "the About box is the port's own");
