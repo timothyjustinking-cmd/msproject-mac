@@ -413,6 +413,14 @@ Sort beside it changes nothing Save writes and stays allowed. The Redo route the
 (a Redo re-queuing a Calculate without `push()`) was closed by W35d-0.5, which makes Cut and
 Paste clear the structural redo list; qt_calculate_gate guards the cell edits.
 
+*The two document-edit surfaces (W35e-2.6, R35dG2-2).* Table / Date Format and Custom Field
+Formula were still accepted beside a queued Calculate ("edit pending; File > Save writes it")
+and a Calculate was queued beside them; the save refused the pair. `show_table_date_format` and
+`show_custom_formula` now refuse before their dialog opens while a Calculate is queued, with the
+Calculate named, and `calculate_project` refuses while a document edit is pending, naming it;
+both orders are tested in qt_calculate_gate. No wrong file was ever reachable; this is the
+message at the moment of the change.
+
 Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
 FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded
 (the only precedent, `assignment_growth.cpp`, compares the same entry for them and is

@@ -26,6 +26,10 @@
 //                          <project-result.mpp> <control-null-save.mpp>
 #include <QAbstractButton>
 #include <QApplication>
+#include <QComboBox>
+#include <QTimer>
+#include <QVariant>
+#include <QWidget>
 
 #include <array>
 #include <cstddef>
@@ -379,6 +383,108 @@ int main(int argc, char** argv) {
             gate::check(model->data(model->index(1, name_column)).toString() ==
                             QStringLiteral("Renamed by a partial apply"),
                         "partial apply: Redo leaves the edited name as it was");
+        }
+    }
+
+    // --- 2c. W35e-2.6 (R35dG2-2): the two document-edit dialogs and Calculate Project --------
+    // The save refuses a Calculate Project beside a table / date format or a custom-field
+    // formula edit.  The shell now says so at the moment of the change, in either order, before
+    // the dialog opens.  A timer closes any modal dialog that does open (a missing refusal would
+    // otherwise block exec() for good) and the gate fails on it.
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control reopens for the dialog gate");
+        window.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+
+        // Calculate first, then each dialog's menu action.
+        gate::check(click_calculate(window) && window.pending_edits().size() == 1,
+                    "dialog gate: Calculate Project is queued");
+        struct Surface {
+            app::MenuAction action;
+            const char* needle;
+            const char* label;
+        };
+        const Surface surfaces[] = {
+            {app::MenuAction::table_date_format,
+             "a Calculate Project is queued and File > Save would write it, not a table / date "
+             "format edit",
+             "Table / Date Format"},
+            {app::MenuAction::custom_field_formula,
+             "a Calculate Project is queued and File > Save would write it, not a custom-field "
+             "formula edit",
+             "Custom Field Formula"},
+        };
+        for (const Surface& surface : surfaces) {
+            const std::string label = surface.label;
+            QAction* action = gate::find_action(window, surface.action);
+            gate::check(action != nullptr && action->isEnabled(),
+                        (label + " is an enabled menu action").c_str());
+            if (action == nullptr || !action->isEnabled()) {
+                continue;
+            }
+            bool dialog_opened = false;
+            QTimer::singleShot(0, [&dialog_opened]() {
+                if (QWidget* modal = QApplication::activeModalWidget()) {
+                    dialog_opened = true;
+                    modal->close();
+                }
+            });
+            action->trigger();
+            QApplication::processEvents();
+            QApplication::processEvents();
+            gate::check(!dialog_opened,
+                        (label + " beside a queued Calculate Project opens no dialog").c_str());
+            gate::check(window.status_left_text().contains(QString::fromLatin1(surface.needle)),
+                        (label + " beside a queued Calculate Project: the status line names it")
+                            .c_str());
+            gate::check(window.pending_edits().size() == 1,
+                        (label + ": the queue stays at the one Calculate Project").c_str());
+        }
+    }
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control reopens for the reverse order");
+        window.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+
+        // A date-format edit first, then Calculate Project.
+        bool dialog_seen = false;
+        QTimer::singleShot(0, [&dialog_seen]() {
+            auto* dialog =
+                dynamic_cast<msqt::TableDateFormatDialog*>(QApplication::activeModalWidget());
+            if (dialog == nullptr) {
+                return;
+            }
+            dialog_seen = true;
+            const int index = dialog->date_format_combo()->findData(QVariant(4));
+            if (index >= 0) {
+                dialog->date_format_combo()->setCurrentIndex(index);
+            }
+            dialog->accept();
+        });
+        QAction* date_format = gate::find_action(window, app::MenuAction::table_date_format);
+        gate::check(date_format != nullptr && date_format->isEnabled(),
+                    "Table / Date Format is an enabled menu action (reverse order)");
+        if (date_format != nullptr && date_format->isEnabled()) {
+            date_format->trigger();
+            QApplication::processEvents();
+            gate::check(dialog_seen && window.document_dirty(),
+                        "a table / date format edit is pending before the calculation");
+            gate::check(click_calculate(window),
+                        "Calculate Project clicks beside a pending date-format edit");
+            gate::check(window.pending_edits().empty(),
+                        "Calculate Project beside a pending date-format edit queues nothing");
+            gate::check(window.status_left_text().contains(QStringLiteral(
+                            "a table / date format or custom-field formula edit is pending")),
+                        "Calculate Project beside a pending date-format edit: the status line "
+                        "names it");
         }
     }
 
