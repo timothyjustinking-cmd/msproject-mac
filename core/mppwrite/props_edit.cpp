@@ -114,6 +114,47 @@ bool record_measured(std::uint32_t id) {
            id == 0x024013C5u || id == 0x02400003u || id == 0x02400024u;
 }
 
+/* RW35-W7: the payload each measured record takes.  A pair measured one value
+ * per record (the project finish is a date, so only its 4-byte length is
+ * measured); any other payload for a measured id is a shape no pair saw.
+ * Returns the refusal clause, or an empty string when the payload is the
+ * measured one. */
+std::string payload_pin_clause(std::uint32_t id, Bytes const& payload) {
+    static Bytes const mask = {0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+                               0x2E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                               0x07, 0x00, 0x00, 0x00, 0x57, 0x00, 0x00, 0x00};
+    static Bytes const prefix = {0x57, 0x00, 0x00, 0x00, 0x00, 0x00};
+    static Bytes const field_flag = {0x01, 0x00};
+    static Bytes const field_data = {0x00, 0x00, 0x00, 0x00, 0x01, 0x00,
+                                     0x00, 0x00, 0x33, 0x00, 0x40, 0x0B,
+                                     0x64, 0x40, 0x40, 0x0F};
+    static Bytes const pending_clear = {0x00, 0x00};
+    if (id == 0x0240138Bu && payload != mask) {
+        return "0x0240138b is measured as the 24-byte WBS mask ('.' separator, "
+               "'W' prefix, wave30-wbs-code)";
+    }
+    if (id == 0x024013BEu && payload != prefix) {
+        return "0x024013be is measured as the 6-byte WBS prefix ('W' as "
+               "UTF-16LE and a NUL, wave30-wbs-code)";
+    }
+    if (id == 0x02401392u && payload != field_flag) {
+        return "0x02401392 is measured as 01 00 (wave34-field-set)";
+    }
+    if (id == 0x024013C5u && payload != field_data) {
+        return "0x024013c5 is measured as the 16-byte custom-field entry of "
+               "wave34-field-set";
+    }
+    if (id == 0x02400003u && payload.size() != 4) {
+        return "0x02400003 is measured as a 4-byte date "
+               "(wave35-calculate-unlinked)";
+    }
+    if (id == 0x02400024u && payload != pending_clear) {
+        return "0x02400024 is measured as 00 00 "
+               "(wave35-calculate-unlinked)";
+    }
+    return std::string();
+}
+
 bool scalar_allowed(std::string const& stream, std::uint32_t tag) {
     if (stream == kPropsBackEnd) {
         return tag == kPropsTaskSizeTag || tag == kPropsTaskFreedTag ||
@@ -383,6 +424,13 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
             record_payload_matches(state, record, edit_record.payload)) {
             throw Error(function + ": record " + hex_u32(edit_record.id) +
                         " would keep its payload; that is not an edit");
+        }
+        std::string const pin =
+            payload_pin_clause(edit_record.id, edit_record.payload);
+        if (!pin.empty()) {
+            throw Error(function + ": record " + hex_u32(edit_record.id) +
+                        " is given a payload no pair measured: " + pin +
+                        ", so this update is refused");
         }
         PropsRecordWrite write;
         write.id = edit_record.id;

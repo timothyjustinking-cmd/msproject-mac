@@ -823,7 +823,12 @@ void test_edit_refusals(TestContext& t) {
         refuses(control, edit, "is not one a committed pair updated",
                 "an existing record no pair updated refused");
         PropsEdit mixed;
-        mixed.records.push_back({0x0240138Bu, 0, bigger_8b});
+        /* the measured mask, so the unmeasured record is the one refused */
+        mixed.records.push_back(
+            {0x0240138Bu, 0,
+             Bytes{0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00,
+                   0x2E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                   0x07, 0x00, 0x00, 0x00, 0x57, 0x00, 0x00, 0x00}});
         mixed.records.push_back({0x02400002u, 4, Bytes(64, 0)});
         refuses(control, mixed, "is not one a committed pair updated",
                 "a measured record next to an unmeasured one refused");
@@ -853,6 +858,42 @@ void test_edit_refusals(TestContext& t) {
         PropsEdit edit;
         edit.records.push_back({0x0240138Bu, 0, smaller_8b});
         refuses(control, edit, "would shrink", "a smaller payload refused");
+    }
+    {
+        /* RW35-W7: a measured id with a payload no pair measured is refused,
+         * whatever its kind (the control's own) and size (not smaller). */
+        struct Pin {
+            std::uint32_t id;
+            Bytes payload;
+            char const* needle;
+        };
+        Bytes wrong_mask = bigger_8b;
+        wrong_mask[8] = 0x2F; /* another separator */
+        Bytes const wrong_field_data(16, 0x01);
+        Pin const pins[] = {
+            {0x0240138Bu, wrong_mask,
+             "0x0240138b is measured as the 24-byte WBS mask"},
+            {0x024013BEu, Bytes{0x58, 0, 0, 0, 0, 0},
+             "0x024013be is measured as the 6-byte WBS prefix"},
+            {0x02401392u, Bytes{2, 0},
+             "0x02401392 is measured as 01 00"},
+            {0x024013C5u, wrong_field_data,
+             "0x024013c5 is measured as the 16-byte custom-field entry"},
+            {0x02400003u, Bytes(6, 0x11),
+             "0x02400003 is measured as a 4-byte date"},
+            {0x02400024u, Bytes{2, 0},
+             "0x02400024 is measured as 00 00"},
+        };
+        for (Pin const& pin : pins) {
+            PropsEdit edit;
+            edit.records.push_back(
+                {pin.id,
+                 walk.records[find_record(walk, pin.id, "refusals")].kind,
+                 pin.payload});
+            refuses(control, edit, pin.needle,
+                    "a measured record with an unmeasured payload refused: " +
+                        std::string(pin.needle));
+        }
     }
     {
         PropsEdit edit;

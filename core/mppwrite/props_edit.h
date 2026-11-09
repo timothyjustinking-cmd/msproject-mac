@@ -88,10 +88,13 @@
  *     length runs past the stream end (the 0x00400000 id family is how the
  *     record area ends and the tail begins);
  *   - a record edit on 214/Props; a target id absent (insert), present twice,
- *     or outside the four a pair updated (0x0240138b, 0x024013be from
- *     wave30-wbs-code; 0x02401392, 0x024013c5 from wave34-field-set; W35-0.4,
- *     RC-W7), with another kind, with an equal payload, or with a smaller
- *     payload; a duplicate target id in the request;
+ *     or outside the six a pair updated (0x0240138b, 0x024013be from
+ *     wave30-wbs-code; 0x02401392, 0x024013c5 from wave34-field-set;
+ *     0x02400003, 0x02400024 from wave35-calculate-unlinked; W35-0.4,
+ *     RC-W7), with another kind, with an equal payload, with a smaller
+ *     payload, or with a payload other than the measured one (RW35-W7: the
+ *     value, or for the project-finish date its 4-byte length); a duplicate
+ *     target id in the request;
  *   - a scalar tag outside the stream's whitelist, a duplicate tag in the
  *     request, no scalar with the tag, the tag twice in the stream, a hit
  *     outside the tail, or a value equal to the current one.
