@@ -488,6 +488,54 @@ void test_bold_off_pair(TestContext& t) {
                 "differs from the measured control's",
                 "Bold off on a changed view record refused");
     }
+    /* W35b-3.6 (R35G3-4): the four unbold_cell guards the cases above did not reach, each
+     * with the needle of its own message. */
+    {
+        /* The Bold item is not the last item of the block: it swaps places with the item
+         * before it (same bytes, same total, no pad: both items are an even length). */
+        constexpr std::size_t kItemBeforeBytes = 32;  // 12 header + 20 payload (id 0x22400015)
+        constexpr std::size_t kCellItemBytes = 56;    // 12 header + 44 payload (id 0x2240000c)
+        t.equal(u32_at(control_var2, kInsertAt - kItemBeforeBytes + 4), 0x22400015u,
+                "bold off, not last: the item before the Bold item is the measured one");
+        t.equal(u32_at(control_var2, kInsertAt + 4), 0x2240000cu,
+                "bold off, not last: the last item is the Bold item");
+        std::vector<std::uint8_t> var2_swapped = control_var2;
+        std::copy(control_var2.begin() + static_cast<std::ptrdiff_t>(kInsertAt),
+                  control_var2.begin() + static_cast<std::ptrdiff_t>(kInsertAt + kCellItemBytes),
+                  var2_swapped.begin() +
+                      static_cast<std::ptrdiff_t>(kInsertAt - kItemBeforeBytes));
+        std::copy(control_var2.begin() + static_cast<std::ptrdiff_t>(kInsertAt - kItemBeforeBytes),
+                  control_var2.begin() + static_cast<std::ptrdiff_t>(kInsertAt),
+                  var2_swapped.begin() +
+                      static_cast<std::ptrdiff_t>(kInsertAt - kItemBeforeBytes + kCellItemBytes));
+        refuses(with_stream(kOffControl, kViewVar2, var2_swapped),
+                "is not the last item of the view block",
+                "Bold off on an item that is not last refused");
+    }
+    {
+        /* Two cell format items: the item before the Bold item carries the cell id as well
+         * (the lengths are unchanged, so the block still walks). */
+        std::vector<std::uint8_t> var2_two = control_var2;
+        put_u32_at(var2_two, kInsertAt - 32 + 4, 0x2240000cu);
+        refuses(with_stream(kOffControl, kViewVar2, var2_two), "this block carries 2",
+                "Bold off on a block with two cell format items refused");
+    }
+    {
+        /* The font word's top byte is not 0x90 (only 0x90 is accepted). */
+        std::vector<std::uint8_t> var2_font = control_var2;
+        t.equal(var2_font[kInsertAt + 12 + 40 + 3], 0x90, "bold off, font word: the top byte is 0x90");
+        var2_font[kInsertAt + 12 + 40 + 3] = 0x80;
+        refuses(with_stream(kOffControl, kViewVar2, var2_font),
+                "is not the measured Bold item for row uid 1",
+                "Bold off on a font word with another top byte refused");
+    }
+    {
+        /* The item is already off (Project's own Bold-off save: flags 0x00000003, font word
+         * 0x90000000), so there is no Bold item to turn off. */
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, kOffEdit));
+        refuses(doc_from_data(kOffEdit), "is not the measured Bold item for row uid 1",
+                "Bold off on an already unbolded item refused");
+    }
     /* W35b-3.5 (R35G3-3): the digest masks payload byte 42,678 and only that byte.  The
      * neighbours either side are refused, so a mask widened to a window passes no test. */
     for (std::size_t const payload_at : {kViewBlockSessionByte - 1, kViewBlockSessionByte + 1}) {
