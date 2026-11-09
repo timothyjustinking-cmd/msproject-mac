@@ -535,7 +535,58 @@ pass.  `README.md` cannot carry its own hash (it changes when this table does).
 | `wave35-viewstate-zoom-reset-control-null.mpp` | `87DEB891C4FB3B2B564B4E5621F1B678D7B860A385D70915E5F84E5F5470F402` |
 | `wave35-viewstate-zoom-reset-control.mpp` | `6A536AE817E7E30D7578B8F909387C58A08D4CD32EEE0F2033DFC029D2B9CC3A` |
 | `wave35-viewstate-zoom-reset.mpp` | `C69D367156042604246A83E3378B611A3F718D54AC7B018C7E6B3E0D67E9BFFF` |
-| `wave35-g3-assign-remove-port-saved-control.mpp` / `wave35-g3-assign-remove-port-saved.mpp` | the SAME Project 2021 session's save before and after the edit (`scripts/oracle_w35_g3.py`, W35-3.5; the pair name is `assign-remove-port-saved`).  Shape: the port's Assign Resources output on wave30-assign-add-control.mpp (task 1, resource uid 2), then Project deletes that assignment  The seed is saved and REOPENED before the control is saved.  Neutral Author/Manager/Company/UserName/Title; rows are the three synthetic tasks of wave30-assign-add-control.mpp.  Its null save is `wave35-g3-assign-remove-port-saved-control-null.mpp`. |
+| `wave35-g3-assign-remove-port-saved-control-null.mpp` | `42A0B0AB086BA95FEC8581F8948A45943B93CF03B5514FB1071B284442E246BB` |
+| `wave35-g3-assign-remove-port-saved-control.mpp` | `BCECAD7302E04B063FF46904F58E6A004B6CA26CE3E8E2255090B916FA08F336` |
+| `wave35-g3-assign-remove-port-saved.mpp` | `F70DFC78B5F8E8B51437095E6A013018F77E3F8F2F116FD79A51F33B01164E7A` |
+| `wave35-g3-baseline-set-nested-control-null.mpp` | `5C5A18EF317D487BE3823DDF09B02644D90948CA7BCE3C3B0330C59CE740E6B8` |
+| `wave35-g3-baseline-set-nested-control.mpp` | `C841BADC860A6F4D8038E9A1FB5B9B077F649628D629DED99F57624EC21535B2` |
+| `wave35-g3-baseline-set-nested.mpp` | `5B4E50A443F61B109041EEEC457E1965FB2011A30946083120EAA0205A44D8CF` |
+| `wave35-g3-font-bold-off-control-null.mpp` | `8A84C700FC90ED8ED2ED432B68299D1AF0591E9EB9F8A0196E176B57600D18F0` |
+| `wave35-g3-font-bold-off-control.mpp` | `9EFDD067675D3CFB0FF0ED50B07E2D33981135C278DED01F7C7AB293F4A288C7` |
+| `wave35-g3-font-bold-off.mpp` | `9129A5546B509502FB05B865CE29040C252A7D88D031CA956ED0C8EE52DEC62B` |
+| `wave35-g3-font-bold-range-control-null.mpp` | `9AF690FA5A332DBB339441045A50C4AD47A97A778D012A52DF45FA12DC280124` |
+| `wave35-g3-font-bold-range-control.mpp` | `D6CAF52AE050B8E2F50EA5EA60C4F26A0863268D40037751FF05AC696A97EE7E` |
+| `wave35-g3-font-bold-range.mpp` | `FF06B57758092EDAF302D66E7F04741F7A45A7A0B5C982E0CCE5D3C7F2788411` |
+| `wave35-g3-font-bold-row2-control-null.mpp` | `296282BFB7E83C473660DDF3A8F82E88A2A77E679DE8724CAA96C1D9FD11EC90` |
+| `wave35-g3-font-bold-row2-control.mpp` | `36E6D36ADC0D81B24319A446FB14DF8D7B664CA92A18E44A1BE4D74371D837DF` |
+| `wave35-g3-font-bold-row2.mpp` | `431BD805AD061D7461C4A4803BD73955FDEF4026FAE572D43B30CF31C62D9F8C` |
+| `wave35-g3-font-bold-start-control-null.mpp` | `ED9282EED9637D4D62741F93CD186E0D0AFDAD5492554E5414E992ECF137C89D` |
+| `wave35-g3-font-bold-start-control.mpp` | `13B40A1EC0C4AE4962D2B844AC3B1CF416AD26247002B70409DE018EF49F257D` |
+| `wave35-g3-font-bold-start.mpp` | `96D09CC7724CA32F3CB64DE3425156525F13DFE46E7FB8B89B28DDD84A1FDCC6` |
+| `wave35-g3-font-colour-control-null.mpp` | `8EE627D00EAD853396C0DF62E2018CE349292C07917504A949AF066E83A0D538` |
+| `wave35-g3-font-colour-control.mpp` | `8AB17EECA580315BD3C6D64099E0FD25FB44D1C09F22689D74698EA4705B9B91` |
+| `wave35-g3-font-colour.mpp` | `20FFFEBF7A61C7EB950FF5CCF0005C23A45004333A17CAF09E9DC54D111823B9` |
+| `wave35-g3-font-italic-control-null.mpp` | `0FD7AB37B01444FD801448C325F7996AA06E8937ABFF736820736002A4C304E9` |
+| `wave35-g3-font-italic-control.mpp` | `81CDB2A44AAA901FB82683E46C1E1C6CEB8EF6FAA288D6BD9256D648CEFA8FB5` |
+| `wave35-g3-font-italic.mpp` | `F28BC1EFC3F540FAFC2256465FF3CD968443B6C4A3EE9D3380A82796E47C4DDA` |
+| `wave35-g3-font-name-control-null.mpp` | `652BDCB754220B1CED0AEC2B466B424C46E8934B622FE6F3DF2885AEE3074016` |
+| `wave35-g3-font-name-control.mpp` | `F311EA4A23A11DD861A40DAD6CBCE5ACEFF7DD5803F42D8D42F159562325BA4A` |
+| `wave35-g3-font-name.mpp` | `04FB1D72EAEA2DF09E1CA75DF62C68C661BC0261AB576B6CD8031C537BA10DB0` |
+| `wave35-g3-font-size-control-null.mpp` | `2E483392BC738F0A9545D4D4C8769F234D4CEE40074E8AC83D76A8EE4DD41C87` |
+| `wave35-g3-font-size-control.mpp` | `6C49292A909BDD4571DE5462AF30EB685610C56A67C508E5DA9B4EB9289926BA` |
+| `wave35-g3-font-size.mpp` | `E30BFDD04A1314E338D84228AE6372BB63776A8CE8D31DFD35D3A5D9137ACF1B` |
+| `wave35-g3-font-underline-control-null.mpp` | `3662362363DC063EABF22D13B4AAE74C320103B7600A2D3FF4282FF70FBC928F` |
+| `wave35-g3-font-underline-control.mpp` | `854990C43BD8D13A3A80C7B8F042416B896BD4EB022A0CD1CAD3FEF81FCE06AB` |
+| `wave35-g3-font-underline.mpp` | `48A8E0BCA171B1B0F0709E533EF4D0B76BB3AAE1EB8413D66FCFF696CC091082` |
+| `wave35-g3-insert-milestone-first-control-null.mpp` | `0CA96AA029332F36AA79CFFDFE0F6F424DBC16C124674E188A60D68A3FD04DFE` |
+| `wave35-g3-insert-milestone-first-control.mpp` | `D406A2F80F9E747C2FCA09825C123B46721CEEF266A4CE749C4078E4DB888F2D` |
+| `wave35-g3-insert-milestone-first.mpp` | `7500C66EC955BE893CE5209F608DD30E0E2803A3ED7F04F2E81BAFD1D079E601` |
+| `wave35-g3-insert-milestone-last-control-null.mpp` | `0CD83F6E7F618591151AF3CCD134F9F4FFE192297797674C9FCADDE35396B1F3` |
+| `wave35-g3-insert-milestone-last-control.mpp` | `85255060B45BB97F6760238808E9EB1472C9AA7AD5FFF3CC31FB4C4E4EB1B83A` |
+| `wave35-g3-insert-milestone-last.mpp` | `0CCADA1CC0886E05412CEAF926564E299AAB42D4FCD1B2EFAC33E5C01CC06CF3` |
+| `wave35-g3-insert-milestone-nested-control-null.mpp` | `7B447D7F66F1B5B2649305602E573532148ED9CEA03DDB888124541B23C6E339` |
+| `wave35-g3-insert-milestone-nested-control.mpp` | `DECE1C39399AC2CCD5C084AD77D62461EAD8CCF4A0EDF4493996147B8B9FDF43` |
+| `wave35-g3-insert-milestone-nested.mpp` | `06E7540B184EA4346FC80FADF39F3B84F40C8C9FCC772911B9146889418E5529` |
+| `wave35-g3-insert-summary-nested-control-null.mpp` | `F73C2C3252C733F468FC62982F3DE1D8EA407B7062A632B6EA78E7C4ED50212C` |
+| `wave35-g3-insert-summary-nested-control.mpp` | `5B799DADE3839596460F2352B1E4F47D27154B3325719BEA1EDEFFBB1B5ECB45` |
+| `wave35-g3-insert-summary-nested.mpp` | `4370DCD988F78AF6ECC195F5962012182627908D1FDC23DCCDB20CCEE6FB88E9` |
+| `wave35-g3-notes-generator-control-null.mpp` | `D150F1175955304D44AABF893A644786589325783D38DD2CE3B03B1891597CF1` |
+| `wave35-g3-notes-generator-control.mpp` | `11089DB5B090D3CBABF3296B6CD620EFF74E8D9FB5CBB7FC3390B952447555CD` |
+| `wave35-g3-notes-generator.mpp` | `23B73D23A7B29BE88849381B8F230E51A5B5EBCC3EE800CC32DC742D114DFEFB` |
+| `wave35-g3-wbs-renumber-defined-control-null.mpp` | `4E3E4D2F6400F1156A74C8D1CC2111BECAC7C073A66E3C9AE21C2920103014E9` |
+| `wave35-g3-wbs-renumber-defined-control.mpp` | `D80CA0441A6BA0942E98489D6AA5B166B49F2BFA1938B1618589ED5EFE5238EE` |
+| `wave35-g3-wbs-renumber-defined.mpp` | `FBA5F1C04ADD89ADA0DF61431135BADC63A527E9CD76D615BB30A1BF5A7019A5` |
+| `wave35-g3-assign-remove-port-saved-control.mpp` / `wave35-g3-assign-remove-port-saved.mpp` | NOT a same-session pair: the control is a file the PORT saved (its Assign Resources output on wave30-assign-add-control.mpp, task 1, resource uid 2), copied byte for byte with no seed and no Project save, so it still holds `C:\w30\fixtures-g2\wave30-assign-add-control.mpp` as its save path; the edit is Project 2021 opening a copy of it and deleting that assignment (`scripts/oracle_w35_g3.py`, W35-3.5, `measure_port`; the pair name is `assign-remove-port-saved`).  Neutral Author/Manager/Company/UserName/Title; rows are the three synthetic tasks of wave30-assign-add-control.mpp.  Its null save is `wave35-g3-assign-remove-port-saved-control-null.mpp`. |
 | `wave35-g3-font-bold-row2-control.mpp` / `wave35-g3-font-bold-row2.mpp` | the SAME Project 2021 session's save before and after the edit (`scripts/oracle_w35_g3.py`, W35-3.4; the pair name is `font-bold-row2`).  Shape: one Font or Renumber factor against the wave-30 shape (the Name cell of row 1 of synthetic-base unless the pair name says otherwise).  The seed is saved and REOPENED before the control is saved.  Neutral Author/Manager/Company/UserName/Title; rows are the three synthetic tasks.  Its null save is `wave35-g3-font-bold-row2-control-null.mpp`. |
 | `wave35-g3-font-bold-start-control.mpp` / `wave35-g3-font-bold-start.mpp` | the SAME Project 2021 session's save before and after the edit (`scripts/oracle_w35_g3.py`, W35-3.4; the pair name is `font-bold-start`).  Shape: one Font or Renumber factor against the wave-30 shape (the Name cell of row 1 of synthetic-base unless the pair name says otherwise).  The seed is saved and REOPENED before the control is saved.  Neutral Author/Manager/Company/UserName/Title; rows are the three synthetic tasks.  Its null save is `wave35-g3-font-bold-start-control-null.mpp`. |
 | `wave35-g3-font-bold-range-control.mpp` / `wave35-g3-font-bold-range.mpp` | the SAME Project 2021 session's save before and after the edit (`scripts/oracle_w35_g3.py`, W35-3.4; the pair name is `font-bold-range`).  Shape: one Font or Renumber factor against the wave-30 shape (the Name cell of row 1 of synthetic-base unless the pair name says otherwise).  The seed is saved and REOPENED before the control is saved.  Neutral Author/Manager/Company/UserName/Title; rows are the three synthetic tasks.  Its null save is `wave35-g3-font-bold-range-control-null.mpp`. |
