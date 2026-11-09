@@ -227,6 +227,14 @@ is the writer for the first one; the other three are refused.
   start in 114/Props". A start inside the working day (for example Monday 10:30) is its own
   first working instant, which no leaf Start equals, so it is refused. Project's own bytes
   for a moved start are still not measured: this is a refusal, not a decoded shape.
+  **Which Start word each layer reads (W35d-2.1, R35cG0-2 and R35cW-3).** The writer's 0.2
+  check compares FixedData +96 and the plan's compares +104 (`task.start`, which the reader
+  fills from +104). The writer's half also covers +104: W35c-2.2 (R35bG0-7, `ecc51d1`) refuses
+  a leaf whose second date copy (+104/+108) differs from +96/+100, and that check runs before
+  0.2, so a file whose +96 is right and +104 stale is refused by `save_calculate` on its own.
+  The same equality makes every plan check that reads +104/+108 agree with the writer's
+  +96/+100 checks. The plan never reads +96, and the plan half of R35cG0-2 stays open; 2.2
+  must not be dropped without moving that check.
 - **One Duration edit, not two (W35c-1.5, R35bG0-3).** W35b-0.3's critical-path guard is a
   finish-position proxy: exactly one leaf finishes at or after the stored project finish. It
   cannot tell one Duration edit from two: the old critical leaf shortened below the stored
