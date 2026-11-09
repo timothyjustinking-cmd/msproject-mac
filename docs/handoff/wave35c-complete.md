@@ -99,3 +99,74 @@ No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no
 dispatched.
 
 WAVE-35c-G1-COMPLETE
+
+## G2: the Lows
+
+Builder record: `wave35c-verification/gates-g2.md`. Commits: `4e957ae` (2.1), `ecc51d1` (2.2),
+`8e41da3` (2.3), `21b61d6` (2.4), `cb40334` (2.5), `fc9cae3` (2.6), `d8cfb6c` (2.7), `6f95c27`
+(2.8), `36c1492` (2.9), `aab8a26` (2.10), `d776901` (2.11), `d829206` (2.12), `6f28860` (2.13),
+`cea97e1` (2.14), `d0100dd` (2.15), `0222978` (2.16), `8aa61f5` (2.17), `c235973` (2.18),
+`dbef0ef` (2.19), `e9e4657` (2.20), `f074f1c` (2.21), `b588f05` (2.22), `f8be7ba` (2.23),
+`f4065f2` (2.24), `cd7dc10` (2.25), `4d3c943` (2.26), `9a38f2e` (2.27). The trailer is on each.
+
+| Item | Finding | Status |
+|---|---|---|
+| 2.1 | R35bG0-6 | fixed `4e957ae` |
+| 2.2 | R35bG0-7 | fixed `ecc51d1` |
+| 2.3 | R35bG0-8 | fixed `8e41da3` in the writer; `push()` has no file, so the save refuses a hand-built edit |
+| 2.4 | R35bG2-2 | fixed `21b61d6` (tests only; also closed incidentally earlier) |
+| 2.5 | R35bG2-5 | fixed `cb40334` (statements and a comment; also closed incidentally earlier) |
+| 2.6 | R35bG2-6 | partly fixed `fc9cae3`: the app test asserts the digest refusal; the save-time dry run's second suggestion is unreachable through the public API and recorded as defence in depth |
+| 2.7 | R35bG2-7 | fixed `d8cfb6c` |
+| 2.8 | R35bG4-2 | fixed `6f95c27` |
+| 2.9 | R35bG4-3 | fixed `36c1492` |
+| 2.10 | R35bG4-4 | fixed `aab8a26` (defence in depth: not reachable today) |
+| 2.11 | R35bG4-6 | fixed `d776901`; mutation G7c turns it red |
+| 2.12 | R35bG1-4 | fixed `d829206` as a refusal (the pin), not a record |
+| 2.13 | R35bG1-5 | fixed `6f28860` |
+| 2.14 | R35bG1-6 | fixed `cea97e1` |
+| 2.15 | R35bG1-9 | fixed `d0100dd` |
+| 2.16 | R35bG3-3 | fixed `0222978` |
+| 2.17 | R35bG3-5 | recorded `8aa61f5`: the second-session Bold pair is a measuring-wave item; no pair taken |
+| 2.18 | R35bG4-5 | fixed `c235973` |
+| 2.19 | R35bG1-7 | fixed `dbef0ef` (one backlog row; no guard can go red) |
+| 2.20 | R35bG1-8 | fixed `e9e4657` for the wording; which fields Save writes was not re-traced |
+| 2.21 | R35bG2-3 | fixed `f074f1c` for the wording; the plan layer's name trim differs from the writer's, recorded and not changed |
+| 2.22 | R35bG2-8 | fixed `b588f05` (README rows) |
+| 2.23 | R35bG3-4 | fixed `f8be7ba` (record) |
+| 2.24 | R35bW-4 | fixed `f4065f2` (record) |
+| 2.25 | R35bW-5 | fixed `cd7dc10` (record) |
+| 2.26 | R35bG2-4 | recorded `4d3c943`; no history rewrite |
+| 2.27 | R35bW-6 | recorded `9a38f2e` as an accepted defect; no history rewrite |
+
+**Gate line** (Visual Studio 17 2022, Release, `CORE_WARNINGS_AS_ERRORS=ON`; last row
+`4d3c943-W35c-2.27-*`): core build 0 with 0 warnings; `ctest -E plan_recalc` 65/65; app 34/34;
+app_qt 52/52 on the ten items that touch app, Qt or linked core source (2.1, 2.2, 2.5, 2.6, 2.10,
+2.12, 2.14, 2.18, 2.20, 2.21; the last code change is 2.21); `check_fixtures` 0;
+`check_markers --range main..HEAD` 0; `guard_names` 0; `scan_client_names` 0; client-string grep
+none. The other rows did not build app_qt.
+
+**Guards seen red:** 2.1, 2.2, 2.3, 2.4 (two mutations), 2.6 to 2.16, 2.18, 2.20 (two runs) and
+2.21, each against the code or guard without the fix, restored after (`build/w35c/2.*-run.log`).
+No red run, stated in each commit: 2.5 (statements and a comment), 2.17, 2.19 (no check pins a
+menu row's gap text), 2.22 (the evidence is the fixture read) and 2.23 to 2.27 (records).
+
+**Deferred:** nothing.
+
+**Found, not fixed:**
+- The 24 `wave35-g3-*` fixtures store project start 2026-01-04 13:00 (Props `781ef13b`), and their
+  README rows (602 to 605 among them) still say 2026-01-05 08:00; only the viewstate rows were in
+  R35bG2-8.
+- The plan layer trims the Props calendar name and the writer does not (2.21); the writer is the
+  stricter layer and the builder's dry run reaches it.
+- The "asks to save or undo" labels in the sort and show_level test names are stale.
+- No guard pins a menu row's gap text (2.19).
+- 2.20 did not re-trace which fields Save writes.
+- R35bG2-6's second suggestion is unreachable (defence in depth).
+- Not this wave's: R35bW-3 (answered by the coordinator's map); R35bG2-9 is watch-only and green
+  on macOS at `e95c6ca`.
+
+No writer added, no refusal lifted, no pair measured, no COM, nothing pushed, no workflow
+dispatched, no history rewrite.
+
+WAVE-35c-G2-COMPLETE
