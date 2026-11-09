@@ -631,6 +631,20 @@ void check_refusals() {
                             "push() refuses a Calculate edit over a task the reader did not build");
     }
     {
+        /* W35c-2.11 (R35bG4-6): the default itself.  A row built from app::TaskRow's defaults
+         * (given a file row so the pending-row check passes) must be refused as unread; if the
+         * default of type_block_known were flipped to true it would pass as the measured shape. */
+        app::PlanInput changed = plan;
+        const app::TaskRow defaults{};
+        check(!defaults.type_block_known, "a default-built task row is not marked as read");
+        changed.tasks[1] = defaults;
+        changed.tasks[1].file_row = plan.tasks[1].file_row;
+        expect_refused(changed, source, "task that was not read from the file",
+                       "a task row built from its defaults (plan)");
+        expect_push_refused(changed, "task that was not read from the file",
+                            "push() refuses a Calculate edit over a default-built task row");
+    }
+    {
         /* Each calendar variant: a renamed calendar, one with a block of its own (working
          * times or exceptions), an extra calendar, and none at all. */
         app::PlanInput renamed = plan;
