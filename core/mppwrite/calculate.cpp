@@ -474,17 +474,20 @@ void check_unvaried_parameters(CfbDocument const& doc, TaskTable const& rows) {
     std::vector<std::uint8_t> const meta =
         doc.read_stream(std::string(kTable) + "/FixedMeta");
     for (std::size_t row = 1; row < kRows; ++row) {
-        std::size_t const f2_at = kF2MetaHeader + (row + 3) * kF2MetaEntry;
+        std::size_t const at = fixed_meta_entry_at(meta, row);
+        if (at == kNoMetaEntry) {
+            throw Error("Task FixedMeta has no entry for task uid " +
+                        std::to_string(rows.uid(row)));
+        }
+        /* W35c-2.9 (R35bG4-3): the Fixed2Meta entry is the one at the FixedMeta entry's
+         * index, as task_mode.cpp pairs them, not the one at the row's position. */
+        std::size_t const f2_at =
+            kF2MetaHeader + ((at - kFixedMetaHeader) / kFixedMetaEntry) * kF2MetaEntry;
         if (f2_meta.size() < f2_at + kF2MetaEntry ||
             (f2_meta[f2_at + kF2MetaFlags] & kF2MetaActive) == 0) {
             throw Error("task uid " + std::to_string(rows.uid(row)) +
                         " is inactive; the measured Calculate Project save "
                         "has active tasks only");
-        }
-        std::size_t const at = fixed_meta_entry_at(meta, row);
-        if (at == kNoMetaEntry) {
-            throw Error("Task FixedMeta has no entry for task uid " +
-                        std::to_string(rows.uid(row)));
         }
         int const differs = calculate_leaf_meta_mismatch(meta.data() + at, kFixedMetaEntry);
         if (differs >= 0) {
