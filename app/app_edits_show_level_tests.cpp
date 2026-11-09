@@ -44,6 +44,7 @@
 #include <cstdio>
 #include <exception>
 #include <filesystem>
+#include <stdexcept>
 #include <string>
 #include <system_error>
 #include <vector>
@@ -191,9 +192,18 @@ mppwrite::CfbDocument with_control_path_size(const std::filesystem::path& file,
     const Bytes edl = document.read_stream(kEdlVar2);
     const std::size_t size = edl.size() - path_record_bytes(edl) + control_path;
     Bytes meta = document.read_stream(kEdlMeta);
+    Bytes props = document.read_stream(kProps);
+    // R35G2-9: Project's own words must be its CEdl length before they are replaced, or the
+    // normalisation would hide a difference of its own.
+    if (u32_at(meta, 0x14) != edl.size() || u32_at(props, kEdlSizeAt) != edl.size()) {
+        throw std::runtime_error(
+            "with_control_path_size: " + file.string() + " holds CEdl size words " +
+            std::to_string(u32_at(meta, 0x14)) + " (VarMeta +0x14) and " +
+            std::to_string(u32_at(props, kEdlSizeAt)) + " (Props), not its CEdl length " +
+            std::to_string(edl.size()));
+    }
     put_u32_at(meta, 0x14, static_cast<std::uint32_t>(size));
     document.replace_stream(kEdlMeta, meta);
-    Bytes props = document.read_stream(kProps);
     put_u32_at(props, kEdlSizeAt, static_cast<std::uint32_t>(size));
     document.replace_stream(kProps, props);
     return document;
