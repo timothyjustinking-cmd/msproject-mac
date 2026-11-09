@@ -225,7 +225,9 @@ is the writer for the first one; the other three are refused.
   08:00 maps to 08:00 the same day. `mppwrite::calculate_measured_first_working_start` is
   the shared rule; the reader fills `PlanInput::props_project_start`. The needle is "project
   start in 114/Props". A start inside the working day (for example Monday 10:30) is its own
-  first working instant, which no leaf Start equals, so it is refused. Project's own bytes
+  first working instant, which no leaf Start equals, so it is refused. A time word of 24:00 or
+  later (14,400 ticks and up, which no Project save writes) is refused too (W35d-2.3,
+  R35cG0-5); it used to read as "at or after 17:00" and map to a working day. Project's own bytes
   for a moved start are still not measured: this is a refusal, not a decoded shape.
   **Which Start word each layer reads (W35d-2.1, R35cG0-2 and R35cW-3).** The writer's 0.2
   check compares FixedData +96 and the plan's compares +104 (`task.start`, which the reader

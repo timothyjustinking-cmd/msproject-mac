@@ -128,6 +128,11 @@ bool calculate_measured_first_working_start(std::uint32_t props_start,
         return false;
     }
     PackedDate at = unpack_date(props_start);
+    /* unpack_date multiplies any 16-bit tick count by six, so a time word of 24:00 or later
+     * would count as "at or after 17:00" and map to a real working day (R35cG0-5). */
+    if (at.seconds_of_day >= 86400) {
+        return false;
+    }
     bool const working_day = at.day % 7 != kSaturday && at.day % 7 != kSunday;
     if (working_day && at.seconds_of_day >= kDayStartSeconds &&
         at.seconds_of_day < kDayFinishSeconds) {

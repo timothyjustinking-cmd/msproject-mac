@@ -92,7 +92,8 @@ bool calculate_measured_late(std::uint32_t finish, std::uint32_t duration,
  * day 08:00; one inside the working day is its own first working instant.  The lunch
  * hour is not modelled: no leaf starts anywhere but 08:00 (calculate_measured_finish),
  * so no start inside the working day can equal a leaf Start.  Returns false for an
- * invalid date or a day past the packed range. */
+ * invalid date, a time word of 24:00 or later (W35d-2.3, R35cG0-5) or a day past the packed
+ * range. */
 bool calculate_measured_first_working_start(std::uint32_t props_start,
                                             std::uint32_t& first);
 
