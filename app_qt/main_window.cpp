@@ -266,6 +266,13 @@ bool redo_top_is(const app::StructuralEdits& edits, app::StructuralKind kind) {
     return next != nullptr && next->kind == kind;
 }
 
+// W35e-1.1 (R35dG1-1): true when a Redo would re-queue a Sort or a Show Level.  A sort choice made
+// now ends either, because Redo re-queues it without push() under whatever sort is then shown.
+bool redo_top_is_view_edit(const app::StructuralEdits& edits) {
+    return redo_top_is(edits, app::StructuralKind::sort_view) ||
+           redo_top_is(edits, app::StructuralKind::show_level);
+}
+
 }  // namespace
 
 QString& ui_font_family() { return font_family_storage(); }
@@ -6098,8 +6105,9 @@ void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
     }
     // W35d-0.4 (R35cG1-1): a Sort on the redo list (Undo withdrew it) is replaced by any
     // sort choice made now, as a queued one is below.  Left there, Ctrl+Y re-queued it under
-    // whatever sort the display had by then.
-    if (redo_top_is(structural_, app::StructuralKind::sort_view)) {
+    // whatever sort the display had by then.  W35e-1.1 (R35dG1-1): a Show Level on the redo
+    // list ends the same way, since Ctrl+Y would queue it under the sort chosen now.
+    if (redo_top_is_view_edit(structural_)) {
         structural_.clear_redo();
     }
     // A queued persisted sort is replaced (Sort is an exclusive edit) or, when the
@@ -6168,8 +6176,9 @@ void MainWindow::apply_session_sort(core::view::SortDefinition definition,
     if (!doc_.has_document()) {
         return;
     }
-    // W35d-0.4 (R35cG1-1): the session sort changes, so a withdrawn Sort must not come back.
-    if (redo_top_is(structural_, app::StructuralKind::sort_view)) {
+    // W35d-0.4 (R35cG1-1): the session sort changes, so a withdrawn Sort must not come back
+    // (W35e-1.1: nor a withdrawn Show Level).
+    if (redo_top_is_view_edit(structural_)) {
         structural_.clear_redo();
     }
     doc_.set_sort(std::move(definition), std::move(description));
@@ -6180,7 +6189,7 @@ void MainWindow::clear_session_sort() {
     if (!doc_.has_document()) {
         return;
     }
-    if (redo_top_is(structural_, app::StructuralKind::sort_view)) {
+    if (redo_top_is_view_edit(structural_)) {
         structural_.clear_redo();
     }
     doc_.clear_sort();
@@ -6245,6 +6254,17 @@ void MainWindow::apply_outline_level(int level) {
     // two toggles.  Under a queued Level the call below replaces or withdraws it, as before.
     if (queued_edit_is(structural_.applied(), app::StructuralKind::sort_view) &&
         refuse_view_change(level == 0 ? "all subtasks shown" : "a session Show Level")) {
+        return;
+    }
+    // W35e-1.1 (R35dG1-1): the other order of the same rule.  A session Sort that is shown (not
+    // queued) re-orders the rows, and a level queued now would be written by File > Save over the
+    // file's own order, so the Level is refused until the sort is cleared.  All Subtasks only
+    // expands and queues nothing.
+    if (level != 0 && doc_.sort_active()) {
+        set_message("outline: a session Sort is shown and File > Save would write the file's own "
+                    "order, not a session Show Level; clear the sort first",
+                    true);
+        update_status();
         return;
     }
     // A queued persisted level is replaced (Show Level is an exclusive edit) or,
