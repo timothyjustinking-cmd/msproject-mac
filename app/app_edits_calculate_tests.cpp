@@ -509,6 +509,45 @@ void check_refusals() {
               "push() refuses a Calculate edit over a plan that moves the critical path");
     }
     {
+        /* W35c-1.5 (R35bG0-3): the finish-position guard cannot tell one Duration edit from
+         * two.  The stored Free Slack is the before-state: the leaf that ends the project now
+         * was critical, every other leaf still has the slack its finish leaves. */
+        check(plan.tasks[0].free_slack_stored && plan.tasks[0].free_slack_ticks == 0,
+              "the reader fills the critical leaf's stored free slack (0)");
+        check(plan.tasks[1].free_slack_stored && plan.tasks[1].free_slack_ticks == 9600,
+              "the reader fills the other leaf's stored free slack (two days)");
+        const char* const needle = "changed more than one leaf";
+        {
+            /* The old critical leaf was the SECOND one: it was shortened and the first leaf was
+             * lengthened past the stored finish, so the signature is the measured pair's. */
+            app::PlanInput changed = plan;
+            changed.tasks[1].free_slack_ticks = 0;
+            expect_refused(changed, source, needle,
+                           "a pending change where the leaf now before the finish was critical");
+            app::StructuralEdits edits;
+            check(!edits.push(hand_edit(changed), &changed),
+                  "push() refuses a Calculate edit where two leaves were edited");
+        }
+        {
+            app::PlanInput changed = plan;
+            changed.tasks[0].free_slack_ticks = 9600;
+            expect_refused(changed, source, needle,
+                           "a pending change where the leaf now ending the project was not critical");
+        }
+        {
+            app::PlanInput changed = plan;
+            changed.tasks[1].free_slack_ticks = 4800;
+            expect_refused(changed, source, needle,
+                           "a pending change where the other leaf's finish moved too");
+        }
+        {
+            app::PlanInput changed = plan;
+            changed.tasks[1].free_slack_stored = false;
+            expect_refused(changed, source, needle,
+                           "a plan whose stored free slack was not read");
+        }
+    }
+    {
         /* The project would shorten: the stored project finish is later than every leaf. */
         app::PlanInput changed = plan;
         changed.project_finish = app::date32_from_packed(0x3BFE27D8u);
@@ -768,6 +807,29 @@ void check_refusals() {
         moved.save(moved_path.string());
         expect_refused(plan, moved_path.string(), "moves the critical path",
                        "a file whose recalculation moves the critical path");
+    }
+    {
+        /* W35c-1.5 (R35bG0-3): the plan is the clean control's, so the writer's own check names
+         * a stored free slack that is not the single-edit before-state. */
+        const struct {
+            std::size_t row;
+            std::uint32_t free_slack;
+            const char* what;
+        } cases[] = {
+            {2, 0, "the leaf now before the finish was critical (two Duration edits)"},
+            {1, 9600, "the leaf now ending the project was not critical"},
+            {2, 4800, "the other leaf's finish moved as well"},
+        };
+        for (const auto& one : cases) {
+            mppwrite::CfbDocument two = mppwrite::CfbDocument::from_file(source);
+            mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(two);
+            rows.set_u32(one.row, mppwrite::task_row::kFreeSlack, one.free_slack);
+            rows.store_into(two);
+            const std::filesystem::path two_path = out_path("app-calculate-two-edits.mpp");
+            two.save(two_path.string());
+            expect_refused(plan, two_path.string(), "stored free slack (+74)",
+                           std::string("a file where ") + one.what);
+        }
     }
     {
         // W35b-2.7 (RW35-W3): a tie and the swapped order, which no pair measures.

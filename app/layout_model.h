@@ -151,6 +151,13 @@ struct TaskRow {
     // The measured Calculate Project pair has every task active with no baseline.
     bool active = true;
     bool baseline_stored = false;
+    // W35c-1.5 (R35bG0-3): the stored Free Slack word (FixedData +74, core/mpp
+    // Task::free_slack_ticks).  Under manual calculation a Duration edit leaves it as the
+    // last calculation wrote it, so it is the before-state of the pending recalculation:
+    // Calculate Project reads it to prove one leaf alone changed.  `free_slack_stored` is
+    // set only by the reader adapter; a row built any other way has no before-state.
+    std::int32_t free_slack_ticks = 0;
+    bool free_slack_stored = false;
     // W30-C5: the physical TBkndAssn row count naming this task (tombstones
     // included), or kAssignmentRowsUnknown for a plan not loaded from a file.
     std::size_t assignment_rows = kAssignmentRowsUnknown;

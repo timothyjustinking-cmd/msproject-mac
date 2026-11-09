@@ -222,6 +222,27 @@ is the writer for the first one; the other three are refused.
   start in 114/Props". A start inside the working day (for example Monday 10:30) is its own
   first working instant, which no leaf Start equals, so it is refused. Project's own bytes
   for a moved start are still not measured: this is a refusal, not a decoded shape.
+- **One Duration edit, not two (W35c-1.5, R35bG0-3).** W35b-0.3's critical-path guard is a
+  finish-position proxy: exactly one leaf finishes at or after the stored project finish. It
+  cannot tell one Duration edit from two: the old critical leaf shortened below the stored
+  finish and the other leaf lengthened past it has the measured pair's signature with the
+  critical path moved. The before-state witness is each leaf's stored Free Slack (FixedData
+  +74). Manual calculation leaves it as the last calculation wrote it: the control's second
+  leaf holds 9600 ticks (two working days to the stored project finish) and F9 rewrites it to
+  seven days (`wave35-calculate-unlinked`, task FixedData row 2 +74 `80 25 -> 40 83`); the
+  first leaf holds 0. Both layers now require the leaf that ends the project to have stored
+  free slack 0 (it was critical) and every other leaf to have the working time between its own
+  Finish and the stored project finish (row 0's Finish, the old one), as
+  `calculate_measured_late` computes it. A leaf that fails either was edited too, or was not
+  the leaf that ended the project: the needle is "stored free slack (+74)" in the writer and
+  "changed more than one leaf" in the plan (`TaskRow::free_slack_ticks`, filled by the reader;
+  a plan whose slack was not read is refused). Limits that remain: the witness proves no leaf
+  other than the one that ends the project moved from the last calculation, so two edits that
+  cancel (an edit and its reverse) pass, as they leave the file as the pair has it; a file
+  whose free slack was never calculated (a stored 0 on a non-critical leaf) is refused rather
+  than saved; and whether Project stores a critical bit outside the slack words is still
+  unmeasured (R35G1-2). The tie (two leaves ending the project) stays W35b-2.7's refusal in
+  the writer; the plan layer's tie refusal is W35c-1.11.
 - **One arrangement is measured (W35b-2.7, RW35-W3).** In the unlinked pair the first leaf row
   ends the project and the other leaf finishes before the stored project finish; the leaf stamp
   `0x30` is measured for that arrangement alone (the linked pair stores `0x30` and `0x28`). Two

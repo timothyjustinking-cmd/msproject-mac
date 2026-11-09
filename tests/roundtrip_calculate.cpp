@@ -653,6 +653,30 @@ void refused_requests() {
                 "project start in 114/Props", "0.2: only the Props project start moved a day");
     }
     {
+        /* W35c-1.5 (R35bG0-3): the finish-position guard cannot tell one Duration edit from two
+         * (the old critical leaf shortened below the stored finish, the other lengthened past
+         * it).  Every date relation is the control's; only the stored Free Slack (+74), the
+         * before-state manual calculation leaves behind, differs. */
+        struct Case {
+            std::size_t row;
+            std::uint32_t free_slack;
+            char const* what;
+        };
+        Case const cases[] = {
+            {2, 0, "1.5: the leaf now before the finish was critical (two Duration edits)"},
+            {1, 9600, "1.5: the leaf now ending the project was not critical"},
+            {2, 4800, "1.5: the other leaf's finish moved as well"},
+        };
+        for (Case const& one : cases) {
+            CfbDocument doc = control;
+            TaskTable rows = TaskTable::from_document(doc);
+            rows.set_u32(one.row, mppwrite::task_row::kFreeSlack, one.free_slack);
+            rows.store_into(doc);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); }, "stored free slack (+74)",
+                    one.what);
+        }
+    }
+    {
         /* W35c-0.3 (R35bG0-2): 114/Props is pinned to the measured control's.  Every record
          * the save does not write (all but the finish, the pending flag, the start the 0.2
          * relation covers, and the two per-save GUIDs) is refused when one payload byte

@@ -3766,6 +3766,34 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
                             "the leaves starting there";
         }
     }
+    // W35c-1.5 (R35bG0-3): the finish-position guard above cannot tell one Duration edit from
+    // two (A shortened below the stored finish and B lengthened past it looks like the
+    // measured pair, with the critical path moved).  The stored Free Slack (+74) is the
+    // before-state witness: manual calculation leaves it as the last calculation wrote it,
+    // so the leaf that ends the project now was critical (free slack 0) and every other leaf
+    // still has the slack its unchanged finish leaves before the stored project finish.
+    // After the 0.4 check, which proves each leaf's duration and finish are consistent.
+    for (const TaskRow& task : plan.tasks) {
+        std::uint32_t expected = 0;
+        if (task.finish != latest) {
+            std::uint32_t late_start = 0;
+            if (!mppwrite::calculate_measured_late(static_cast<std::uint32_t>(task.finish),
+                                                   static_cast<std::uint32_t>(task.duration_ticks),
+                                                   static_cast<std::uint32_t>(plan.project_finish),
+                                                   expected, late_start)) {
+                return prefix + "for a leaf whose slack before the stored project finish cannot "
+                                "be worked out on the measured calendar";
+            }
+        }
+        if (!task.free_slack_stored || task.free_slack_ticks < 0 ||
+            static_cast<std::uint32_t>(task.free_slack_ticks) != expected) {
+            return prefix + "for a pending recalculation that changed more than one leaf (or "
+                            "not the leaf that ended the project): the stored free slack of "
+                            "task uid " + std::to_string(task.uid) +
+                            " is not the before-state the measured Project pair has, so the "
+                            "critical path may have moved";
+        }
+    }
     return {};
 }
 
