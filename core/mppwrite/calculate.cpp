@@ -582,9 +582,13 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
             return fail(error, "the project summary task carries a deadline; the measured "
                                "Calculate Project save has none");
         }
+        /* W35d-2.5 (R35cG2-2): 33 of the 332 committed fixtures store 1 at row 0 +64 and are no
+         * constraint pairs, so the word is not shown to be a constraint the user set.  The text
+         * states what is read, not what it means. */
         if (rows.u16(0, task_row::kConstraintType) != 0) {
-            return fail(error, "the project summary task carries a constraint; the "
-                               "measured Calculate Project save has none");
+            return fail(error, "the project row's ConstraintType word (+64) is not 0, as it is "
+                               "in the measured Calculate Project save; the word is not shown "
+                               "to be a constraint the user set");
         }
         std::vector<std::uint8_t> const meta =
             doc.read_stream(std::string(kTable) + "/FixedMeta");
