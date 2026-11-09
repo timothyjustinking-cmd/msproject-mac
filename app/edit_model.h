@@ -656,6 +656,11 @@ bool make_wbs_code_edit(const PlanInput& plan, std::string_view source_path,
 bool make_calculate_edit(const PlanInput& plan, std::string_view source_path,
                          StructuralEdit& out, std::string& error);
 
+// W35c-2.1 (R35bG0-6): the plan-side half of the Calculate Project rule that both
+// make_calculate_edit and StructuralEdits::push() consult, as text ("" when the plan
+// passes).  Exposed so a test can name the guard push() fired, since push() returns a bool.
+std::string calculate_plan_refusal_reason(const PlanInput& plan);
+
 // Wave 35 (W35-2.1): the sort keys make_sort_edit can be asked for.  Only Name
 // and Duration are measured as single keys with Outline = True and
 // Renumber = False; every other choice is refused with its own reason.

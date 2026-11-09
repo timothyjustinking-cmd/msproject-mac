@@ -3940,6 +3940,10 @@ std::string calculate_slack_refusal(const PlanInput& plan, const StructuralEdit&
 
 }  // namespace
 
+std::string calculate_plan_refusal_reason(const PlanInput& plan) {
+    return calculate_plan_refusal(plan);
+}
+
 bool make_calculate_edit(const PlanInput& plan, std::string_view source_path,
                          StructuralEdit& out, std::string& error) {
     out = StructuralEdit{};

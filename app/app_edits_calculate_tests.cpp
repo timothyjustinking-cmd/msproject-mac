@@ -389,6 +389,20 @@ app::StructuralEdit hand_edit(const app::PlanInput& plan) {
     return hand;
 }
 
+/* W35c-2.1 (R35bG0-6): push() returns only a bool, so "push() refuses" alone cannot say which
+ * guard fired (a plan the 0.4 date check also refuses stays red-free if the guard under test
+ * is removed).  This names the guard: the plan-side refusal push() consults must carry the
+ * needle, and push() must refuse the hand-built edit over the same plan. */
+void expect_push_refused(const app::PlanInput& plan, const char* needle, const std::string& what) {
+    const std::string reason = app::calculate_plan_refusal_reason(plan);
+    check(reason.find(needle) != std::string::npos,
+          what + ": the plan-side guard push() consults says \"" + needle + "\" (got \"" + reason +
+              "\")");
+    app::PlanInput copy = plan;
+    app::StructuralEdits edits;
+    check(!edits.push(hand_edit(copy), &copy), what);
+}
+
 void check_refusals() {
     const std::filesystem::path control_path = data_path(kControl);
     app::PlanInput plan;
@@ -485,9 +499,8 @@ void check_refusals() {
         app::PlanInput changed = plan;
         changed.tasks[1].deadline = changed.tasks[1].finish;
         expect_refused(changed, source, "for a task with a deadline", "a task with a deadline");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan with a deadline");
+        expect_push_refused(changed, "for a task with a deadline",
+                            "push() refuses a Calculate edit over a plan with a deadline");
     }
     {
         app::PlanInput changed = plan;
@@ -504,9 +517,8 @@ void check_refusals() {
         changed.tasks[1].finish = app::date32_from_packed(0x3C0427D8u);
         expect_refused(changed, source, "moves the critical path",
                        "a recalculation that moves the critical path (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan that moves the critical path");
+        expect_push_refused(changed, "moves the critical path",
+                            "push() refuses a Calculate edit over a plan that moves the critical path");
     }
     {
         /* W35c-1.5 (R35bG0-3): the finish-position guard cannot tell one Duration edit from
@@ -553,9 +565,8 @@ void check_refusals() {
         changed.project_finish = app::date32_from_packed(0x3BFE27D8u);
         expect_refused(changed, source, "would shorten the project",
                        "a recalculation that shortens the project (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan that shortens the project");
+        expect_push_refused(changed, "would shorten the project",
+                            "push() refuses a Calculate edit over a plan that shortens the project");
     }
     {
         /* A leaf that does not start at the project start. */
@@ -563,9 +574,8 @@ void check_refusals() {
         changed.tasks[1].start = app::date32_from_packed(0x3BF312C0u);
         expect_refused(changed, source, "does not start at the project start",
                        "a leaf that does not start at the project start (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan with a moved leaf start");
+        expect_push_refused(changed, "does not start at the project start",
+                            "push() refuses a Calculate edit over a plan with a moved leaf start");
     }
     /* W35b-0.5 (R35G1-3): the parameters a user can vary that no pair measured.  The pair
      * has no resource on the Resource Sheet, only Project's placeholder assignments, the
@@ -575,9 +585,8 @@ void check_refusals() {
         changed.resources.push_back(app::ResourceRow{});
         expect_refused(changed, source, "resources on the Resource Sheet",
                        "a project with a resource (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan with a resource");
+        expect_push_refused(changed, "resources on the Resource Sheet",
+                            "push() refuses a Calculate edit over a plan with a resource");
     }
     {
         app::PlanInput changed = plan;
@@ -596,17 +605,15 @@ void check_refusals() {
         app::PlanInput changed = plan;
         changed.tasks[1].baseline_stored = true;
         expect_refused(changed, source, "task with a baseline", "a task with a baseline (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan with a baseline");
+        expect_push_refused(changed, "task with a baseline",
+                            "push() refuses a Calculate edit over a plan with a baseline");
     }
     {
         app::PlanInput changed = plan;
         changed.tasks[1].active = false;
         expect_refused(changed, source, "inactive task", "an inactive task (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan with an inactive task");
+        expect_push_refused(changed, "inactive task",
+                            "push() refuses a Calculate edit over a plan with an inactive task");
     }
     {
         app::PlanInput changed = plan;
@@ -628,9 +635,8 @@ void check_refusals() {
         extra.calendars.push_back(app::CalendarRow{});
         expect_refused(extra, source, "is not the measured Standard calendar",
                        "an extra calendar (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(edited), &edited),
-              "push() refuses a Calculate edit over a plan with an edited calendar");
+        expect_push_refused(edited, "is not the measured Standard calendar",
+                            "push() refuses a Calculate edit over a plan with an edited calendar");
     }
     /* W35b-0.4 (RW35-W2): the pending recalculation must have been caused by a Duration
      * change alone, so each leaf's Finish is its Start plus its Duration on the measured
@@ -641,9 +647,8 @@ void check_refusals() {
         changed.tasks[1].duration_ticks = 19200;
         expect_refused(changed, source, "is not its start plus its duration",
                        "a leaf duration without its finish (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan whose leaf duration and finish differ");
+        expect_push_refused(changed, "is not its start plus its duration",
+                            "push() refuses a Calculate edit over a plan whose leaf duration and finish differ");
     }
     {
         /* A Finish edit. */
@@ -661,9 +666,8 @@ void check_refusals() {
         changed.tasks[1].start = app::date32_from_packed(0x3BF312C0u);
         expect_refused(changed, source, "is not its start plus its duration",
                        "a leaf start edit (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(changed), &changed),
-              "push() refuses a Calculate edit over a plan whose start edit left the finish");
+        expect_push_refused(changed, "is not its start plus its duration",
+                            "push() refuses a Calculate edit over a plan whose start edit left the finish");
     }
     {
         app::PlanInput changed = plan;
@@ -786,9 +790,8 @@ void check_refusals() {
                        "a file whose only change is the Props project start (plan layer)");
         expect_refused(plan, moved_path.string(), "uid 1 does not start at the first working",
                        "a file whose only change is the Props project start (writer layer)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(moved_plan), &moved_plan),
-              "push() refuses a Calculate edit over a plan with a moved Props project start");
+        expect_push_refused(moved_plan, "for a leaf that does not start at the first working instant",
+                            "push() refuses a Calculate edit over a plan with a moved Props project start");
         app::PlanInput unread = plan;
         unread.props_project_start_stored = false;
         expect_refused(unread, source, "project start in 114/Props",
@@ -885,9 +888,8 @@ void check_refusals() {
             check(error.find("end on the same day") != std::string::npos &&
                       error.find(writer_tie) == std::string::npos,
                   "the tie refusal is the plan layer's own text (got \"" + error + "\")");
-            app::StructuralEdits edits;
-            check(!edits.push(hand_edit(tied), &tied),
-                  "push() refuses a Calculate edit over a plan whose two leaves tie");
+            expect_push_refused(tied, "end on the same day",
+                                "push() refuses a Calculate edit over a plan whose two leaves tie");
         }
         {
             app::PlanInput swapped = plan;
@@ -905,9 +907,8 @@ void check_refusals() {
                       error.find(writer_swap) == std::string::npos,
                   "the swapped-order refusal is the plan layer's own text (got \"" + error +
                       "\")");
-            app::StructuralEdits edits;
-            check(!edits.push(hand_edit(swapped), &swapped),
-                  "push() refuses a Calculate edit over a plan whose second leaf ends the project");
+            expect_push_refused(swapped, "is not the first leaf row",
+                                "push() refuses a Calculate edit over a plan whose second leaf ends the project");
         }
     }
     {
@@ -1115,9 +1116,8 @@ void check_refusals() {
             changed.tasks[1].fixed_meta_entry[16] = 0x05;
             expect_refused(changed, source, "FixedMeta flags differ",
                            "a leaf whose effort-driven or task-type bit differs (plan)");
-            app::StructuralEdits edits;
-            check(!edits.push(hand_edit(changed), &changed),
-                  "push() refuses a Calculate edit over a plan with other FixedMeta flags");
+            expect_push_refused(changed, "FixedMeta flags differ",
+                                "push() refuses a Calculate edit over a plan with other FixedMeta flags");
         }
         {
             app::PlanInput changed = plan;
@@ -1130,9 +1130,8 @@ void check_refusals() {
             changed.tasks[1].var_keys.push_back(0x0B400100u);
             expect_refused(changed, source, "variable records differ",
                            "a leaf with a variable record the control does not store (plan)");
-            app::StructuralEdits edits;
-            check(!edits.push(hand_edit(changed), &changed),
-                  "push() refuses a Calculate edit over a plan with another variable record");
+            expect_push_refused(changed, "variable records differ",
+                                "push() refuses a Calculate edit over a plan with another variable record");
         }
         {
             app::PlanInput changed = plan;
@@ -1207,9 +1206,8 @@ void check_refusals() {
         milestone.tasks[1].duration_ticks = 0;
         expect_refused(milestone, source, "is not its start plus its duration",
                        "a milestone leaf, duration zero (plan)");
-        app::StructuralEdits edits;
-        check(!edits.push(hand_edit(milestone), &milestone),
-              "push() refuses a Calculate edit over a plan with a zero-duration leaf");
+        expect_push_refused(milestone, "is not its start plus its duration",
+                            "push() refuses a Calculate edit over a plan with a zero-duration leaf");
         app::PlanInput negative = plan;
         negative.tasks[1].duration_ticks = -4800;
         expect_refused(negative, source, "is not its start plus its duration",
