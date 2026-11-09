@@ -990,6 +990,67 @@ void check_refusals() {
         expect_refused(plan, path.string(), "is inactive", "a file whose task is inactive");
     }
     {
+        /* W35c-1.6 (R35bG0-4): the plan layer's refusals above set the TaskRow and
+         * AssignmentRow fields by hand.  Here the mutated FILE is read through the reader
+         * (plan_input_from_document) and the PLAN's own needle is asserted, so deleting a
+         * reader_adapter line (the deadline, active or baseline_stored assignment) turns this
+         * red instead of leaving the plan layer silently blind to a real file. */
+        {
+            mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+            mppwrite::TaskTable rows = mppwrite::TaskTable::from_document(doc);
+            rows.set_u32(2, mppwrite::task_row::kDeadline, 0x3BF212C0u);
+            rows.store_into(doc);
+            const std::filesystem::path path = out_path("app-calculate-reader-deadline.mpp");
+            doc.save(path.string());
+            const app::PlanInput loaded = load_plan(path);
+            check(loaded.tasks.size() == 2 && loaded.tasks[1].deadline != app::kDateNa,
+                  "the reader fills a leaf's deadline");
+            expect_refused(loaded, path.string(), "for a task with a deadline",
+                           "a deadline read from the file (plan layer)");
+        }
+        {
+            mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+            Bytes meta = doc.read_stream(kTaskFixed2Meta);
+            meta[16 + 5 * 96 + 8] = static_cast<std::uint8_t>(meta[16 + 5 * 96 + 8] & ~0x40u);
+            doc.replace_stream(kTaskFixed2Meta, meta);
+            const std::filesystem::path path = out_path("app-calculate-reader-inactive.mpp");
+            doc.save(path.string());
+            const app::PlanInput loaded = load_plan(path);
+            check(loaded.tasks.size() == 2 && !loaded.tasks[1].active,
+                  "the reader fills a leaf's Active flag (false)");
+            check(plan.tasks.size() == 2 && plan.tasks[0].active && plan.tasks[1].active,
+                  "the reader fills the control's Active flags (true)");
+            expect_refused(loaded, path.string(), "for an inactive task",
+                           "an inactive task read from the file (plan layer)");
+        }
+        {
+            mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+            add_var_key(doc, "TBkndTask", 1, 0x0b40001bu);
+            const std::filesystem::path path = out_path("app-calculate-reader-task-baseline.mpp");
+            doc.save(path.string());
+            const app::PlanInput loaded = load_plan(path);
+            check(loaded.tasks.size() == 2 && loaded.tasks[0].baseline_stored,
+                  "the reader fills a leaf's stored Baseline 0");
+            expect_refused(loaded, path.string(), "for a task with a baseline",
+                           "a task baseline read from the file (plan layer)");
+        }
+        {
+            mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+            add_var_key(doc, "TBkndAssn", 1, 0x0f400092u);
+            const std::filesystem::path path =
+                out_path("app-calculate-reader-assignment-baseline.mpp");
+            doc.save(path.string());
+            const app::PlanInput loaded = load_plan(path);
+            bool any_stored = false;
+            for (const app::AssignmentRow& row : loaded.assignments) {
+                any_stored = any_stored || row.baseline_stored;
+            }
+            check(any_stored, "the reader fills an assignment's stored Baseline 0");
+            expect_refused(loaded, path.string(), "assignment with a baseline",
+                           "an assignment baseline read from the file (plan layer)");
+        }
+    }
+    {
         /* A flag byte of the task's FixedMeta entry (the summary, effort-driven and task
          * type bits live there: assignment_growth.cpp compares them). */
         mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
