@@ -77,6 +77,7 @@ bool calculate_measured_finish(std::uint32_t start, std::uint32_t duration,
 struct CalculateShape {
     std::uint32_t critical_uid = 0;     /* the leaf that ends the project */
     std::uint32_t project_start = 0;    /* row 0 +96 */
+    std::uint32_t props_project_start = 0; /* 114/Props 0x02400002, the leaf Fixed2Data +46 */
     std::uint32_t project_finish = 0;   /* the latest leaf Finish */
     std::uint32_t critical_duration = 0; /* that leaf's +84, ticks */
     std::vector<std::uint32_t> leaf_uids;

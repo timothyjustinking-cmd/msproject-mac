@@ -429,6 +429,7 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                "(0x02400002), so the leaf Fixed2Data +46 cannot "
                                "be set");
         }
+        shape.props_project_start = get_u32(props, start_at);
         /* W35b-0.3: the pair lengthens the project; no pair shortens it. */
         if (shape.project_finish < rows.u32(0, task_row::kFinish)) {
             return fail(error, "the recalculation would shorten the project (the "
@@ -575,8 +576,13 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
     if (path.empty() || std::filesystem::path(path).filename().empty()) {
         throw Error("calculate: the output path is empty or names a directory");
     }
-    validate_calculate(doc, request);
+    CalculateShape shape;
+    std::string reason;
+    if (!read_calculate_shape(doc, shape, reason)) {
+        throw Error("calculate: " + reason);
+    }
     TaskTable const before = TaskTable::from_document(doc, kTable);
+    check_request(shape, before, request);
 
     CfbDocument work = doc;
     TaskTable after = before;
@@ -603,14 +609,7 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
 
     /* Fixed2Data: the project duration word clears, each leaf gets the
      * measured stamp and the Props project start. */
-    std::vector<std::uint8_t> props = work.read_stream(props_path());
-    std::uint32_t length = 0;
-    std::size_t const start_at = props_payload(props, kPropProjectStart, length);
-    if (start_at == static_cast<std::size_t>(-1) || length != 4) {
-        throw Error("calculate: 114/Props has no 4-byte project start "
-                    "(0x02400002), so the leaf Fixed2Data +46 cannot be set");
-    }
-    std::uint32_t const project_start = get_u32(props, start_at);
+    std::uint32_t const project_start = shape.props_project_start;
     std::vector<std::uint8_t> fixed2 = read_fixed2_data(work, kTable);
     put_u32(fixed2, fixed2_record_offset(0) + kFixed2ProjectDuration, 0);
     for (CalculateLeaf const& leaf : request.leaves) {

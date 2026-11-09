@@ -606,6 +606,92 @@ void refused_requests() {
                 "has been calculated before", "a file calculated once before");
         check(!std::filesystem::exists(again), "2.3: no file left behind");
     }
+    /* W35b-2.4 (R35G1-7): one synthetic mutation per writer guard, each with the guard's own
+     * words as the needle, so removing any one guard turns this test red.  Every mutation
+     * changes only what its guard reads. */
+    {
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(0, mppwrite::task_row::kUniqueId, 7);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "row 0 is not the project row",
+                "2.4: row 0 uid");
+    }
+    {
+        /* A leaf's FixedMeta +17/+18 (the automatic row's 0x48/0xef) differs. */
+        CfbDocument doc = control;
+        Bytes meta = doc.read_stream("114/TBkndTask/FixedMeta");
+        meta[16 + 4 * 47 + 17] = 0x00;
+        doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "0x48/0xef at FixedMeta +17/+18", "2.4: FixedMeta +17");
+        CfbDocument other = control;
+        Bytes meta2 = other.read_stream("114/TBkndTask/FixedMeta");
+        meta2[16 + 5 * 47 + 18] = 0x00;
+        other.replace_stream("114/TBkndTask/FixedMeta", meta2);
+        refuses([&] { mppwrite::save_calculate(other, good, path); },
+                "0x48/0xef at FixedMeta +17/+18", "2.4: FixedMeta +18");
+    }
+    {
+        CfbDocument doc = control;
+        rename_props_record(doc, 0x02400024u, 0x02400FF4u);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "no 0x02400024 calculation-pending record", "2.4: pending record missing");
+    }
+    {
+        /* The flag stays 01 00 (pending) and the project row's finish already equals the latest
+         * leaf finish: nothing to calculate.  Project's own result stops at "not pending" and
+         * never reaches this guard. */
+        CfbDocument doc = control;
+        mppwrite::CalculateShape shape;
+        std::string reason;
+        check(mppwrite::read_calculate_shape(doc, shape, reason), "2.4: the control reads");
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(0, mppwrite::task_row::kFinish, shape.project_finish);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "already equals the latest task finish", "2.4: project finish already equals");
+    }
+    {
+        CfbDocument doc = control;
+        TaskTable rows = TaskTable::from_document(doc);
+        rows.set_u32(1, mppwrite::task_row::kStartAnchor, 0xFFFFFFFFu);
+        rows.store_into(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); }, "has no start anchor",
+                "2.4: start anchor");
+    }
+    {
+        CfbDocument doc = control;
+        CalculateRequest bad = good;
+        bad.leaves[0].late_start = 0;
+        refuses([&] { mppwrite::save_calculate(doc, bad, path); },
+                "has a late date before its early date", "2.4: late start before early start");
+        CalculateRequest bad_finish = good;
+        bad_finish.leaves[1].late_finish = 0;
+        refuses([&] { mppwrite::save_calculate(doc, bad_finish, path); },
+                "has a late date before its early date", "2.4: late finish before early finish");
+    }
+    {
+        CfbDocument doc = control;
+        CalculateRequest bad = good;
+        bad.leaves[0].late_finish += 0x10000;
+        refuses([&] { mppwrite::save_calculate(doc, bad, path); },
+                "has a late finish after the project finish",
+                "2.4: late finish after the project finish");
+    }
+    {
+        /* The row count: a task table with a row fewer is refused by the writer's own row-count
+         * guard (the file also fails the assignment count, which is why the needle is the
+         * guard's). */
+        CfbDocument doc = control;
+        Bytes fixed = doc.read_stream("114/TBkndTask/FixedData");
+        fixed.resize(fixed.size() - 202);
+        doc.replace_stream("114/TBkndTask/FixedData", fixed);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "task rows; the measured Calculate Project save has the project row and exactly "
+                "two leaf tasks",
+                "2.4: row count");
+    }
     {
         /* W35b-2.1 (R35G1-4): a Props record the save needs after its appends is missing.  The
          * target already exists (Save over the open file); it must be left byte-identical. */

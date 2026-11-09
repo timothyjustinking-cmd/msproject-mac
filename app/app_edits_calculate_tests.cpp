@@ -650,7 +650,9 @@ void check_refusals() {
         broken.replace_stream(kTaskFixed, fixed);
         const std::filesystem::path broken_path = out_path("app-calculate-broken-fixed.mpp");
         broken.save(broken_path.string());
-        expect_refused(plan, broken_path.string(), "not implemented in this port",
+        expect_refused(plan, broken_path.string(),
+                       "task rows; the measured Calculate Project save has the project row and "
+                       "exactly two leaf tasks",
                        "a file whose Task table lost a row");
     }
     {
