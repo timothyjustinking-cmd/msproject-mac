@@ -171,9 +171,11 @@ std::string sorted_order_of(std::vector<SortRow> const& rows, std::uint32_t fiel
  * what is refused in the message ("this outline level").  W35c-2.12 (R35bG1-4):
  * `alt_digest_measured` is false for a shape that no pair measured on the second
  * text style (Show Level on the five-task outline), which then accepts the first
- * digest only.  Throws Error. */
+ * digest only.  W35d-2.10 (R35cG2-5): the parameter has no default, so every caller states
+ * what its writer measured; a default of true would silently accept the second digest for any
+ * shape, the R35bG1-4 defect again.  Throws Error. */
 void require_measured_view_block(CfbDocument const& doc, std::string const& function,
-                                 std::string const& refused, bool alt_digest_measured = true);
+                                 std::string const& refused, bool alt_digest_measured);
 
 /*
  * Apply `edit` to `doc`, write the package to `path`, re-open it and prove the
