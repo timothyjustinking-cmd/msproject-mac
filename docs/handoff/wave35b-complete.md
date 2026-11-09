@@ -91,6 +91,16 @@ Also open, found by the G4 review and the CLOSE review after this section was wr
   pre-rebuild ones are in `wave35b-verification/history-rebuild-wave35b.map`.  **No history
   rewrite**: wave 35b brief section 0 and the wave 35c brief (G2, Records) forbid it, and a rewrite
   would change every later id.  Wave 35c's own commits carry the trailer.
+- **A builder commit carries the coordinator's G3 records (R35bW-6, Low; recorded by
+  W35c-2.27).**  `d60b3a6` ("W35b-4.G0-12 (R34b-9, R35G0-12)", pre-rebuild `ec07ab7`) adds
+  `wave35b-verification/coord-gates-g3.md` (118 lines) and `review-g3.md` (140 lines) beside its
+  14-line test change in `app/app_edits_assignment_tests.cpp`.  The coordinator staged them in
+  the shared tree while the builder was committing (`coord-gates-g4.md`, "Process note").  So
+  one commit holds two authors' work under one finding id (the standing rule is one id per
+  commit) and the builder's `Generated-By` trailer no longer tells who wrote those two records;
+  their content is the coordinator's, byte for byte.  **Accepted defect, no history rewrite**
+  (same ground as above).  The rule for later waves: the coordinator's records are committed
+  from the verify worktree, and only after the builder's tree is clean.
 
 ### Push and CI
 
