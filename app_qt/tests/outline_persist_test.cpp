@@ -91,6 +91,33 @@ int main(int argc, char** argv) {
     gate::check(status_contains(window, "the queued level was withdrawn"),
                 "the status line says the queued level was withdrawn");
 
+    // W35b-3.2 (R35G2-6): expanding or collapsing a row by hand while a level is
+    // queued would leave the file describing rows the user is no longer looking at;
+    // the toggle is refused, with the reason, and the queued level and the rows stay.
+    window.apply_outline_level(1);
+    QApplication::processEvents();
+    gate::check(queued_level(window) != nullptr, "Level 1 is queued again for the toggle case");
+    const std::size_t level1_rows = window.sheet_row_count();
+    window.toggle_outline_row(0);
+    QApplication::processEvents();
+    gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                "a hand toggle leaves the queued Level 1 in place");
+    gate::check(window.sheet_row_count() == level1_rows,
+                "a hand toggle with a level queued changes no row");
+    gate::check(status_contains(window, "a Show Level is queued and File > Save would write it"),
+                "a hand toggle with a level queued: the status line names the queued level");
+    // With nothing queued the same toggle works (All Subtasks first withdraws it).
+    window.apply_outline_level(0);
+    QApplication::processEvents();
+    window.toggle_outline_row(0);
+    QApplication::processEvents();
+    gate::check(window.pending_edits().empty(), "a hand toggle queues nothing");
+    gate::check(window.sheet_row_count() == full_rows - 2,
+                "a hand toggle with nothing queued collapses the summary's two children");
+    window.apply_outline_level(0);
+    QApplication::processEvents();
+    gate::check(window.sheet_row_count() == full_rows, "All Subtasks shows every row again (2)");
+
     // Level 2 on this outline hides nothing: session only, with the reason.
     window.apply_outline_level(2);
     QApplication::processEvents();
