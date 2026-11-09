@@ -46,6 +46,9 @@ class SheetTableModel final : public QAbstractTableModel {
   public:
     // Called after a setData() attempt: ok, and the message to show ("" when ok).
     using CommitHandler = std::function<void(bool ok, const std::string& message)>;
+    // W35c-1.3 (R35bW-1): asked before every cell edit; a non-empty answer is the
+    // reason the edit is refused (reported through the commit handler).
+    using EditGate = std::function<std::string()>;
 
     explicit SheetTableModel(QObject* parent = nullptr);
 
@@ -83,6 +86,7 @@ class SheetTableModel final : public QAbstractTableModel {
     void set_display_rows(std::vector<std::size_t> rows, bool active);
 
     void set_commit_handler(CommitHandler handler);
+    void set_edit_gate(EditGate gate) { edit_gate_ = std::move(gate); }
 
     // W33-1.7 (A-8 / D-7): a document opened from a container with unreferenced
     // sectors cannot be saved, so setData refuses every cell edit and reports
@@ -225,6 +229,7 @@ class SheetTableModel final : public QAbstractTableModel {
     // W33-1.7 (A-8 / D-7): non-empty while the open document is read-only.
     std::string read_only_reason_;
     CommitHandler commit_handler_;
+    EditGate edit_gate_;
 };
 
 }  // namespace msqt

@@ -31,6 +31,7 @@
 #include <vector>
 
 #include "cfb_writer.h"
+#include "dialogs.h"
 #include "edit_model.h"
 #include "entry_columns.h"
 #include "fixture_guard.h"
@@ -72,6 +73,16 @@ const app::StructuralEdit* queued_sort(const msqt::MainWindow& window) {
 
 bool status_contains(const msqt::MainWindow& window, const char* needle) {
     return window.status_left_text().contains(QString::fromUtf8(needle));
+}
+
+// True when some displayed row of the Name column reads `text`.
+bool any_row_named(msqt::SheetTableModel* model, int name_column, const QString& text) {
+    for (int row = 0; row < model->rowCount(); ++row) {
+        if (model->data(model->index(row, name_column)).toString() == text) {
+            return true;
+        }
+    }
+    return false;
 }
 
 }  // namespace
@@ -183,6 +194,96 @@ int main(int argc, char** argv) {
         gate::check(window.pending_edits().empty(), "two keys: nothing is queued");
         gate::check(status_contains(window, "Sort with 2 keys is not implemented in this port"),
                     "two keys: the status line names the reason");
+    }
+
+    // W35c-1.3 (R35bW-1): the other order of the same rule.  A grid edit made AFTER a Sort is
+    // queued is refused with the queued edit named, so the screen cannot re-sort on names the
+    // file does not store while File > Save writes the file's own order.
+    {
+        gate::check(window.open_file(fixture, &error), "the fixture reopens for the later-edit gate");
+        QApplication::processEvents();
+        window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                 "Name descending", false);
+        QApplication::processEvents();
+        gate::check(queued_sort(window) != nullptr, "Name descending is queued for the later-edit gate");
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        const int duration_column = msqt::entry_column_index(msqt::EntryCellKind::duration);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        gate::check(name_column >= 0 && duration_column >= 0, "the Entry table has Name and Duration");
+        const QString name_before = model->data(model->index(1, name_column)).toString();
+        gate::check(!model->setData(model->index(1, name_column),
+                                    QStringLiteral("Renamed after the sort"), Qt::EditRole),
+                    "a rename after a queued Sort is refused");
+        gate::check(model->data(model->index(1, name_column)).toString() == name_before,
+                    "the refused rename leaves the name as it was");
+        gate::check(queued_sort(window) != nullptr, "the refused rename leaves the Sort queued");
+        gate::check(status_contains(window, "a Sort is queued and File > Save would write it, not "
+                                            "an edited cell"),
+                    "a rename after a queued Sort: the status line names the queued Sort");
+        gate::check(!model->setData(model->index(1, duration_column), QStringLiteral("9d"),
+                                    Qt::EditRole),
+                    "a Duration edit after a queued Sort is refused");
+        // The task form and Task Information commit through apply_task_information.
+        window.sheet()->select_cell(1, 0);
+        msqt::TaskInformationValues values;
+        gate::check(window.task_information_values(&values), "a task is selected for the form");
+        values.name = "Renamed in the form";
+        gate::check(!window.apply_task_information(values),
+                    "a task form edit after a queued Sort is refused");
+        gate::check(status_contains(window, "not an edited task field"),
+                    "a task form edit after a queued Sort: the status line names the Sort");
+        gate::check(queued_sort(window) != nullptr, "the refused form edit leaves the Sort queued");
+        // Cut writes cells too.
+        window.sheet()->select_cell(1, 0);
+        QApplication::processEvents();
+        if (QAction* cut = gate::find_action(window, app::MenuAction::cut)) {
+            gate::check(cut->isEnabled(), "Cut is enabled on the selected cell");
+            cut->trigger();
+            QApplication::processEvents();
+            gate::check(status_contains(window, "not a cut cell"),
+                        "a cut after a queued Sort: the status line names the queued Sort");
+        } else {
+            gate::check(false, "Cut is a menu action");
+        }
+        gate::check(queued_sort(window) != nullptr, "the refused cut leaves the Sort queued");
+    }
+
+    // W35c-1.3: undo in the sheet, then Sort, then Ctrl+Y.  Queueing the Sort rebuilds the
+    // document, and the rebuild's new sheet carries no history, so there is no sheet Redo to
+    // re-apply the rename under the queued Sort.  This pins that: Redo is disabled and the
+    // rename does not come back.
+    {
+        gate::check(window.open_file(fixture, &error), "the fixture reopens for the redo gate");
+        QApplication::processEvents();
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        gate::check(model->setData(model->index(1, name_column),
+                                   QStringLiteral("Renamed then undone"), Qt::EditRole),
+                    "a rename commits with nothing queued");
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        gate::check(undo != nullptr, "Undo is a menu action");
+        if (undo != nullptr) {
+            undo->trigger();
+            QApplication::processEvents();
+        }
+        gate::check(!any_row_named(model, name_column, QStringLiteral("Renamed then undone")),
+                    "the sheet's Undo takes the rename back");
+        window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                 "Name descending", false);
+        QApplication::processEvents();
+        gate::check(queued_sort(window) != nullptr,
+                    "Name descending queues after the sheet's Undo (the plan is clean)");
+        if (QAction* redo = gate::find_action(window, app::MenuAction::redo)) {
+            gate::check(!redo->isEnabled(),
+                        "the queued Sort's rebuild leaves no sheet Redo");
+            redo->trigger();
+            QApplication::processEvents();
+        } else {
+            gate::check(false, "Redo is a menu action");
+        }
+        gate::check(!any_row_named(model, name_column, QStringLiteral("Renamed then undone")),
+                    "Redo does not re-apply the rename under the queued Sort");
+        gate::check(queued_sort(window) != nullptr, "Redo leaves the Sort queued");
     }
 
     // W35b-1.5 (RW35-R2): a grid edit that is not saved yet.  The session plan
