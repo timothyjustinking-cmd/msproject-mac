@@ -772,6 +772,30 @@ void refused_requests() {
                                 static_cast<std::uint8_t>((next_day >> 24) & 0xFFu)});
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
                 "project start in 114/Props", "0.2: only the Props project start moved a day");
+        /* W35d-2.4 (R35cG0-6): the project start's payload is free of the pin (the 0.2 relation
+         * governs it), so a different start that still maps to the leaves' start is accepted:
+         * Saturday 2026-01-03 00:00 maps to Monday 2026-01-05 08:00, the leaves' Start.  Taking
+         * the record out of props_payload_is_free would refuse it as a changed payload. */
+        std::uint32_t const saturday = mppwrite::pack_date_ymd(2026, 1, 3, 0);
+        doc = control;
+        set_props_payload(doc, 0x02400002u,
+                          Bytes{static_cast<std::uint8_t>(saturday & 0xFFu),
+                                static_cast<std::uint8_t>((saturday >> 8) & 0xFFu),
+                                static_cast<std::uint8_t>((saturday >> 16) & 0xFFu),
+                                static_cast<std::uint8_t>((saturday >> 24) & 0xFFu)});
+        mppwrite::CalculateShape saturday_shape;
+        std::string saturday_reason;
+        check(mppwrite::read_calculate_shape(doc, saturday_shape, saturday_reason),
+              "0.2: a Props project start of Saturday 00:00 maps to the leaves' start and is "
+              "accepted: " + saturday_reason);
+        check(saturday_shape.props_project_start == saturday,
+              "0.2: the accepted shape carries the Saturday start");
+        /* The record's kind is checked where the start is read, before the pin, with its own
+         * text.  The pin would refuse the same file later with the record-kind text. */
+        doc = control;
+        set_props_kind(doc, 0x02400002u, 0x01u);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "date record for the project start", "0.2: the Props project start of another kind");
     }
     {
         /* W35c-1.5 (R35bG0-3): the finish-position guard cannot tell one Duration edit from two
@@ -841,14 +865,22 @@ void refused_requests() {
                       "0.3: a per-save GUID record changed is accepted: " + reason);
             }
         }
-        /* The record's kind is pinned as well as its payload. */
+        /* The record's kind is pinned as well as its payload.  W35d-2.4 (R35cG0-6): the needle
+         * is the record-kind text, which only that branch produces; "differs from the measured
+         * control" is shared by the header, count, payload and tail texts. */
         {
             Bytes changed = props;
+            std::uint32_t const was = changed[frames[10].at + 8];
             changed[frames[10].at + 8] ^= 0x01;
             CfbDocument doc = control;
             doc.replace_stream("114/Props", changed);
-            refuses([&] { mppwrite::save_calculate(doc, good, path); },
-                    "differs from the measured control", "0.3: a Props record kind changed");
+            char needle[160];
+            std::snprintf(needle, sizeof needle,
+                          "114/Props record 10 is 0x%08X (kind %u, %u bytes), not the control's "
+                          "0x%08X (kind %u",
+                          frames[10].id, was ^ 1u, frames[10].length, frames[10].id, was);
+            refuses([&] { mppwrite::save_calculate(doc, good, path); }, needle,
+                    "0.3: a Props record kind changed");
         }
         /* W35d-1.4 (R35cG0-3): the pin also holds per-file identity records, the project title
          * (0x02400008) among them, so a project saved under another title is refused here.
