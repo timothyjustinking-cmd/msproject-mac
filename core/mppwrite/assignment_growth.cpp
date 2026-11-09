@@ -2339,10 +2339,19 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
     Bytes assn_var2 = doc.read_stream(kAssnVar2Data);
     Bytes const props = doc.read_stream(kPropsBackEnd);
 
-    {
+    /* W35c-1.9 (R35bG1-2): every resource row, not only the target's.  Project's resave sets
+     * 0x40 on every row, and the port's own resource add stamps 0x1C even into a file Project
+     * has saved, so the target's byte alone does not prove no session has saved the file.
+     * The target is read first (its text is the measured one); row 0 (the first row of the
+     * table) is 0x5C in the measured control, so it is read only when it is the target. */
+    for (std::size_t k = 0; k < rsc_rows; ++k) {
+        std::size_t const r = k == 0 ? rsc_row : k;
+        if (k != 0 && k == rsc_row) {
+            continue;
+        }
         std::uint8_t const session = get_u8(
             rsc_meta, kMetaHeaderBytes +
-                          kRscFmEntryBytes * (rsc_row + kF2SpacerRecords) +
+                          kRscFmEntryBytes * (r + kF2SpacerRecords) +
                           kRscFmSession);
         if (session != kRscFmSessionUnsaved) {
             char buffer[96];
@@ -2350,7 +2359,10 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
                           "0x%02X, not the measured 0x%02X",
                           static_cast<unsigned>(session),
                           static_cast<unsigned>(kRscFmSessionUnsaved));
-            fail(function + ": the target resource's FixedMeta byte 12 is " +
+            fail(function + ": the " +
+                 (r == rsc_row ? "target resource's" : "resource table's row " +
+                                                           std::to_string(r)) +
+                 " FixedMeta byte 12 is " +
                  buffer + ": a Project session has already saved this file, "
                  "and its removal also clears Rsc Fixed2Meta byte 279 (0x2B to "
                  "0x0B), which this port does not write");
