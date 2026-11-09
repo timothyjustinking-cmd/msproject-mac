@@ -746,7 +746,7 @@ void MainWindow::build_central_widget() {
     sheet_model_.set_commit_handler(
         [this](bool ok, const std::string& error) { after_cell_commit(ok, error); });
     // W35c-1.3 (R35bW-1): a queued Show Level or Sort refuses a later cell edit.
-    sheet_model_.set_edit_gate([this]() { return view_change_refusal("an edited cell"); });
+    sheet_model_.set_edit_gate([this]() { return data_change_refusal("an edited cell"); });
 
     // A click selects through the sheet model (the single source of truth), then
     // mirrors the selection onto the Gantt bar.  Shift-click extends the model's
@@ -1631,6 +1631,27 @@ std::string MainWindow::view_change_refusal(const std::string& change) const {
                "; clear the sort or choose another sort first";
     }
     return {};
+}
+
+// W35d-2.11 (R35cW-4): a queued Calculate Project is exclusive and writes no view state, so
+// it refuses only the changes that would put another edit or value beside it (a cell edit,
+// Cut, Paste, Fill, a task-form edit), not a collapse or a session Sort.
+std::string MainWindow::data_change_refusal(const std::string& change) const {
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project)) {
+        return "calculate: a Calculate Project is queued and File > Save would write it, not " +
+               change + "; save or undo the calculation first";
+    }
+    return view_change_refusal(change);
+}
+
+bool MainWindow::refuse_data_change(const std::string& change) {
+    const std::string reason = data_change_refusal(change);
+    if (reason.empty()) {
+        return false;
+    }
+    set_message(reason, true);
+    update_status();
+    return true;
 }
 
 bool MainWindow::refuse_view_change(const std::string& change) {
@@ -4953,7 +4974,7 @@ void MainWindow::cut_selection() {
     if (refuse_read_only()) {
         return;
     }
-    if (refuse_view_change("a cut cell")) {
+    if (refuse_data_change("a cut cell")) {
         return;
     }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
@@ -5053,7 +5074,7 @@ void MainWindow::paste_selection() {
     if (refuse_read_only()) {
         return;
     }
-    if (refuse_view_change("a pasted cell")) {
+    if (refuse_data_change("a pasted cell")) {
         return;
     }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
@@ -5143,7 +5164,7 @@ void MainWindow::fill_down() {
     if (refuse_read_only()) {
         return;
     }
-    if (refuse_view_change("a filled cell")) {
+    if (refuse_data_change("a filled cell")) {
         return;
     }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
@@ -5709,7 +5730,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
     }
     // W35c-1.3 (R35bW-1): the form's fields commit through the sheet, so the same
     // queued Show Level or Sort refuses them.
-    if (refuse_view_change("an edited task field")) {
+    if (refuse_data_change("an edited task field")) {
         return false;
     }
     // The status prefix names the surface: Task Information's dialog or (W28-4.1)

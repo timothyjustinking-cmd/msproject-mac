@@ -384,6 +384,16 @@ on `PlanInput` (with the same exemptions as the pin) is cheap. It is not built: 
 and the writer's pin plus the save's digest stand in for it. It is the next step if a caller
 other than `make_calculate_edit` ever queues a Calculate Project edit.
 
+*A queued Calculate Project and a later change (W35d-2.11, R35cW-4).* `push()` already refuses
+every other structural edit beside a queued Calculate (it is an exclusive kind), and the save
+refuses the rest, so no wrong bytes were reachable; what was missing was the shell saying so at
+the moment of the change. `MainWindow::data_change_refusal` now names the queued Calculate for a
+grid cell edit, Cut, Paste, Fill and a task-form edit. It is deliberately not part of
+`view_change_refusal`: Calculate writes no view state, so a collapse, an expand or a session
+Sort beside it changes nothing Save writes and stays allowed. The Redo route the finding named
+(a Redo re-queuing a Calculate without `push()`) was closed by W35d-0.5, which makes Cut and
+Paste clear the structural redo list; qt_calculate_gate guards the cell edits.
+
 Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
 FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded
 (the only precedent, `assignment_growth.cpp`, compares the same entry for them and is
