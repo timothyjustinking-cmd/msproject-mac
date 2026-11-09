@@ -433,6 +433,41 @@ std::string identity_reference_problem(CfbDocument const& file,
     return std::string();
 }
 
+/* W35b-4.G0-13 (R34b-4's lesser case, R35G0-13): the appended record's own identity (+0, 16
+ * bytes: the counter dword is the one the pair masks, the rest is the shared stable suffix) must
+ * differ from every other identity in the Assignment, Task and Resource Fixed2Data streams, each
+ * walked at its own record stride.  The mask hides a +0 that collides with another row's, so the
+ * comparison is the 16 bytes, not the masked counter.  Returns the first collision, or "". */
+std::string identity_collision_problem(CfbDocument const& file, std::size_t record_index) {
+    Bytes const assn_f2 = file.read_stream(kAssnF2);
+    std::size_t const at = record_index * kF2Record;
+    if (assn_f2.size() < at + 16) {
+        return "the record is missing";
+    }
+    struct Stream {
+        char const* label;
+        Bytes bytes;
+        std::size_t stride;
+    };
+    Stream const streams[] = {{"Assignment", assn_f2, kF2Record},
+                              {"Task", file.read_stream(kTaskF2), 64},
+                              {"Resource", file.read_stream(kRscF2), 40}};
+    for (Stream const& stream : streams) {
+        for (std::size_t other = 0; other + 16 <= stream.bytes.size(); other += stream.stride) {
+            if (&stream == &streams[0] && other == at) {
+                continue;
+            }
+            if (std::equal(assn_f2.begin() + static_cast<std::ptrdiff_t>(at),
+                           assn_f2.begin() + static_cast<std::ptrdiff_t>(at + 16),
+                           stream.bytes.begin() + static_cast<std::ptrdiff_t>(other))) {
+                return std::string("the record's identity (+0) equals the ") + stream.label +
+                       " Fixed2Data record at offset " + std::to_string(other);
+            }
+        }
+    }
+    return std::string();
+}
+
 /* The pair's appended record is the first one past the null save's records.
  * Checks Project's save and the port's output, and shows the check can fail by
  * planting a wrong task and a wrong resource reference in scratch copies of the
@@ -461,6 +496,33 @@ void check_identity_references(TestContext& t, std::string const& label,
             label + ": the port's appended record references the same rows "
                     "(" + port_problem + ")");
 
+    /* W35b-4.G0-13: the appended record's own identity is unique, in Project's save and in
+     * the port's, and the check fails on a planted collision with a task or a resource row. */
+    {
+        std::string const project_collision = identity_collision_problem(project, record);
+        t.check(project_collision.empty(),
+                label + ": Project's appended identity is unique (" + project_collision + ")");
+        std::string const port_collision = identity_collision_problem(port, record);
+        t.check(port_collision.empty(),
+                label + ": the port's appended identity is unique (" + port_collision + ")");
+        for (bool const from_task : {true, false}) {
+            CfbDocument scratch = port;
+            Bytes assn_f2 = scratch.read_stream(kAssnF2);
+            Bytes const other_f2 = scratch.read_stream(from_task ? kTaskF2 : kRscF2);
+            std::size_t const other =
+                (from_task ? other_task_uid + std::size_t{3} : other_resource_uid + std::size_t{3}) *
+                (from_task ? 64 : 40);
+            std::copy(other_f2.begin() + static_cast<std::ptrdiff_t>(other),
+                      other_f2.begin() + static_cast<std::ptrdiff_t>(other + 16),
+                      assn_f2.begin() + static_cast<std::ptrdiff_t>(record * kF2Record));
+            scratch.replace_stream(kAssnF2, assn_f2);
+            std::string const problem = identity_collision_problem(scratch, record);
+            t.check(problem.find(from_task ? "equals the Task" : "equals the Resource") !=
+                        std::string::npos,
+                    label + ": an identity planted from a " + (from_task ? "task" : "resource") +
+                        " row is detected (" + problem + ")");
+        }
+    }
     /* A wrong resource reference in a scratch copy of the port's output. */
     {
         CfbDocument scratch = port;
