@@ -71,6 +71,15 @@ const app::StructuralEdit* queued_sort(const msqt::MainWindow& window) {
     return &applied.front();
 }
 
+// The Name column of the displayed rows, in display order.
+std::vector<QString> displayed_names(msqt::SheetTableModel* model, int name_column) {
+    std::vector<QString> names;
+    for (int row = 0; row < model->rowCount(); ++row) {
+        names.push_back(model->data(model->index(row, name_column)).toString());
+    }
+    return names;
+}
+
 bool status_contains(const msqt::MainWindow& window, const char* needle) {
     return window.status_left_text().contains(QString::fromUtf8(needle));
 }
@@ -207,6 +216,102 @@ int main(int argc, char** argv) {
     window.apply_sort_choice(core::view::SortDefinition{}, "", true);
     QApplication::processEvents();
     gate::check(!window.sort_active(), "the Undo case leaves no session sort");
+
+    // W35d-0.4 (R35cG1-1): the Undo-FIRST route.  Undo withdraws a queued Sort onto the redo
+    // list, so a later refused or cleared Sort found nothing queued and kept that list, and
+    // Ctrl+Y re-queued the withdrawn Sort while the rows showed another order (File > Save
+    // then wrote Name descending).  Any sort choice made while a Sort sits on the redo list
+    // ends it.  The needles are the redo state and the displayed order, not a status text.
+    {
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(undo != nullptr && redo != nullptr, "Undo and Redo are menu actions");
+        if (undo != nullptr && redo != nullptr && name_column >= 0) {
+            const std::vector<QString> file_order = displayed_names(model, name_column);
+
+            // Name descending, Ctrl+Z, a Sort the builder refuses (Start), Ctrl+Y.
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            QApplication::processEvents();
+            gate::check(queued_sort(window) != nullptr, "Undo-first: Name descending is queued");
+            const std::vector<QString> name_order = displayed_names(model, name_column);
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        "Undo-first: Undo withdraws the Sort onto the redo list");
+            window.apply_sort_choice(one_key_sort("Start", false, "Start descending"),
+                                     "Start descending", false);
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Undo-first: the refused Start sort queues nothing");
+            const std::vector<QString> start_order = displayed_names(model, name_column);
+            gate::check(!redo->isEnabled(),
+                        "Undo-first: a refused Sort ends the redo list (Redo is disabled)");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Undo-first: Redo after a refused Sort queues nothing");
+            gate::check(displayed_names(model, name_column) == start_order,
+                        "Undo-first: Redo after a refused Sort leaves the rows as the Start sort "
+                        "shows them");
+            gate::check(window.sort_active(),
+                        "Undo-first: the Start session sort is still the displayed sort");
+
+            // Name descending, Ctrl+Z, clear the sort, Ctrl+Y.
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            QApplication::processEvents();
+            gate::check(queued_sort(window) != nullptr, "Undo-first: Name descending is queued again");
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(redo->isEnabled(), "Undo-first: the second Undo fills the redo list");
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+            gate::check(!window.sort_active() && displayed_names(model, name_column) == file_order,
+                        "Undo-first: the cleared sort shows the file's order");
+            gate::check(!redo->isEnabled(),
+                        "Undo-first: a cleared Sort ends the redo list (Redo is disabled)");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Undo-first: Redo after a cleared Sort queues nothing");
+            gate::check(!window.sort_active() && displayed_names(model, name_column) == file_order,
+                        "Undo-first: Redo after a cleared Sort leaves the rows in the file's order");
+
+            // The session-sort entry point the gates and the header use ends it too.
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            QApplication::processEvents();
+            undo->trigger();
+            QApplication::processEvents();
+            window.clear_session_sort();
+            QApplication::processEvents();
+            gate::check(!redo->isEnabled(),
+                        "Undo-first: clearing the session sort ends the redo list");
+
+            // The plain route still works: Undo then Redo with nothing in between re-queues the
+            // Sort and the rows show it.
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            QApplication::processEvents();
+            undo->trigger();
+            QApplication::processEvents();
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(queued_sort(window) != nullptr,
+                        "Undo then Redo with nothing between re-queues the Sort");
+            gate::check(displayed_names(model, name_column) == name_order,
+                        "Undo then Redo: the rows show the queued Name descending order");
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+        }
+    }
 
     // Unmeasured shapes stay session only, each with its own reason.
     struct Refused {

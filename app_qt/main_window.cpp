@@ -258,6 +258,14 @@ bool queued_edit_is(const std::vector<app::StructuralEdit>& applied,
     return !applied.empty() && applied.back().kind == kind;
 }
 
+// W35d-0.4 (R35cG1-1): true when the edit a Redo would re-apply is `kind`.  Undo moves a queued
+// Sort or Show Level onto the redo list, so "a Sort is queued" is the wrong test for whether a
+// later sort choice has to end the redo list.
+bool redo_top_is(const app::StructuralEdits& edits, app::StructuralKind kind) {
+    const app::StructuralEdit* next = edits.next_redo();
+    return next != nullptr && next->kind == kind;
+}
+
 }  // namespace
 
 QString& ui_font_family() { return font_family_storage(); }
@@ -3573,6 +3581,27 @@ void MainWindow::after_structural_change(std::uint32_t keep_uid) {
     if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
         doc_.show_outline_level(structural_.applied().back().show_level);
         after_model_change();
+    } else if (queued_edit_is(structural_.applied(), app::StructuralKind::sort_view)) {
+        // W35d-0.4 (R35cG1-1): the same for a queued Sort.  A Redo re-queues it without going
+        // through push(), so the session sort is set to the edit's own key when the display
+        // is showing another (nothing changes when it already shows it, so the description
+        // the user's choice carries is kept).
+        const app::StructuralEdit& queued = structural_.applied().back();
+        const core::view::SortDefinition& shown = doc_.sort_definition();
+        const bool shows_queued = doc_.sort_active() && shown.keys.size() == 1 &&
+                                  shown.keys.front().field == queued.field_id &&
+                                  shown.keys.front().ascending == queued.ascending;
+        if (!shows_queued) {
+            core::view::SortDefinition definition;
+            definition.id = "app.sort";
+            definition.keys.push_back(core::view::SortKey{queued.field_id, queued.ascending});
+            const bool by_name = queued.field_id == app::task_field_id("Name");
+            std::string description = std::string(by_name ? "Name" : "Duration") +
+                                      (queued.ascending ? " ascending" : " descending");
+            definition.name = description;
+            doc_.set_sort(std::move(definition), std::move(description));
+            after_model_change();
+        }
     }
     if (prefs_.view != app::ViewMode::task_sheet && sheet_view_ != nullptr) {
         // W34-4.1: the Resource Sheet and the usage grids are built from the
@@ -6021,6 +6050,12 @@ void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
     if (!doc_.has_document()) {
         return;
     }
+    // W35d-0.4 (R35cG1-1): a Sort on the redo list (Undo withdrew it) is replaced by any
+    // sort choice made now, as a queued one is below.  Left there, Ctrl+Y re-queued it under
+    // whatever sort the display had by then.
+    if (redo_top_is(structural_, app::StructuralKind::sort_view)) {
+        structural_.clear_redo();
+    }
     // A queued persisted sort is replaced (Sort is an exclusive edit) or, when the
     // sort is cleared, withdrawn.
     const bool had_queued_sort = !structural_.applied().empty() &&
@@ -6087,6 +6122,10 @@ void MainWindow::apply_session_sort(core::view::SortDefinition definition,
     if (!doc_.has_document()) {
         return;
     }
+    // W35d-0.4 (R35cG1-1): the session sort changes, so a withdrawn Sort must not come back.
+    if (redo_top_is(structural_, app::StructuralKind::sort_view)) {
+        structural_.clear_redo();
+    }
     doc_.set_sort(std::move(definition), std::move(description));
     after_model_change();
 }
@@ -6094,6 +6133,9 @@ void MainWindow::apply_session_sort(core::view::SortDefinition definition,
 void MainWindow::clear_session_sort() {
     if (!doc_.has_document()) {
         return;
+    }
+    if (redo_top_is(structural_, app::StructuralKind::sort_view)) {
+        structural_.clear_redo();
     }
     doc_.clear_sort();
     after_model_change();
