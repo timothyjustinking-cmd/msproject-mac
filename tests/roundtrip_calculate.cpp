@@ -599,6 +599,61 @@ void refused_requests() {
                 "is not its start plus its duration", "leaf start edit");
     }
     {
+        /* W35c-0.2 (R35bG0-1): ONLY the Props project start (0x02400002) moves, by a week
+         * (Sunday 21:00 to the next Sunday 21:00), under manual calculation.  The leaves,
+         * row 0 and every date relation are untouched, so the 0.3 and 0.4 checks pass and
+         * only the Props relation can refuse.  The writer would have stamped Fixed2Data +46
+         * with the moved start and cleared the pending flag. */
+        CfbDocument doc = control;
+        mppwrite::CalculateShape shape;
+        std::string reason;
+        check(mppwrite::read_calculate_shape(doc, shape, reason), "0.2: control reads: " + reason);
+        std::uint32_t const moved = shape.props_project_start + (7u << 16);
+        set_props_payload(doc, 0x02400002u,
+                          Bytes{static_cast<std::uint8_t>(moved & 0xFFu),
+                                static_cast<std::uint8_t>((moved >> 8) & 0xFFu),
+                                static_cast<std::uint8_t>((moved >> 16) & 0xFFu),
+                                static_cast<std::uint8_t>((moved >> 24) & 0xFFu)});
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "project start in 114/Props", "0.2: only the Props project start moved a week");
+        /* One day later (Monday 21:00 maps to Tuesday 08:00), still not the leaves' start. */
+        std::uint32_t const next_day = shape.props_project_start + (1u << 16);
+        doc = control;
+        set_props_payload(doc, 0x02400002u,
+                          Bytes{static_cast<std::uint8_t>(next_day & 0xFFu),
+                                static_cast<std::uint8_t>((next_day >> 8) & 0xFFu),
+                                static_cast<std::uint8_t>((next_day >> 16) & 0xFFu),
+                                static_cast<std::uint8_t>((next_day >> 24) & 0xFFu)});
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "project start in 114/Props", "0.2: only the Props project start moved a day");
+    }
+    {
+        /* The relation itself, on the measured calendar. */
+        auto const maps = [](std::uint32_t from, std::uint32_t want, std::string const& what) {
+            std::uint32_t got = 0;
+            check(mppwrite::calculate_measured_first_working_start(from, got) && got == want,
+                  "0.2 first working start: " + what);
+        };
+        constexpr int h8 = 8 * 3600;
+        constexpr int h21 = 21 * 3600;
+        maps(mppwrite::pack_date_ymd(2026, 1, 4, h21), mppwrite::pack_date_ymd(2026, 1, 5, h8),
+             "Sunday 21:00 is Monday 08:00 (the measured pair)");
+        maps(mppwrite::pack_date_ymd(2026, 1, 10, 0), mppwrite::pack_date_ymd(2026, 1, 12, h8),
+             "Saturday is Monday 08:00");
+        maps(mppwrite::pack_date_ymd(2026, 1, 9, 17 * 3600), mppwrite::pack_date_ymd(2026, 1, 12, h8),
+             "Friday 17:00 is Monday 08:00");
+        maps(mppwrite::pack_date_ymd(2026, 1, 5, 7 * 3600), mppwrite::pack_date_ymd(2026, 1, 5, h8),
+             "Monday 07:00 is Monday 08:00");
+        maps(mppwrite::pack_date_ymd(2026, 1, 5, h8), mppwrite::pack_date_ymd(2026, 1, 5, h8),
+             "Monday 08:00 is itself");
+        maps(mppwrite::pack_date_ymd(2026, 1, 5, 10 * 3600 + 1800),
+             mppwrite::pack_date_ymd(2026, 1, 5, 10 * 3600 + 1800),
+             "Monday 10:30 is itself, which no leaf start equals");
+        std::uint32_t none = 0;
+        check(!mppwrite::calculate_measured_first_working_start(0xFFFFFFFFu, none),
+              "0.2 first working start: no date is refused");
+    }
+    {
         /* A leaf with its own calendar. */
         CfbDocument doc = control;
         TaskTable rows = TaskTable::from_document(doc);

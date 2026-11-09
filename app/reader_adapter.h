@@ -227,6 +227,10 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     // maps 0xffffffff to kDateNa), never a defaulted date.
     input.status_date = date32_from_packed(document.project.status_date.raw);
     input.status_date_stored = document.project.status_date_stored;
+    // W35c-0.2 (R35bG0-1): the Props project start Calculate Project stamps into the
+    // leaves; a file without the record reports not-stored (kDateNa).
+    input.props_project_start = date32_from_packed(document.project.props_start.raw);
+    input.props_project_start_stored = document.project.props_start_stored;
     input.default_calendar_name = document.project.default_calendar_name;
     input.default_calendar_name_stored = document.project.default_calendar_name_stored;
     input.default_week_record = document.project.default_week_record;

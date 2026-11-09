@@ -210,6 +210,18 @@ is the writer for the first one; the other three are refused.
   shape: the writer stamps `+46` with the Props value as the pair does, but no pair shows that
   Project does the same there. Not re-measured in this wave (no COM); the oracle script is
   unchanged and would need explicit time-zone-safe dates before a re-run.
+- **The leaf Start is related to the Props project start, not to row 0 (W35c-0.2,
+  R35bG0-1).** W35b-0.3's "every leaf starts at the project start" compares each leaf with
+  row 0's Start, the roll-up that manual calculation leaves stale, so a project start moved
+  under manual calculation passed it. Both layers now also require each leaf's Start to be
+  the first working instant at or after Props `0x02400002` (the word the writer stamps into
+  Fixed2Data +46) on the measured Standard calendar: Sunday 21:00 maps to Monday 08:00, a
+  Saturday or a time at or after 17:00 maps to the next working day 08:00, a time before
+  08:00 maps to 08:00 the same day. `mppwrite::calculate_measured_first_working_start` is
+  the shared rule; the reader fills `PlanInput::props_project_start`. The needle is "project
+  start in 114/Props". A start inside the working day (for example Monday 10:30) is its own
+  first working instant, which no leaf Start equals, so it is refused. Project's own bytes
+  for a moved start are still not measured: this is a refusal, not a decoded shape.
 - **One arrangement is measured (W35b-2.7, RW35-W3).** In the unlinked pair the first leaf row
   ends the project and the other leaf finishes before the stored project finish; the leaf stamp
   `0x30` is measured for that arrangement alone (the linked pair stores `0x30` and `0x28`). Two

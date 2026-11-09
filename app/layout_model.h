@@ -288,6 +288,14 @@ struct PlanInput {
     bool default_week_stored = false;
     date32 project_start = kDateNa;
     date32 project_finish = kDateNa;
+    /* W35c-0.2 (R35bG0-1): the project start in 114/Props (0x02400002), the word
+     * the Calculate Project save stamps into each leaf's Fixed2Data +46.  Row 0's
+     * Start above is the roll-up manual calculation leaves stale; this is the one
+     * the leaves must start at (the first working instant at or after it).
+     * `props_project_start_stored` is false when the file carries no such record,
+     * and the value is then kDateNa. */
+    date32 props_project_start = kDateNa;
+    bool props_project_start_stored = false;
     /* Wave 26 (W26-5.1): the project row's Priority word (FixedData +78 of row
      * 0), the one Project Information field this port can both read and write.
      * Project's new-project value is 500; a producer that does not store the

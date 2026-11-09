@@ -1009,6 +1009,16 @@ struct ProjectRow {
     std::vector<std::uint8_t> default_week_record;
     bool default_week_stored = false;
 
+    /* ---- The project START as the table props store it (W35c-0.2, R35bG0-1):
+     * 114/Props 0x02400002, kind 4, one packed date.  It is a different word
+     * from `start` above (row 0's FixedData roll-up, which manual calculation
+     * leaves stale): the Calculate Project save stamps it into each leaf's
+     * Fixed2Data +46.  In the measured pairs it is a Sunday 21:00 and the leaves
+     * start the next Monday 08:00.  `props_start_stored` is false when the file
+     * does not carry the record as kind 4 / 4 bytes. */
+    PackedDate props_start;
+    bool props_start_stored = false;
+
     /* ---- The project ROW's own Flag10 (the SUMMARY column the port shows on
      * synthetic row 0).  Same FixedMeta entry byte +25 bit 0x04 that a task
      * row uses (wave 23 W23-6); the project row is FixedMeta row 0.  Wave 24

@@ -111,6 +111,36 @@ bool calculate_measured_late(std::uint32_t finish, std::uint32_t duration,
     return true;
 }
 
+bool calculate_measured_first_working_start(std::uint32_t props_start,
+                                            std::uint32_t& first) {
+    constexpr int kDayStartSeconds = 8 * 3600;
+    constexpr int kDayFinishSeconds = 17 * 3600;
+    constexpr int kSaturday = 0; /* day 0 (1983-12-31) was a Saturday */
+    constexpr int kSunday = 1;
+    if (!is_date(props_start)) {
+        return false;
+    }
+    PackedDate at = unpack_date(props_start);
+    bool const working_day = at.day % 7 != kSaturday && at.day % 7 != kSunday;
+    if (working_day && at.seconds_of_day >= kDayStartSeconds &&
+        at.seconds_of_day < kDayFinishSeconds) {
+        first = props_start;
+        return true;
+    }
+    /* before 08:00 on a working day, the same day; otherwise the next working day */
+    if (!(working_day && at.seconds_of_day < kDayStartSeconds)) {
+        do {
+            ++at.day;
+        } while (at.day % 7 == kSaturday || at.day % 7 == kSunday);
+    }
+    if (at.day > 0xFFFF) {
+        return false;
+    }
+    at.seconds_of_day = kDayStartSeconds;
+    first = pack_date(at);
+    return true;
+}
+
 namespace {
 
 constexpr char const* kTable = "114/TBkndTask";
@@ -507,10 +537,11 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
         std::uint32_t start_length = 0;
         std::size_t const start_at =
             props_payload(props, kPropProjectStart, start_length);
-        if (start_at == static_cast<std::size_t>(-1) || start_length != 4) {
-            return fail(error, "114/Props has no 4-byte project start "
-                               "(0x02400002), so the leaf Fixed2Data +46 cannot "
-                               "be set");
+        if (start_at == static_cast<std::size_t>(-1) || start_length != 4 ||
+            get_u32(props, start_at - 4) != kPropsRecordKindDate) {
+            return fail(error, "114/Props has no 4-byte date record for the "
+                               "project start (0x02400002), so the leaf Fixed2Data "
+                               "+46 cannot be set");
         }
         shape.props_project_start = get_u32(props, start_at);
         /* W35b-0.3: the pair lengthens the project; no pair shortens it. */
@@ -567,6 +598,26 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                                        "08:00 to 17:00, whole 8-hour days), so the "
                                        "pending recalculation was not caused by a "
                                        "Duration edit alone");
+            }
+        }
+        /* W35c-0.2 (R35bG0-1): the leaf Start above is compared with row 0's Start, the
+         * roll-up manual calculation leaves stale; the writer stamps each leaf's
+         * Fixed2Data +46 with the Props project start instead.  The measured relation is
+         * that the leaf Start is the first working instant at or after the Props start
+         * (Sunday 21:00 maps to Monday 08:00).  A project start moved under manual
+         * calculation breaks it, and the port cannot say where Project would put the
+         * leaves.  After the 0.4 date check so each guard keeps its own test. */
+        for (std::size_t row = 1; row < kRows; ++row) {
+            std::uint32_t first = 0;
+            if (!calculate_measured_first_working_start(shape.props_project_start, first) ||
+                first != rows.u32(row, task_row::kStart)) {
+                return fail(error, "task uid " + std::to_string(rows.uid(row)) +
+                                       " does not start at the first working instant at "
+                                       "or after the project start in 114/Props "
+                                       "(0x02400002), so the project start was moved "
+                                       "after the leaves were scheduled; the measured "
+                                       "Calculate Project save has the leaves starting "
+                                       "there (Sunday 21:00 to Monday 08:00)");
             }
         }
         /* W35b-0.5 (R35G1-3): the parameters no pair varies. */

@@ -764,6 +764,9 @@ constexpr std::uint32_t kProjectPropsSubprojectCount = 0x02400084u;
  * Status date).  Kind 4, one packed date; 0xffffffff means no status date.
  * Measured on the W28-1.3 save pairs; see ProjectRow in reader.h. */
 constexpr std::uint32_t kProjectPropsStatusDate = 0x02400045u;
+/* Project props: the project START (kind 4, one packed date), the word the
+ * Calculate Project save stamps into each leaf's Fixed2Data +46 (W35c-0.2). */
+constexpr std::uint32_t kProjectPropsStart = 0x02400002u;
 /* Project props: Project's internal property QNEWTASKSAREMANUAL -- File >
  * Options > Schedule > "New tasks: Manually Scheduled / Auto Scheduled".
  * Kind 2 (u16), 0 = Auto Scheduled, nonzero = Manually Scheduled.  The id is
@@ -3999,6 +4002,8 @@ struct ProjectPropsRecords {
     bool timeline_stored = false;
     PackedDate status_date;
     bool status_date_stored = false;
+    PackedDate props_start;
+    bool props_start_stored = false;
     std::string default_calendar_name;
     bool default_calendar_name_stored = false;
     std::vector<std::uint8_t> default_week_record;
@@ -4065,6 +4070,16 @@ ProjectPropsRecords decode_project_props(const CompoundFile& cfb,
             }
             out.status_date.raw = u32_at(table_props, payload);
             out.status_date_stored = true;
+            return;
+        }
+        if (id == kProjectPropsStart) {
+            if (kind != 4u || length != 4u) {
+                warn_props_shape(warnings, table_path, id, kind, length,
+                                 "kind 4 / 4 bytes (packed date)");
+                return;
+            }
+            out.props_start.raw = u32_at(table_props, payload);
+            out.props_start_stored = true;
             return;
         }
         if (id == kProjectPropsDefaultCalendarName) {
@@ -4174,6 +4189,8 @@ Document parse_document(const CompoundFile& cfb) {
     document.project.timeline_stored = project_props.timeline_stored;
     document.project.status_date = project_props.status_date;
     document.project.status_date_stored = project_props.status_date_stored;
+    document.project.props_start = project_props.props_start;
+    document.project.props_start_stored = project_props.props_start_stored;
     document.project.default_calendar_name = project_props.default_calendar_name;
     document.project.default_calendar_name_stored = project_props.default_calendar_name_stored;
     document.project.default_week_record = project_props.default_week_record;
