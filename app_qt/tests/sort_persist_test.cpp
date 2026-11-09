@@ -140,6 +140,51 @@ int main(int argc, char** argv) {
     gate::check(window.pending_edits().empty(), "clearing the sort withdraws the queued edit");
     gate::check(!window.sort_active(), "clearing the sort clears the session sort");
 
+    // W35c-1.4 (R35bW-2): a Sort the user replaced or cleared is withdrawn for good.  Left on
+    // the redo list, Ctrl+Y re-queued it under whatever sort the display had by then, and
+    // File > Save wrote a sort the rows no longer showed.
+    {
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(redo != nullptr, "Redo is a menu action");
+        if (redo != nullptr) {
+            gate::check(!redo->isEnabled(), "clearing a queued sort leaves nothing to redo");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(), "Redo after a cleared sort queues nothing");
+            gate::check(!window.sort_active(), "Redo after a cleared sort leaves the rows unsorted");
+
+            // Name descending, then Start: the builder refuses Start, so the display sorts by
+            // Start and the queued Name descending is withdrawn.
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            QApplication::processEvents();
+            gate::check(queued_sort(window) != nullptr, "Name descending is queued for the redo case");
+            window.apply_sort_choice(one_key_sort("Start", false, "Start descending"),
+                                     "Start descending", false);
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "a refused replacement sort withdraws the queued one");
+            gate::check(!redo->isEnabled(),
+                        "a refused replacement sort leaves nothing to redo");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Redo after a refused replacement sort queues nothing");
+            gate::check(window.sort_active(),
+                        "Redo after a refused replacement sort leaves the session sort as it was");
+
+            // A replacement the builder accepts queues the new sort, with no stale redo.
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            window.apply_sort_choice(one_key_sort("Name", true, "Name ascending"),
+                                     "Name ascending", false);
+            QApplication::processEvents();
+            gate::check(!redo->isEnabled(), "a replacement sort leaves nothing to redo");
+        }
+        window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+        QApplication::processEvents();
+    }
+
     // W35b-4.R7 (RW35-R7): Undo withdraws a queued sort from the file but not the
     // session sort (the rebuild keeps it), so the status line says the rows stay
     // sorted and the file keeps its order.
