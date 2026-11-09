@@ -191,8 +191,13 @@ is the writer for the first one; the other three are refused.
   Project's own for this pair.
 - **Enforced, not trusted (W35b-2.2, R35G1-5).** The writer's request check requires every
   leaf's late Finish to equal the project Finish, and the leaf that ends the project to
-  carry total slack 0 and a late Start equal to its early Start. The writer cannot recompute
-  the per-leaf slack (it has no calendar), so the app proves the file is unchanged since the
+  carry total slack 0 and a late Start equal to its early Start. Since W35b-3.7 (RW35-R4)
+  the writer also recomputes every other leaf's slack and late Start on the measured
+  calendar (`calculate_measured_late`: 4,800 ticks of slack per working day between the
+  leaf's Finish and the project Finish, Monday to Friday 08:00 to 17:00) and refuses a
+  request that differs ("is not the working time between its finish and the project
+  finish"); `push()` runs the same recomputation. The digest stays as the second guard: the
+  slack is derived from that file's rows, so the app proves the file is unchanged since the
   edit was built: `StructuralEdit::source_digest` (FNV-1a 64 of the container) is compared
   at save, and a different file, or an edit with no digest, is refused ("has changed since
   Calculate Project was queued").
