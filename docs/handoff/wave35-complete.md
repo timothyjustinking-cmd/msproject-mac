@@ -255,7 +255,7 @@ and `scan_client_names` report 0; `guard_names` reports 1 for the two 9fa599b bl
 
 **Bold off (W35-3.4).**  `mppwrite::unbold_cell` in `core/mppwrite/viewstream_edit.cpp` rewrites
 the one cell-format item in place (flags 0x01000003 to 0x00000003, font word to 0x90000000, the
-control's top byte kept), proves that only those eight bytes changed, and requires the VarMeta
+top byte pinned to 0x90 as in Bold on), proves that only those eight bytes changed, and requires the VarMeta
 and Props streams unchanged.  Tested by `test_bold_off_pair` in
 `tests/roundtrip_viewstream.cpp` with zero KnownGaps.  **Found, not fixed: it is not wired to
 either shell.**  G3's item was the writer and its pair; I did not touch the edit model or the
@@ -280,12 +280,14 @@ rule derives from the file alone.  `spec/writers/note-richtext.md`.
 **Font controls beyond one Bold cell (W35-3.4).**  Ten pairs: Bold on row 2, on the first row and
 on a range, Bold off, Italic, Underline, size, name and colour.  The flags, colour words and
 pattern decode (0x01000003 Bold, 0x02000003 Italic, 0x04000003 underline through Font32Ex), but
-the top byte of the font word is uninitialised noise: it differs between sessions that make the
-same call, so no append can match byte for byte, and it could only sit as a KnownGap that must
-not enable.  Font32Ex stores no name or size in the item.  The two-row range stored one item.
+the top byte of the font word is a byte Project leaves uninitialised: it differs between sessions
+that make the same call, so an append is not enabled without a measured pair, and it could only
+sit as a KnownGap that must not enable.  **One rule (W35b-3.8, R35G3-5):** the port pins 0x90 and
+accepts no other top byte, for Bold on and for Bold off alike; Project reads 0x90 back.  The
+existing enabled Bold on one cell matched wave 30 because that session stored 0x90; the spec
+records it.  Font32Ex stores no name or size in the item.  The two-row range stored one item.
 Toolbar Underline was not measured: `FontUnderline(True)` raises "'bool' object is not
-callable" in this COM session.  The existing enabled Bold on one cell matched wave 30 only
-because that session stored 0x90 in the top byte; the spec records it.
+callable" in this COM session.
 
 **WBS Renumber (W35-3.4).**  Unavailable in Project without a code definition ("The method is
 not available in this situation", kept as evidence).  On a defined three-task file it is a no-op:
