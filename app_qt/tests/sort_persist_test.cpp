@@ -264,7 +264,6 @@ int main(int argc, char** argv) {
                                      "Name descending", false);
             QApplication::processEvents();
             gate::check(queued_sort(window) != nullptr, "Undo-first: Name descending is queued");
-            const std::vector<QString> name_order = displayed_names(model, name_column);
             undo->trigger();
             QApplication::processEvents();
             gate::check(window.pending_edits().empty() && redo->isEnabled(),
@@ -321,8 +320,38 @@ int main(int argc, char** argv) {
             gate::check(!redo->isEnabled(),
                         "Undo-first: clearing the session sort ends the redo list");
 
+            // W35e-2.2 (R35dG0-4): apply_session_sort called DIRECTLY after an Undo.  Every route
+            // above reaches its own clear through apply_sort_choice, which has already ended the
+            // redo list; this one is the entry point the header and the gates use, and its own
+            // clear is the only guard on it.
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+            window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                     "Name descending", false);
+            QApplication::processEvents();
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        "Undo-first: Undo withdraws the Sort onto the redo list (direct session "
+                        "sort)");
+            window.apply_session_sort(one_key_sort("Name", true, "Name ascending"),
+                                      "Name ascending");
+            QApplication::processEvents();
+            gate::check(!redo->isEnabled(),
+                        "Undo-first: apply_session_sort ends the redo list (Redo is disabled)");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Undo-first: Redo after apply_session_sort queues nothing");
+            gate::check(window.sort_active(),
+                        "Undo-first: the Name ascending session sort is still the displayed sort");
+
             // The plain route still works: Undo then Redo with nothing in between re-queues the
-            // Sort and the rows show it.
+            // Sort.  W35e-2.2 (R35dG0-4): the rows are NOT asserted here.  Undo keeps the session
+            // sort, so the rows already show the Sort before the re-apply in the rebuild runs
+            // and a check on them passes with or without it; the re-apply has no route that
+            // reaches it with a different display (every sort path above ends the redo list
+            // first).  Its key mapping is tested in app_edits_sort (W35e-2.1).
             window.apply_sort_choice(core::view::SortDefinition{}, "", true);
             QApplication::processEvents();
             window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
@@ -334,8 +363,6 @@ int main(int argc, char** argv) {
             QApplication::processEvents();
             gate::check(queued_sort(window) != nullptr,
                         "Undo then Redo with nothing between re-queues the Sort");
-            gate::check(displayed_names(model, name_column) == name_order,
-                        "Undo then Redo: the rows show the queued Name descending order");
             window.apply_sort_choice(core::view::SortDefinition{}, "", true);
             QApplication::processEvents();
         }
