@@ -64,6 +64,7 @@
 
 #include "document.h"
 #include "layout_model.h"
+#include "sort.h"
 
 namespace core::sched {
 class Calendar;
@@ -696,6 +697,13 @@ struct SortKeyRequest {
 bool make_sort_edit(const PlanInput& plan, std::string_view source_path,
                     const std::vector<SortKeyRequest>& keys, bool outline, bool renumber,
                     StructuralEdit& out, std::string& error);
+
+// W35e-2.1 (R35dG0-3): the display key a queued sort_view edit shows.  The edit's field_id is
+// the WRITER's id (mppwrite::kSortFieldName, or kSortFieldDuration = Task.DurationText), which
+// is the display field's id for Name only; the display's Duration is a different id.  The shell
+// re-applies a queued Sort through this (a Redo re-queues one without push()), so the key it
+// sets and the key it compares with the shown sort are display fields.
+core::view::SortKey queued_sort_display_key(const StructuralEdit& edit);
 
 // Builds a ready-to-push show_level edit (W35-2.3): View > Outline > Show > Level
 // `level` (1-based) on the task sheet.  Measured shape: the pairs' five-task

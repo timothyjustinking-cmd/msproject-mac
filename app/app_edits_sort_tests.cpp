@@ -215,6 +215,14 @@ void check_pair(const Pair& p) {
     check(edit.kind == app::StructuralKind::sort_view, label + ": the built edit has the kind");
     check_size(edit.field_id, p.field_id, label + ": the edit names the key's field");
     check(edit.ascending == p.ascending, label + ": the edit has the key's direction");
+    /* W35e-2.1 (R35dG0-3): the display key of the queued edit is the display field, which is the
+     * writer's id for Name and the stock Duration field (0x0B40001D) for Duration. */
+    {
+        const core::view::SortKey shown = app::queued_sort_display_key(edit);
+        const std::uint32_t want = p.kind == app::SortKeyKind::duration ? 0x0B40001Du : kFieldName;
+        check_size(shown.field, want, label + ": the queued sort's display key is the display field");
+        check(shown.ascending == p.ascending, label + ": the display key has the edit's direction");
+    }
     check(edit.sort_base_order == kBase, label + ": the base order is the file's");
     check(edit.sort_order == p.sorted, label + ": the order the edit computes is the order "
                                                   "Project saved");

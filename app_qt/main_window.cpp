@@ -3616,14 +3616,17 @@ void MainWindow::after_structural_change(std::uint32_t keep_uid) {
         // the user's choice carries is kept).
         const app::StructuralEdit& queued = structural_.applied().back();
         const core::view::SortDefinition& shown = doc_.sort_definition();
+        // W35e-2.1 (R35dG0-3): the edit's field_id is the writer's, so the display key comes
+        // from queued_sort_display_key (Name's two ids agree, Duration's do not).
+        const core::view::SortKey queued_key = app::queued_sort_display_key(queued);
         const bool shows_queued = doc_.sort_active() && shown.keys.size() == 1 &&
-                                  shown.keys.front().field == queued.field_id &&
-                                  shown.keys.front().ascending == queued.ascending;
+                                  shown.keys.front().field == queued_key.field &&
+                                  shown.keys.front().ascending == queued_key.ascending;
         if (!shows_queued) {
             core::view::SortDefinition definition;
             definition.id = "app.sort";
-            definition.keys.push_back(core::view::SortKey{queued.field_id, queued.ascending});
-            const bool by_name = queued.field_id == app::task_field_id("Name");
+            definition.keys.push_back(queued_key);
+            const bool by_name = queued_key.field == app::task_field_id("Name");
             std::string description = std::string(by_name ? "Name" : "Duration") +
                                       (queued.ascending ? " ascending" : " descending");
             definition.name = description;
