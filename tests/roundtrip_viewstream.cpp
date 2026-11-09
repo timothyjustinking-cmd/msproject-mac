@@ -99,6 +99,7 @@ char const* kEdlVar2 = "214/CEdl/Var2Data";
 
 /* The measured block and item. */
 constexpr std::size_t kBlockOffset = 42576;
+constexpr std::size_t kViewBlockSessionByte = 42678;  // the writer's masked payload byte
 constexpr std::size_t kPayloadBefore = 42692;
 constexpr std::size_t kPayloadAfter = 42748;
 constexpr std::size_t kInsertAt = kBlockOffset + 4 + kPayloadBefore;
@@ -487,6 +488,29 @@ void test_bold_off_pair(TestContext& t) {
                 "differs from the measured control's",
                 "Bold off on a changed view record refused");
     }
+    /* W35b-3.5 (R35G3-3): the digest masks payload byte 42,678 and only that byte.  The
+     * neighbours either side are refused, so a mask widened to a window passes no test. */
+    for (std::size_t const payload_at : {kViewBlockSessionByte - 1, kViewBlockSessionByte + 1}) {
+        std::vector<std::uint8_t> var2_neighbour = control_var2;
+        var2_neighbour[kBlockOffset + 4 + payload_at] ^= 0x01;
+        refuses(with_stream(kOffControl, kViewVar2, var2_neighbour),
+                "differs from the measured control's",
+                "Bold off with payload byte " + std::to_string(payload_at) + " changed refused");
+    }
+    {
+        /* The masked byte itself is another session's value and is accepted. */
+        std::vector<std::uint8_t> var2_session = control_var2;
+        var2_session[kBlockOffset + 4 + kViewBlockSessionByte] ^= 0x0F;
+        CfbDocument other_session = with_stream(kOffControl, kViewVar2, var2_session);
+        bool accepted = true;
+        try {
+            (void)mppwrite::save_view_cell_style(other_session, {bold_off_edit()},
+                                                 out_path("w35b-view-bold-off-session.mpp"));
+        } catch (mppwrite::Error const&) {
+            accepted = false;
+        }
+        t.check(accepted, "Bold off accepts another session's value at payload byte 42678");
+    }
     {
         ViewCellStyleEdit edit = bold_off_edit();
         edit.selection = ViewCellSelection::whole_row;
@@ -625,6 +649,30 @@ void test_edit_refusals(TestContext& t) {
         refuses(with_stream(kControl, kViewVar2, var2), {measured_edit()},
                 "differs from the measured control's",
                 "a view record that is not the measured control's refused");
+    }
+    /* W35b-3.5 (R35G3-3): Bold on is the enabled direction, and its digest masks payload
+     * byte 42,678 (a session-date float32, spec/writers/view-stream-214.md) and only that
+     * byte; the neighbours either side are refused.  The masked byte itself is accepted: a
+     * control another Project session saved differs there and nowhere else. */
+    for (std::size_t const payload_at : {kViewBlockSessionByte - 1, kViewBlockSessionByte + 1}) {
+        std::vector<std::uint8_t> var2 = control.read_stream(kViewVar2);
+        var2[kBlockOffset + 4 + payload_at] ^= 0x01;
+        refuses(with_stream(kControl, kViewVar2, var2), {measured_edit()},
+                "differs from the measured control's",
+                "Bold on with payload byte " + std::to_string(payload_at) + " changed refused");
+    }
+    {
+        std::vector<std::uint8_t> var2 = control.read_stream(kViewVar2);
+        var2[kBlockOffset + 4 + kViewBlockSessionByte] ^= 0x0F;
+        CfbDocument other_session = with_stream(kControl, kViewVar2, var2);
+        bool accepted = true;
+        try {
+            (void)mppwrite::save_view_cell_style(other_session, {measured_edit()},
+                                                 out_path("w35b-view-bold-on-session.mpp"));
+        } catch (mppwrite::Error const&) {
+            accepted = false;
+        }
+        t.check(accepted, "Bold on accepts another session's value at payload byte 42678");
     }
 }
 
