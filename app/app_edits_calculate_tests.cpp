@@ -1051,6 +1051,76 @@ void check_refusals() {
         }
     }
     {
+        /* W35c-1.7 (R35bG0-5): the plan layer pins the leaf's FixedMeta entry and its exact
+         * VarMeta key set as the writer does.  The reader fills both; here the PLAN is mutated
+         * (file untouched) and then a mutated FILE is read through the reader, so the needle
+         * can only come from calculate_plan_refusal. */
+        check(plan.tasks.size() == 2 && plan.tasks[0].fixed_meta_entry.size() == 47 &&
+                  plan.tasks[1].fixed_meta_entry.size() == 47,
+              "the reader fills each leaf's 47-byte FixedMeta entry");
+        check(plan.tasks.size() == 2 &&
+                  plan.tasks[0].var_keys == mppwrite::calculate_leaf_var_keys() &&
+                  plan.tasks[1].var_keys == mppwrite::calculate_leaf_var_keys(),
+              "the reader fills each leaf's VarMeta keys (the measured nine)");
+        {
+            app::PlanInput changed = plan;
+            changed.tasks[1].fixed_meta_entry[16] = 0x05;
+            expect_refused(changed, source, "FixedMeta flags differ",
+                           "a leaf whose effort-driven or task-type bit differs (plan)");
+            app::StructuralEdits edits;
+            check(!edits.push(hand_edit(changed), &changed),
+                  "push() refuses a Calculate edit over a plan with other FixedMeta flags");
+        }
+        {
+            app::PlanInput changed = plan;
+            changed.tasks[0].fixed_meta_entry.clear();
+            expect_refused(changed, source, "FixedMeta flags differ",
+                           "a leaf whose FixedMeta entry was not read (plan)");
+        }
+        {
+            app::PlanInput changed = plan;
+            changed.tasks[1].var_keys.push_back(0x0B400100u);
+            expect_refused(changed, source, "variable records differ",
+                           "a leaf with a variable record the control does not store (plan)");
+            app::StructuralEdits edits;
+            check(!edits.push(hand_edit(changed), &changed),
+                  "push() refuses a Calculate edit over a plan with another variable record");
+        }
+        {
+            app::PlanInput changed = plan;
+            changed.tasks[0].var_keys.pop_back();
+            expect_refused(changed, source, "variable records differ",
+                           "a leaf missing a variable record of the control (plan)");
+        }
+        {
+            /* The same shapes through the reader: a block the control does not store (a note,
+             * a Baseline 1 field, an interim date) and the effort-driven/task-type byte. */
+            mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+            add_var_key(doc, "TBkndTask", 2, 0x0B400100u);
+            const std::filesystem::path path = out_path("app-calculate-reader-var-key.mpp");
+            doc.save(path.string());
+            const app::PlanInput loaded = load_plan(path);
+            check(loaded.tasks.size() == 2 && loaded.tasks[1].var_keys.size() == 10,
+                  "the reader fills the extra VarMeta key of a leaf");
+            expect_refused(loaded, path.string(), "variable records differ",
+                           "a variable record read from the file (plan layer)");
+        }
+        {
+            mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);
+            Bytes meta = doc.read_stream("114/TBkndTask/FixedMeta");
+            meta[16 + 5 * 47 + 16] = 0x05;
+            doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+            const std::filesystem::path path = out_path("app-calculate-reader-flag-byte.mpp");
+            doc.save(path.string());
+            const app::PlanInput loaded = load_plan(path);
+            check(loaded.tasks.size() == 2 && loaded.tasks[1].fixed_meta_entry.size() == 47 &&
+                      loaded.tasks[1].fixed_meta_entry[16] == 0x05,
+                  "the reader fills the changed FixedMeta flag byte of a leaf");
+            expect_refused(loaded, path.string(), "FixedMeta flags differ",
+                           "a FixedMeta flag byte read from the file (plan layer)");
+        }
+    }
+    {
         /* A flag byte of the task's FixedMeta entry (the summary, effort-driven and task
          * type bits live there: assignment_growth.cpp compares them). */
         mppwrite::CfbDocument doc = mppwrite::CfbDocument::from_file(source);

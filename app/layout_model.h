@@ -158,6 +158,11 @@ struct TaskRow {
     // set only by the reader adapter; a row built any other way has no before-state.
     std::int32_t free_slack_ticks = 0;
     bool free_slack_stored = false;
+    // W35c-1.7 (R35bG0-5): the task's Task FixedMeta entry (empty: no live entry) and every
+    // VarMeta field id it owns (sorted), from the reader.  Calculate Project pins both to the
+    // measured control in the plan layer as it does in the writer.
+    std::vector<std::uint8_t> fixed_meta_entry;
+    std::vector<std::uint32_t> var_keys;
     // W30-C5: the physical TBkndAssn row count naming this task (tombstones
     // included), or kAssignmentRowsUnknown for a plan not loaded from a file.
     std::size_t assignment_rows = kAssignmentRowsUnknown;

@@ -243,6 +243,20 @@ is the writer for the first one; the other three are refused.
   than saved; and whether Project stores a critical bit outside the slack words is still
   unmeasured (R35G1-2). The tie (two leaves ending the project) stays W35b-2.7's refusal in
   the writer; the plan layer's tie refusal is W35c-1.11.
+- **The plan layer pins the leaf's FixedMeta entry and VarMeta keys too (W35c-1.7,
+  R35bG0-5).** W35b-0.5's "pinned ... in both layers" held for the writer only for these
+  shapes: the effort-driven and task-type bits (FixedMeta byte 16, `0x07` in the control) and
+  every VarMeta block beyond the control's nine keys (Baseline 1 to 10, interim Start1-10 and
+  Finish1-10, a note, any other block), because the reader did not expose them. `mpp::Task`
+  now carries `fixed_meta_entry` (the row's 47-byte entry) and `var_keys` (its VarMeta field
+  ids, sorted); `TaskRow` copies them; `calculate_plan_refusal` refuses a leaf whose entry or
+  key set differs, through the one pattern the writer uses
+  (`mppwrite::calculate_leaf_meta_mismatch`, `calculate_leaf_var_keys`). Needles: "FixedMeta
+  flags differ" and "variable records differ" in the plan, "metadata flags differ" and
+  "stores variable records other than the measured ones" in the writer. A plan whose entry or
+  keys were not read (a row not built by the reader) is refused. MPP12 rows leave both empty
+  and are refused, as Calculate Project is measured on MPP14 only. The third R35bG0-5 gap, the
+  tie, is W35c-1.11's.
 - **One arrangement is measured (W35b-2.7, RW35-W3).** In the unlinked pair the first leaf row
   ends the project and the other leaf finishes before the stored project finish; the leaf stamp
   `0x30` is measured for that arrangement alone (the linked pair stores `0x30` and `0x28`). Two

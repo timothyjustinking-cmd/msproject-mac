@@ -473,9 +473,6 @@ void check_unvaried_parameters(CfbDocument const& doc, TaskTable const& rows) {
         doc.read_stream(std::string(kTable) + "/Fixed2Meta");
     std::vector<std::uint8_t> const meta =
         doc.read_stream(std::string(kTable) + "/FixedMeta");
-    static std::uint8_t const kLeafMeta[kFixedMetaEntry] = {
-        0x00, 0x00, 0x09, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        0x07, 0x48, 0xEF, 0x1F, 0x10};
     for (std::size_t row = 1; row < kRows; ++row) {
         std::size_t const f2_at = kF2MetaHeader + (row + 3) * kF2MetaEntry;
         if (f2_meta.size() < f2_at + kF2MetaEntry ||
@@ -489,22 +486,40 @@ void check_unvaried_parameters(CfbDocument const& doc, TaskTable const& rows) {
             throw Error("Task FixedMeta has no entry for task uid " +
                         std::to_string(rows.uid(row)));
         }
-        for (std::size_t i = 0; i < kFixedMetaEntry; ++i) {
-            if (i >= 4 && i < 16) {
-                continue; /* the row's offset and stamp */
-            }
-            if (meta[at + i] != kLeafMeta[i]) {
-                throw Error("task uid " + std::to_string(rows.uid(row)) +
-                            "'s FixedMeta metadata flags differ from the "
-                            "measured entry at byte " + std::to_string(i) +
-                            " (summary, effort-driven, task-type and presence "
-                            "bits)");
-            }
+        int const differs = calculate_leaf_meta_mismatch(meta.data() + at, kFixedMetaEntry);
+        if (differs >= 0) {
+            throw Error("task uid " + std::to_string(rows.uid(row)) +
+                        "'s FixedMeta metadata flags differ from the "
+                        "measured entry at byte " + std::to_string(differs) +
+                        " (summary, effort-driven, task-type and presence "
+                        "bits)");
         }
     }
 }
 
 } /* namespace */
+
+int calculate_leaf_meta_mismatch(std::uint8_t const* entry, std::size_t size) {
+    static std::uint8_t const kLeafMeta[kFixedMetaEntry] = {
+        0x00, 0x00, 0x09, 0x00, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+        0x07, 0x48, 0xEF, 0x1F, 0x10};
+    if (entry == nullptr || size != kFixedMetaEntry) {
+        return 0;
+    }
+    for (std::size_t i = 0; i < kFixedMetaEntry; ++i) {
+        if (i >= 4 && i < 16) {
+            continue; /* the row's offset and stamp */
+        }
+        if (entry[i] != kLeafMeta[i]) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+std::vector<std::uint32_t> const& calculate_leaf_var_keys() {
+    return kLeafTaskKeys;
+}
 
 bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
                           std::string& error) {

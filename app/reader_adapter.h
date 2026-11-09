@@ -198,6 +198,9 @@ inline TaskRow task_row_from_mpp(const mpp::Task& task) {
     // W35c-1.5 (R35bG0-3): the stored Free Slack, the pending recalculation's before-state.
     row.free_slack_ticks = task.free_slack_ticks;
     row.free_slack_stored = true;
+    // W35c-1.7 (R35bG0-5): the FixedMeta entry and VarMeta keys Calculate Project pins.
+    row.fixed_meta_entry = task.fixed_meta_entry;
+    row.var_keys = task.var_keys;
     // Wave 12: the stored custom fields (W48's measured decodings, in the
     // reader's order).  Absent values are absent here too; app::make_record_set
     // turns each into a RecordSet value.
