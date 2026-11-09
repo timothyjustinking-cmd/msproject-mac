@@ -345,6 +345,33 @@ void refused_shapes() {
                 needle, pair);
         check(!std::filesystem::exists(path), pair + ": no file left behind");
     }
+    {
+        /* W35c-2.8 (R35bG4-2): a refusal the shape check raises as an exception, not returns,
+         * names the Calculate Project pair too.  The assignment storage's name is changed in
+         * the directory (same length, so the container stays well formed), which leaves the
+         * file without 114/TBkndAssn/FixedData. */
+        CfbDocument const control = open("wave35-calculate-unlinked-control.mpp");
+        CfbDocument const project = open("wave35-calculate-unlinked.mpp");
+        Bytes raw = control.to_bytes();
+        Bytes const name = {'T', 0, 'B', 0, 'k', 0, 'n', 0, 'd', 0, 'A', 0, 's', 0, 's', 0, 'n', 0};
+        std::size_t renamed = 0;
+        for (auto at = std::search(raw.begin(), raw.end(), name.begin(), name.end());
+             at != raw.end();
+             at = std::search(at + 1, raw.end(), name.begin(), name.end())) {
+            *(at + static_cast<std::ptrdiff_t>(name.size()) - 2) = 'x';
+            ++renamed;
+        }
+        check(renamed > 0, "the assignment storage's name is found in the directory");
+        CfbDocument doc = CfbDocument::from_bytes(raw);
+        check(!doc.has_stream("114/TBkndAssn/FixedData"),
+              "the renamed file has no assignment FixedData");
+        std::string const path = out_path("w35-calculate-no-assn-refused.mpp");
+        refuses([&] { mppwrite::save_calculate(doc, request_from(project), path); },
+                "the measured Calculate Project pair needs 114/TBkndAssn/FixedData, which this "
+                "file does not have",
+                "a missing stream names the Calculate Project pair");
+        check(!std::filesystem::exists(path), "the missing-stream refusal leaves no file behind");
+    }
 }
 
 void refused_requests() {
