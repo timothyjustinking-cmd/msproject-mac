@@ -603,6 +603,49 @@ int main(int argc, char** argv) {
         }
     }
 
+    // W35e-0.1 (R35dG0-1): a PARTLY applied Task Information or Task Form edit ends the structural
+    // redo list.  Route: Level 1, Ctrl+Z, a Name that commits and a Duration that does not parse,
+    // Ctrl+Y.  The Name stays committed, and left on the list Redo re-queued the level over the
+    // unsaved name without push() or the builder.
+    {
+        gate::check(window.open_file(five, &error), "the five-task fixture reopens (partial apply)");
+        QApplication::processEvents();
+        const int name_col = msqt::entry_column_index(msqt::EntryCellKind::name);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(undo != nullptr && redo != nullptr && name_col >= 0,
+                    "Undo, Redo and a Name column exist (partial apply)");
+        if (undo != nullptr && redo != nullptr && name_col >= 0) {
+            window.apply_outline_level(1);
+            QApplication::processEvents();
+            gate::check(queued_level(window) != nullptr, "partial apply: Level 1 is queued");
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        "partial apply: Undo withdraws Level 1 onto the redo list");
+            window.sheet()->select_cell(1, 0);
+            msqt::TaskInformationValues values;
+            gate::check(window.task_information_values(&values),
+                        "partial apply: a task is selected for the form");
+            values.name = "Renamed by a partial apply";
+            values.duration_text = "not a duration";
+            gate::check(!window.apply_task_information(values),
+                        "partial apply: the form edit fails on the Duration");
+            gate::check(any_row_named(model, name_col, QStringLiteral("Renamed by a partial apply")),
+                        "partial apply: the Name field stays committed");
+            gate::check(!redo->isEnabled(),
+                        "partial apply: the committed Name ends the structural redo list "
+                        "(Redo is disabled)");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "partial apply: Redo re-queues no level over the edited name");
+            gate::check(any_row_named(model, name_col, QStringLiteral("Renamed by a partial apply")),
+                        "partial apply: Redo leaves the edited name as it was");
+        }
+    }
+
     // W35b-3.4: Level 1 on the five-task control, saved through File > Save, is Project's own
     // save of the pair (outline-level1), every stream under the null-save discipline.  The
     // same bytes the core and app tests pin, here through the shell's queue and save path.
