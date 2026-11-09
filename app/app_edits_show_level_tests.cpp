@@ -557,8 +557,16 @@ void check_refusals() {
         };
         refused(1, three_deep, {0, 1, 2, 0, 0},
                 "R35G2-5: push() refuses Level 1 on a three-level-deep outline {0,1,2,0,0}");
+        /* W35c-2.16 (R35bG3-3): Level 3 is over the cap (kOutlineMeasuredMaxLevel = 2),
+         * which push() checks first, so this case proves the cap and not the shape guard.
+         * Level 2 on the same outline is in range and hides the level-3 and level-4 rows,
+         * so only the shape guard refuses it. */
         refused(3, four_deep, {0, 1, 2, 3, 0},
-                "R35G2-5: push() refuses Level 3 on a four-level outline {0,1,2,3,0}");
+                "R35G2-5: push() refuses Level 3 on a four-level outline {0,1,2,3,0} "
+                "(the level cap, not the shape guard)");
+        refused(2, four_deep, {0, 1, 2, 3, 0},
+                "R35bG3-3: push() refuses Level 2 on a four-level outline {0,1,2,3,0} "
+                "(in range, so only the shape guard refuses it)");
         refused(1, four_deep, {0, 1, 2, 3, 0},
                 "R35G2-5: push() refuses Level 1 on a four-level outline {0,1,2,3,0}");
     }
