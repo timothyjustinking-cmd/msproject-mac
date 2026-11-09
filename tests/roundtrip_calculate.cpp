@@ -655,6 +655,30 @@ void refused_requests() {
                 "0x48/0xef at FixedMeta +17/+18", "2.4: FixedMeta +18");
     }
     {
+        /* W35b-4.G1-12 (R35G1-12): the entry is found by its row offset, not by position.  The
+         * entries of rows 1 and 2 swap places and the one that is row 2's (now first) loses its
+         * 0x48.  A positional read would blame row 1 (the entry now at row 1's position); the
+         * lookup names row 2, and the file still reads when the swap alone is made. */
+        CfbDocument swapped = control;
+        Bytes meta = swapped.read_stream("114/TBkndTask/FixedMeta");
+        for (std::size_t i = 0; i < 47; ++i) {
+            std::swap(meta[16 + 4 * 47 + i], meta[16 + 5 * 47 + i]);
+        }
+        swapped.replace_stream("114/TBkndTask/FixedMeta", meta);
+        mppwrite::CalculateShape shape;
+        std::string reason;
+        check(mppwrite::read_calculate_shape(swapped, shape, reason),
+              "G1-12: the control with its leaf entries swapped still reads (got: " + reason + ")");
+        CfbDocument doc = swapped;
+        meta[16 + 4 * 47 + 17] = 0x00; /* row 2's entry, now at position 4 */
+        doc.replace_stream("114/TBkndTask/FixedMeta", meta);
+        TaskTable const rows = TaskTable::from_document(doc);
+        refuses([&] { mppwrite::save_calculate(doc, good, path); },
+                "task uid " + std::to_string(rows.uid(2)) +
+                    " does not store the automatic row's 0x48/0xef",
+                "G1-12: entries are found by row offset");
+    }
+    {
         CfbDocument doc = control;
         rename_props_record(doc, 0x02400024u, 0x02400FF4u);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },

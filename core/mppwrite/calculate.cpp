@@ -133,18 +133,38 @@ constexpr std::uint32_t kPropsRecordKindFlag = 2;
 constexpr std::size_t kFixed2Stamp = 42;
 constexpr std::size_t kFixed2ProjectDuration = 58;
 
-/* FixedMeta entry 3 is the project row (row + 3 is not needed: the entry
- * order is the row order after the three header entries). */
+/* FixedMeta: a task row's entry is the one whose +4 word is the row's FixedData
+ * offset (task_row_offset), as task_mode.cpp resolves it; the entry's position is
+ * not assumed (R35G1-12). */
 constexpr std::size_t kFixedMetaHeader = 16;
 constexpr std::size_t kFixedMetaEntry = 47;
+constexpr std::size_t kFixedMetaRowOffset = 4;
 constexpr std::size_t kMetaPresenceLow = 18;
 constexpr std::size_t kMetaPresenceHigh = 19;
+constexpr std::size_t kNoMetaEntry = static_cast<std::size_t>(-1);
 
 std::uint32_t get_u32(std::vector<std::uint8_t> const& b, std::size_t o) {
     return static_cast<std::uint32_t>(b[o]) |
            (static_cast<std::uint32_t>(b[o + 1]) << 8) |
            (static_cast<std::uint32_t>(b[o + 2]) << 16) |
            (static_cast<std::uint32_t>(b[o + 3]) << 24);
+}
+
+/* The byte position of the FixedMeta entry for a task row, or kNoMetaEntry. */
+std::size_t fixed_meta_entry_at(std::vector<std::uint8_t> const& meta,
+                                std::size_t row) {
+    if (meta.size() < kFixedMetaHeader) {
+        return kNoMetaEntry;
+    }
+    std::uint32_t const offset =
+        static_cast<std::uint32_t>(task_row_offset(row));
+    for (std::size_t at = kFixedMetaHeader;
+         at + kFixedMetaEntry <= meta.size(); at += kFixedMetaEntry) {
+        if (get_u32(meta, at + kFixedMetaRowOffset) == offset) {
+            return at;
+        }
+    }
+    return kNoMetaEntry;
 }
 
 void put_u32(std::vector<std::uint8_t>& b, std::size_t o, std::uint32_t v) {
@@ -327,7 +347,11 @@ void check_unvaried_parameters(CfbDocument const& doc, TaskTable const& rows) {
                         " is inactive; the measured Calculate Project save "
                         "has active tasks only");
         }
-        std::size_t const at = kFixedMetaHeader + (row + 3) * kFixedMetaEntry;
+        std::size_t const at = fixed_meta_entry_at(meta, row);
+        if (at == kNoMetaEntry) {
+            throw Error("Task FixedMeta has no entry for task uid " +
+                        std::to_string(rows.uid(row)));
+        }
         for (std::size_t i = 0; i < kFixedMetaEntry; ++i) {
             if (i >= 4 && i < 16) {
                 continue; /* the row's offset and stamp */
@@ -372,16 +396,18 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
         std::vector<std::uint8_t> const meta =
             doc.read_stream(std::string(kTable) + "/FixedMeta");
         for (std::size_t row = 1; row < kRows; ++row) {
-            std::size_t const entry_at =
-                kFixedMetaHeader + (row + 3) * kFixedMetaEntry;
+            std::size_t const entry_at = fixed_meta_entry_at(meta, row);
+            if (entry_at == kNoMetaEntry) {
+                return fail(error, "Task FixedMeta has no entry for task uid " +
+                                       std::to_string(rows.uid(row)));
+            }
             if (task_is_manually_scheduled(doc, row, kTable)) {
                 return fail(error, "task uid " + std::to_string(rows.uid(row)) +
                                        " is manually scheduled; the measured "
                                        "Calculate Project save has automatic "
                                        "rows only");
             }
-            if (meta.size() < entry_at + kFixedMetaEntry ||
-                meta[entry_at + 17] != 0x48 || meta[entry_at + 18] != 0xEF) {
+            if (meta[entry_at + 17] != 0x48 || meta[entry_at + 18] != 0xEF) {
                 return fail(error, "task uid " + std::to_string(rows.uid(row)) +
                                        " does not store the automatic row's "
                                        "0x48/0xef at FixedMeta +17/+18");
