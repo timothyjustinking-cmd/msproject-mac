@@ -396,6 +396,33 @@ int main(int argc, char** argv) {
             gate::check(false, "Cut is a menu action");
         }
         gate::check(queued_sort(window) != nullptr, "the refused cut leaves the Sort queued");
+        // W35d-1.1 (R35cG1-3): Paste writes the RecordSet through SheetModel::paste, not
+        // setData, so the cell gate does not cover it; refuse_view_change("a pasted cell") is
+        // its only guard.  Copy fills the window's own clipboard (it changes nothing), then
+        // Paste onto another Name cell under the queued Sort.
+        QAction* copy = gate::find_action(window, app::MenuAction::copy);
+        QAction* paste = gate::find_action(window, app::MenuAction::paste);
+        gate::check(copy != nullptr && paste != nullptr, "Copy and Paste are menu actions");
+        if (copy != nullptr && paste != nullptr) {
+            window.sheet()->select_cell(2, static_cast<std::size_t>(name_column));
+            window.refresh_menu_state();
+            QApplication::processEvents();
+            copy->trigger();
+            QApplication::processEvents();
+            window.sheet()->select_cell(1, static_cast<std::size_t>(name_column));
+            window.refresh_menu_state();
+            QApplication::processEvents();
+            const QString pasted_before = model->data(model->index(1, name_column)).toString();
+            gate::check(paste->isEnabled(), "Paste is enabled on the selected cell");
+            paste->trigger();
+            QApplication::processEvents();
+            gate::check(status_contains(window, "a Sort is queued and File > Save would write it, "
+                                                "not a pasted cell"),
+                        "a paste after a queued Sort: the status line names the queued Sort");
+            gate::check(model->data(model->index(1, name_column)).toString() == pasted_before,
+                        "the refused paste leaves the name as it was");
+            gate::check(queued_sort(window) != nullptr, "the refused paste leaves the Sort queued");
+        }
     }
 
     // W35d-0.5 (R35cG1-2): Cut and Paste are cell edits and end the structural redo list, as

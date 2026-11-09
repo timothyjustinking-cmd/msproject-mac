@@ -368,6 +368,35 @@ int main(int argc, char** argv) {
         gate::check(queued_level(window) != nullptr && window.sheet_row_count() == queued_rows,
                     "the refused edits leave the level queued and the rows as they were");
 
+        // W35d-1.1 (R35cG1-3): Paste writes through SheetModel::paste, not setData, so the cell
+        // gate does not cover it; refuse_view_change("a pasted cell") is its only guard.  Copy
+        // (which changes nothing) fills the window's own clipboard, then Paste onto another
+        // Name cell under the queued level.
+        QAction* copy = gate::find_action(window, app::MenuAction::copy);
+        QAction* paste = gate::find_action(window, app::MenuAction::paste);
+        gate::check(copy != nullptr && paste != nullptr && queued_rows >= 3,
+                    "Copy and Paste exist and the queued level shows three rows");
+        if (copy != nullptr && paste != nullptr && queued_rows >= 3) {
+            window.sheet()->select_cell(2, static_cast<std::size_t>(name_column));
+            window.refresh_menu_state();
+            QApplication::processEvents();
+            copy->trigger();
+            QApplication::processEvents();
+            window.sheet()->select_cell(1, static_cast<std::size_t>(name_column));
+            window.refresh_menu_state();
+            QApplication::processEvents();
+            gate::check(paste->isEnabled(), "Paste is enabled on the selected cell");
+            paste->trigger();
+            QApplication::processEvents();
+            gate::check(status_contains(window, "a Show Level is queued and File > Save would write "
+                                                "it, not a pasted cell"),
+                        "a paste after a queued level: the status line names the queued level");
+            gate::check(model->data(model->index(1, name_column)).toString() == name_before,
+                        "the refused paste leaves the name as it was");
+            gate::check(queued_level(window) != nullptr && window.sheet_row_count() == queued_rows,
+                        "the refused paste leaves the level queued and the rows as they were");
+        }
+
         // Undo in the sheet, then the level, then Ctrl+Y: queueing the level rebuilds the
         // document with a sheet that has no history, so there is no Redo to re-apply the
         // rename under it.  Pinned.
