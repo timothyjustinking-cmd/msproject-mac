@@ -235,8 +235,8 @@ is the writer for the first one; the other three are refused.
   a leaf whose second date copy (+104/+108) differs from +96/+100, and that check runs before
   0.2, so a file whose +96 is right and +104 stale is refused by `save_calculate` on its own.
   The same equality makes every plan check that reads +104/+108 agree with the writer's
-  +96/+100 checks. The plan never reads +96, and the plan half of R35cG0-2 stays open; 2.2
-  must not be dropped without moving that check.
+  +96/+100 checks. The plan never reads +96, and the plan half of R35cG0-2 stays open;
+  W35c-2.2 (`ecc51d1`) must not be dropped without moving that check.
 - **One Duration edit, not two (W35c-1.5, R35bG0-3).** W35b-0.3's critical-path guard is a
   finish-position proxy: exactly one leaf finishes at or after the stored project finish. It
   cannot tell one Duration edit from two: the old critical leaf shortened below the stored
