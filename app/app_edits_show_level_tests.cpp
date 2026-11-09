@@ -674,8 +674,19 @@ void check_refusals() {
 
     /* R35G2-1 at save time: the level queued on the control, the file replaced by a
      * Project save with another table or a zoom, is refused by the writer (not by
-     * the queue) and writes nothing. */
-    for (const char* stem : {"table-cost", "zoom-entire", "sort-name-asc"}) {
+     * the queue) and writes nothing.  W35c-2.13 (R35bG1-5): each fixture asserts its own
+     * needle, so a row-count, UniqueID or FixedMeta refusal from the same writer no longer
+     * passes for the view-state one. */
+    struct ViewStateCase {
+        const char* stem;
+        const char* needle;
+    };
+    for (const ViewStateCase& view_case :
+         {ViewStateCase{"table-cost", "the applied table is \"Cost\", not the measured Entry table"},
+          ViewStateCase{"zoom-entire", "outside its sort spec (digest mismatch"},
+          ViewStateCase{"sort-name-asc",
+                        "the file already carries a sort (the spec at block + 40"}}) {
+        const char* stem = view_case.stem;
         app::StructuralEdit edit;
         std::string error;
         check(app::make_show_level_edit(plan, source, 1, edit, error),
@@ -693,6 +704,9 @@ void check_refusals() {
         check(saved.error.find("view outline write") != std::string::npos,
               std::string("R35G2-1: the save's refusal is the writer's for ") + stem +
                   " (got \"" + saved.error + "\")");
+        check(saved.error.find(view_case.needle) != std::string::npos,
+              std::string("R35bG1-5: the save's refusal names the view-state reason for ") +
+                  stem + " (got \"" + saved.error + "\")");
         check(!std::filesystem::exists(out),
               std::string("the refused save writes no target for ") + stem);
     }
