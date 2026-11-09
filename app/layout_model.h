@@ -142,6 +142,10 @@ struct TaskRow {
     // W35-0.2 (R34b-2): the task stores a Type block (VarMeta 0x0b400080).  The
     // measured assignment fixtures store none, so Assign Resources refuses it.
     bool type_block_stored = false;
+    // W35b-4.G0-7 (R35G0-7): set only by the reader adapter.  A row built any other way
+    // (a pending inserted row, a future adapter) has not been checked for a Type block,
+    // so Assign Resources refuses it rather than reading the default false as "none".
+    bool type_block_known = false;
     // W35b-0.5 (R35G1-3): Task.Active (Fixed2Meta flags bit 0x40, core/mpp Task::active)
     // and whether the task stores a Baseline 0 block (core/mpp Task::baseline.stored).
     // The measured Calculate Project pair has every task active with no baseline.
@@ -219,11 +223,12 @@ struct ResourceRow {
     double cost_per_use = 0.0;
     std::uint32_t accrue_at = 1;        // PjAccrueAt: 1 Start, 2 End, 3 Prorated
     bool cost_fields_stored = false;
-    // W35-0.1: the resource's calendar row (core/mpp/reader.h Resource).  The
-    // defaults are the measured pairs' shape: derived from the Standard base
-    // calendar (uid 1), the resource calendar owning no block and the base
-    // owning nothing beyond its name.
-    std::int32_t calendar_base_uid = 1;
+    // W35-0.1: the resource's calendar row (core/mpp/reader.h Resource).  The measured
+    // pairs' shape is a calendar derived from the Standard base calendar (uid 1), the
+    // resource calendar owning no block and the base owning nothing beyond its name.
+    // W35b-4.G0-7 (R35G0-7): the default is the REFUSED value (-1, no calendar row), so
+    // a row not built by the reader adapter fails closed; only the reader sets 1.
+    std::int32_t calendar_base_uid = -1;
     std::uint32_t calendar_stored_blocks = 0;
     std::uint32_t calendar_base_extra_blocks = 0;
 };

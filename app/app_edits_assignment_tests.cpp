@@ -629,6 +629,13 @@ void check_refusals() {
             /* W35-0.2 (R34b-2): a task that stores a Type block. */
             {"a task that stores a task type", "stores a task type",
              [](app::TaskRow& row) { row.type_block_stored = true; }, nullptr},
+            /* W35b-4.G0-7 (R35G0-7): rows the reader adapter did not build.  The row
+             * defaults are the refused values, so a task never checked for a Type block
+             * and a resource never read for its calendar are refused, not passed. */
+            {"a task whose Type block was never read", "was not read from the file",
+             [](app::TaskRow& row) { row.type_block_known = false; }, nullptr},
+            {"a default-built resource row", "that has no calendar row of its own", nullptr,
+             [](app::ResourceRow& row) { row = app::ResourceRow{.uid = row.uid, .id = row.id}; }},
             /* W35-0.1 (R34b-1): the resource's calendar row, one test per shape. */
             {"a resource calendar based on another calendar",
              "whose calendar is based on another calendar", nullptr,
