@@ -393,6 +393,7 @@ add_test(NAME qt_wbs_code_gate
 # the saved file refuses a second calculation (nothing is pending).
 add_executable(qt_calculate_gate_tests tests/calculate_gate_test.cpp)
 target_link_libraries(qt_calculate_gate_tests PRIVATE qt_shell)
+target_include_directories(qt_calculate_gate_tests PRIVATE "${QT_REPO_ROOT}/tests")
 qt_set_warnings(qt_calculate_gate_tests)
 
 add_test(NAME qt_calculate_gate
@@ -400,7 +401,9 @@ add_test(NAME qt_calculate_gate
                  $<TARGET_FILE:qt_calculate_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave35-calculate-unlinked-control.mpp"
                  "${QT_TEST_DATA_DIR_CMAKE}/wave35-calculate-linked-control.mpp"
-                 "${QT_TEST_OUT_DIR_CMAKE}")
+                 "${QT_TEST_OUT_DIR_CMAKE}"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-calculate-unlinked.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-calculate-unlinked-control-null.mpp")
 
 # ===========================================================================
 # WAVE 20: per-screen structural gates.  The 9/9 parity number measured only
