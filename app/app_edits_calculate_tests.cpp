@@ -706,6 +706,56 @@ void check_refusals() {
                        "a file whose leaf carries a deadline");
     }
     {
+        /* W35c-0.2 (R35bG0-1): only the Props project start (0x02400002) moves, by a week.
+         * The reader fills PlanInput::props_project_start from the saved file, so the plan
+         * layer refuses before the file is opened (its text starts "for a leaf that does
+         * not start"), and the writer's own check names it for the clean control's plan
+         * ("task uid 1 does not start"). */
+        mppwrite::CfbDocument moved = mppwrite::CfbDocument::from_file(source);
+        Bytes props = moved.read_stream(kProps);
+        bool shifted = false;
+        for (std::size_t at = 16; at + 12 <= props.size();) {
+            const std::uint32_t length = static_cast<std::uint32_t>(props[at]) |
+                                         (static_cast<std::uint32_t>(props[at + 1]) << 8) |
+                                         (static_cast<std::uint32_t>(props[at + 2]) << 16) |
+                                         (static_cast<std::uint32_t>(props[at + 3]) << 24);
+            const std::uint32_t id = static_cast<std::uint32_t>(props[at + 4]) |
+                                     (static_cast<std::uint32_t>(props[at + 5]) << 8) |
+                                     (static_cast<std::uint32_t>(props[at + 6]) << 16) |
+                                     (static_cast<std::uint32_t>(props[at + 7]) << 24);
+            if ((id & 0x00FF0000u) != 0x00400000u) {
+                break;
+            }
+            if (id == 0x02400002u && length == 4) {
+                props[at + 14] = static_cast<std::uint8_t>(props[at + 14] + 7); /* day += 7 */
+                shifted = true;
+            }
+            at += 12 + length;
+        }
+        check(shifted, "the Props project start record was found and moved a week");
+        moved.replace_stream(kProps, props);
+        const std::filesystem::path moved_path = out_path("app-calculate-props-start-moved.mpp");
+        moved.save(moved_path.string());
+        check(plan.props_project_start_stored && plan.props_project_start != app::kDateNa,
+              "the reader fills the Props project start of the control");
+        const app::PlanInput moved_plan = load_plan(moved_path);
+        check(moved_plan.props_project_start_stored &&
+                  moved_plan.props_project_start == plan.props_project_start + (7 << 16),
+              "the reader reads the moved Props project start from the saved file");
+        expect_refused(moved_plan, moved_path.string(),
+                       "for a leaf that does not start at the first working instant",
+                       "a file whose only change is the Props project start (plan layer)");
+        expect_refused(plan, moved_path.string(), "uid 1 does not start at the first working",
+                       "a file whose only change is the Props project start (writer layer)");
+        app::StructuralEdits edits;
+        check(!edits.push(hand_edit(moved_plan), &moved_plan),
+              "push() refuses a Calculate edit over a plan with a moved Props project start");
+        app::PlanInput unread = plan;
+        unread.props_project_start_stored = false;
+        expect_refused(unread, source, "project start in 114/Props",
+                       "a plan whose Props project start was not read");
+    }
+    {
         /* W35b-0.3: the FILE holds the unmeasured recalculation, the plan is the clean
          * control's, so the writer's own checks name it. */
         mppwrite::CfbDocument moved = mppwrite::CfbDocument::from_file(source);

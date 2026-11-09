@@ -3748,6 +3748,24 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
                             "edit alone";
         }
     }
+    // W35c-0.2 (R35bG0-1): row 0's Start (compared above) is the roll-up manual calculation
+    // leaves stale.  The writer stamps each leaf's Fixed2Data +46 with the project start in
+    // 114/Props, so the leaf must start at the first working instant at or after THAT date
+    // (the measured Sunday 21:00 maps to Monday 08:00).  After the 0.4 check so each guard
+    // keeps its own test.
+    for (const TaskRow& task : plan.tasks) {
+        std::uint32_t first_working = 0;
+        if (!plan.props_project_start_stored || plan.props_project_start == kDateNa ||
+            task.start == kDateNa ||
+            !mppwrite::calculate_measured_first_working_start(
+                static_cast<std::uint32_t>(plan.props_project_start), first_working) ||
+            first_working != static_cast<std::uint32_t>(task.start)) {
+            return prefix + "for a leaf that does not start at the first working instant at or "
+                            "after the project start in 114/Props: the project start was moved "
+                            "after the leaves were scheduled, and the measured Project pair has "
+                            "the leaves starting there";
+        }
+    }
     return {};
 }
 

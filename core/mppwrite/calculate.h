@@ -85,6 +85,17 @@ bool calculate_measured_late(std::uint32_t finish, std::uint32_t duration,
                              std::uint32_t project_finish, std::uint32_t& slack,
                              std::uint32_t& late_start);
 
+/* W35c-0.2 (R35bG0-1): the first working instant at or after `props_start` (the
+ * 114/Props project start, 0x02400002) on the same calendar: a start before 08:00 on
+ * a working day, or in a weekend, maps to the next working day 08:00 (the measured
+ * Sunday 21:00 maps to Monday 08:00); one at or after 17:00 maps to the next working
+ * day 08:00; one inside the working day is its own first working instant.  The lunch
+ * hour is not modelled: no leaf starts anywhere but 08:00 (calculate_measured_finish),
+ * so no start inside the working day can equal a leaf Start.  Returns false for an
+ * invalid date or a day past the packed range. */
+bool calculate_measured_first_working_start(std::uint32_t props_start,
+                                            std::uint32_t& first);
+
 /* What the pending file looks like, as the shape check read it. */
 struct CalculateShape {
     std::uint32_t critical_uid = 0;     /* the leaf that ends the project */
