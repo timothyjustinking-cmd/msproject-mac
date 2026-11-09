@@ -565,6 +565,14 @@ void check_refusals() {
                    "before the applied view; the view pin is the writer test's)");
     expect_refused(plan, (std::filesystem::path(APP_TEST_OUT_DIR) / "no-such-file.mpp").string(),
                    name_desc, true, false, "could not be read", "a missing project file");
+    /* W35c-2.15 (R35bG1-9): a five-task Project save that matches the plan's names and
+     * outline and differs only in view state reaches the writer's own view-state refusal
+     * through make_sort_edit (the Resource Sheet case above now stops at the row compare).
+     * The needle is the writer's digest text, so a Sort that stopped asking the file's view
+     * block would go red here. */
+    expect_refused(plan, data_path("wave35-viewstate-zoom-entire.mpp").string(), name_desc, true,
+                   false, "outside its sort spec (digest mismatch",
+                   "a five-task file that differs only in its timescale zoom");
 
     /* push(): the plan-side backstop for a hand-built queue. */
     {
