@@ -43,6 +43,7 @@
 #include "ribbon_bar.h"
 #include "sheet_table_model.h"
 #include "shell_style.h"
+#include "sort.h"
 
 #include "gate_util.h"
 #include "save_pair_compare.h"
@@ -395,6 +396,43 @@ int main(int argc, char** argv) {
                         "the refused paste leaves the name as it was");
             gate::check(queued_level(window) != nullptr && window.sheet_row_count() == queued_rows,
                         "the refused paste leaves the level queued and the rows as they were");
+        }
+
+        // W35d-1.2 (R35cG1-4): a session Sort chosen while a level is queued is refused with the
+        // level named (the same guard as the other changes to what Save writes): the display
+        // would re-order rows while Save wrote the level over the file's own order.  Clearing the
+        // sort is not refused.
+        {
+            core::view::SortDefinition by_name;
+            by_name.id = "app.sort";
+            by_name.name = "Name descending";
+            by_name.keys.push_back(core::view::SortKey{app::task_field_id("Name"), false});
+            const std::vector<QString> names_before = [&]() {
+                std::vector<QString> names;
+                for (int row = 0; row < model->rowCount(); ++row) {
+                    names.push_back(model->data(model->index(row, name_column)).toString());
+                }
+                return names;
+            }();
+            window.apply_sort_choice(by_name, "Name descending", false);
+            QApplication::processEvents();
+            gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1 &&
+                            window.sheet_row_count() == queued_rows,
+                        "a session Sort leaves the queued level and the rows as they were");
+            gate::check(status_contains(window, "a Show Level is queued and File > Save would write "
+                                                "it, not a session Sort"),
+                        "a session Sort after a queued level: the status line names the level");
+            std::vector<QString> names_after;
+            for (int row = 0; row < model->rowCount(); ++row) {
+                names_after.push_back(model->data(model->index(row, name_column)).toString());
+            }
+            gate::check(names_after == names_before, "the refused Sort reorders no row");
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+            gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                        "clearing the sort leaves the queued level in place");
+            gate::check(!status_contains(window, "not a session Sort"),
+                        "clearing the sort under a queued level is not refused");
         }
 
         // Undo in the sheet, then the level, then Ctrl+Y: queueing the level rebuilds the

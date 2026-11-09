@@ -343,3 +343,29 @@ has a guard of its own, and `app_edits_*` and `roundtrip_*` pin each on its own 
   predicate: a change inside `require_applied_view` or `require_measured_view_block` would
   remove both.  **Partly fixed.**  `push()` has no file, so it cannot make this check; the
   save re-runs the writer's.
+
+## W35d-1.2 (R35cG1-4): one rule for the queued-view guard
+
+File > Save writes the queued Show Level or Sort, so a change the user makes to the display
+afterwards would leave the file describing rows the user is no longer looking at.  The shell's
+one guard (`view_change_refusal`, `refuse_view_change`) now covers every such change under
+either kind, and the rule is: **while a Show Level or a Sort is queued, every change to the
+displayed outline or order other than the queued kind's own replacement or withdrawal is
+refused, with the queued edit named and nothing changed.**  The Sort branch's refusals are kept
+(the other option, lifting them, would let Save write a Sort over an outline the display no
+longer shows).
+
+| queued | change | result |
+|---|---|---|
+| Sort | Collapse All; the row toggle; the Project Summary Task toggle | refused ("a Sort is queued and File > Save would write it, not ...") |
+| Sort | a session Show Level 1 or deeper; All Subtasks | refused (new: before this the level was taken for the session while `push()` refused it as a second exclusive edit) |
+| Sort | Expand All | refused in the shared guard, and unreachable: every rebuild (queueing, Redo) shows every row expanded and the collapsing commands are refused, so the action is disabled (tested as disabled) |
+| Sort | another Sort, or clearing it | replaces or withdraws the queued Sort (unchanged) |
+| Show Level | Expand All; Collapse All; the row toggle; the summary toggle | refused (unchanged) |
+| Show Level | a session Sort (any key) | refused (new: the sort re-ordered the rows while Save wrote the level over the file's order) |
+| Show Level | clearing the sort | accepted: a cleared sort shows the file's own order, which is what the level is relative to |
+| Show Level | another level, All Subtasks | replaces or withdraws the queued level (unchanged) |
+
+Tests: `qt_sort_persist` (Collapse All, the row toggle, the summary toggle, a session Level,
+All Subtasks, clearing the Sort, and Expand All disabled) and `qt_outline_persist` (a session
+Sort, clearing it).  No writer changed, no refusal of a persisted shape lifted.

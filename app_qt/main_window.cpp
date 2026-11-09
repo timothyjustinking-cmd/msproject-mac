@@ -6058,6 +6058,14 @@ void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
     if (!doc_.has_document()) {
         return;
     }
+    // W35d-1.2 (R35cG1-4): the one queued-view guard covers a session Sort chosen while a
+    // Show Level is queued, as it covers the other three outline changes under a queued Sort.
+    // Clearing the sort is not a change of the order Save writes: the queued level is
+    // relative to the file's own order, which a cleared sort shows again.
+    if (!cleared && queued_edit_is(structural_.applied(), app::StructuralKind::show_level) &&
+        refuse_view_change("a session Sort")) {
+        return;
+    }
     // W35d-0.4 (R35cG1-1): a Sort on the redo list (Undo withdrew it) is replaced by any
     // sort choice made now, as a queued one is below.  Left there, Ctrl+Y re-queued it under
     // whatever sort the display had by then.
@@ -6200,6 +6208,13 @@ void MainWindow::toggle_outline_row(int display_row) {
 
 void MainWindow::apply_outline_level(int level) {
     if (!doc_.has_document()) {
+        return;
+    }
+    // W35d-1.2 (R35cG1-4): the one queued-view guard covers a session Level (and All
+    // Subtasks) chosen while a Sort is queued, as it covers Expand All, Collapse All and the
+    // two toggles.  Under a queued Level the call below replaces or withdraws it, as before.
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::sort_view) &&
+        refuse_view_change(level == 0 ? "all subtasks shown" : "a session Show Level")) {
         return;
     }
     // A queued persisted level is replaced (Show Level is an exclusive edit) or,
