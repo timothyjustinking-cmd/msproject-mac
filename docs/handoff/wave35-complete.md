@@ -300,8 +300,12 @@ scalars), so the writer's existing settled-shape check refuses the raw file.  Wi
 copied from the null into the control the writer accepts it, and the output differs from
 Project's edit in four streams, now named KnownGaps (Assn Fixed2Data, Assn Var2Data, Rsc
 Fixed2Meta, CEdl Var2Data); `Props14` is not vouched for.  The refusal is pinned by test.
-Enabling needs the settle transform, the identity-counter rule, the Rsc Fixed2Meta flag rule and
-the CEdl rebuild, none derivable from one pair.
+Enabling needs the settle transform, the Rsc Fixed2Meta flag rule and the CEdl rebuild, none
+derivable from one pair.  **Correction (W35b-3.8, R35G3-2):** the "identity-counter rule" listed
+here earlier is the session suffix Project renumbers on every save, not a rule to derive, and
+"four named gaps" is a lower bound: the null save rewrote 19 streams, so the pair's mask
+(control against null) is wide and hides a port error in any byte the settle changed.  The real
+open items are the Rsc flag and the CEdl rebuild.
 
 ### Findings
 

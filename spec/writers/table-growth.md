@@ -357,9 +357,13 @@ the three bytes agree.
    accepts the file.  Its output then matches Project's edit save in every
    declared stream except four, now named KnownGaps in
    `tests/roundtrip_assignment_growth.cpp` (`test_remove_port_saved`):
-   - `114/TBkndAssn/Fixed2Data`: 6 bytes from 196; the appended record's identity
-     counter, port 0xd1, Project 0xdb (Project's is 10 higher).
-   - `114/TBkndAssn/Var2Data`: 3 bytes from 524, port 0x12, Project 0xba.
+   - `114/TBkndAssn/Fixed2Data`: 6 bytes from 196; the appended record's session
+     identity suffix, port 0xd1, Project 0xdb (Project's is 10 higher).  Project
+     renumbers it on every save; the gap shows only because the transplant left
+     the control's wave-30-session Fixed2Data in place (the null's records carry
+     Project's suffix).  It is not a rule to derive.
+   - `114/TBkndAssn/Var2Data`: 3 bytes from 524, port 0x12, Project 0xba; very
+     likely the same thing, not separated by a measurement.
    - `114/TBkndRsc/Fixed2Meta`: byte 279, port 0x2b, Project 0x0b.  Project clears
      a flag bit that the port-saved file still carries; in the settled file the
      bit was already clear, which is why wave 30's pair never showed it.
@@ -372,9 +376,14 @@ the three bytes agree.
 **Decision.** DEFERRED with evidence.  The removal stays refused for a file the
 port saved (both writer and plan).  Enabling needs (a) the settle transform
 derived as a rule rather than copied from a null (only this one pair measures
-it), (b) the identity-counter rule behind the Fixed2Data and Var2Data bytes,
-(c) the Rsc Fixed2Meta flag rule and (d) the CEdl rebuild; none can be derived
-from one pair.  Pairs still needed: the same removal from a port-saved file with
+it), (b) the Rsc Fixed2Meta flag rule and (c) the CEdl rebuild; none can be
+derived from one pair.  (W35b-3.8, R35G3-2: the earlier list also carried an
+"identity-counter rule" behind the Fixed2Data and Var2Data bytes; that is the
+session suffix Project renumbers on every save, not a rule.  And the four named
+gaps are a lower bound: the null save rewrote 19 streams, so the pair's mask,
+control against null, is wide and hides any port error in a byte the settle
+changed.  Narrowing it means comparing the port's output on the null save, or
+on a hybrid, against Project's edit, with the null save as the baseline.)  Pairs still needed: the same removal from a port-saved file with
 a different row count (two and three existing assignments) and with the add made
 on a different task, to separate the counter and flag rules from this file.
 
