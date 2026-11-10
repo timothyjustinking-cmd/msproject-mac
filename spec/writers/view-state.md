@@ -375,10 +375,11 @@ longer shows).
 | Show Level | a session Sort (any key) | refused (new: the sort re-ordered the rows while Save wrote the level over the file's order) |
 | Show Level | clearing the sort | accepted: a cleared sort shows the file's own order, which is what the level is relative to |
 | Show Level | another level, All Subtasks | replaces or withdraws the queued level (unchanged) |
-| a session Sort shown, nothing queued | a session Show Level 1 or deeper | refused (W35e-1.1, R35dG1-1(a)): the level would queue and Save would write it over the file's own order; All Subtasks queues nothing and is accepted; clearing the sort lets the level queue |
+| a session Sort shown, nothing queued | a session Show Level 1 or deeper | the queue is refused (W35e-1.1, R35dG1-1(a); narrowed by W35f-0.1, R35eG1-1): the level would queue and Save would write it over the file's own order, so it is shown for the session only with the sort named; a level that could never queue (a read-only file, Level 3 to 9, a file the builder refuses) is a session-only level with its own note, as in wave 31; All Subtasks queues nothing and is accepted; clearing the sort lets the level queue |
 | Show Level or Sort on the redo list (Undo withdrew it) | a sort choice or clearing the sort | ends the redo list (W35e-1.1, R35dG1-1(b); for a Sort since W35d-0.4): Ctrl+Y would re-queue the edit without `push()` under the sort chosen now |
 
 Tests: `qt_sort_persist` (Collapse All, the row toggle, the summary toggle, a session Level,
 All Subtasks, clearing the Sort, and Expand All disabled) and `qt_outline_persist` (a session
 Sort, clearing it; and, on the six-task outline, where the Sort stays session only: a Level
-refused under a shown session Sort, and a Level on the redo list ended by a Sort).  No writer changed, no refusal of a persisted shape lifted.
+shown for the session but not queued under a shown session Sort, an unmeasured Level under it
+shown for the session with the builder's note, and a Level on the redo list ended by a Sort).  No writer changed, no refusal of a persisted shape lifted.
