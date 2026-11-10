@@ -485,11 +485,12 @@ void refused_requests() {
         CalculateRequest slack = good;
         slack.leaves[critical].total_slack = slack.leaves[critical].free_slack =
             slack.leaves[critical].start_slack = 4800;
-        refuses([&] { mppwrite::save_calculate(doc, slack, path); }, "ends the project, so its slack is 0",
-                "critical leaf with slack");
+        refuses([&] { mppwrite::save_calculate(doc, slack, path); },
+                "ends the project, so its slack is 0", "critical leaf with slack");
         CalculateRequest late = good;
         late.leaves[critical].late_start += 0x10000;
-        refuses([&] { mppwrite::save_calculate(doc, late, path); }, "ends the project, so its slack is 0",
+        refuses([&] { mppwrite::save_calculate(doc, late, path); },
+                "ends the project, so its slack is 0",
                 "critical leaf with a late start after its start");
     }
     {
@@ -730,7 +731,8 @@ void refused_requests() {
         rows_r.set_u32(2, mppwrite::task_row::kRemainingDuration, 4800);
         rows_r.store_into(remaining);
         refuses([&] { mppwrite::save_calculate(remaining, good, path); },
-                "remaining duration (+88) differs from its duration", "2.2: leaf remaining duration");
+                "remaining duration (+88) differs from its duration",
+                "2.2: leaf remaining duration");
     }
     {
         /* W35c-2.2 (R35bG0-7): FixedMeta bytes 8-11 of a leaf entry (e3 ?? fd fe) are pinned,
@@ -815,7 +817,8 @@ void refused_requests() {
         doc = control;
         set_props_kind(doc, 0x02400002u, 0x01u);
         refuses([&] { mppwrite::save_calculate(doc, good, path); },
-                "date record for the project start", "0.2: the Props project start of another kind");
+                "date record for the project start",
+                "0.2: the Props project start of another kind");
     }
     {
         /* W35c-1.5 (R35bG0-3): the finish-position guard cannot tell one Duration edit from two
@@ -864,8 +867,8 @@ void refused_requests() {
             CfbDocument doc = control;
             doc.replace_stream("114/Props", changed);
             char needle[96];
-            std::snprintf(needle, sizeof needle, "114/Props record 0x%08X differs from the measured control",
-                          frame.id);
+            std::snprintf(needle, sizeof needle,
+                          "114/Props record 0x%08X differs from the measured control", frame.id);
             refuses([&] { mppwrite::save_calculate(doc, good, path); }, needle,
                     std::string("0.3: one byte of a non-written Props record flipped, ") + needle);
             ++flipped;
@@ -1022,7 +1025,8 @@ void refused_requests() {
             CfbDocument doc = control;
             doc.replace_stream("114/Props", changed);
             refuses([&] { mppwrite::save_calculate(doc, good, path); },
-                    "114/Props tail differs from the measured control", "0.3: a Props tail byte flipped");
+                    "114/Props tail differs from the measured control",
+                    "0.3: a Props tail byte flipped");
         }
         /* W35e-2.8 (R35dG0-5): the two tail checks that run BEFORE the tail hash, each with a
          * needle only its own branch produces (with either switched off the hash still refuses,
@@ -1056,7 +1060,8 @@ void refused_requests() {
             CfbDocument doc = control;
             doc.replace_stream("114/Props", changed);
             refuses([&] { mppwrite::save_calculate(doc, good, path); },
-                    "Task size scalars, not one", "W35e-2.8: a second Task size scalar in the tail");
+                    "Task size scalars, not one",
+                    "W35e-2.8: a second Task size scalar in the tail");
         }
         {
             Bytes changed = props;
@@ -1090,8 +1095,8 @@ void refused_requests() {
              "Sunday 21:00 is Monday 08:00 (the measured pair)");
         maps(mppwrite::pack_date_ymd(2026, 1, 10, 0), mppwrite::pack_date_ymd(2026, 1, 12, h8),
              "Saturday is Monday 08:00");
-        maps(mppwrite::pack_date_ymd(2026, 1, 9, 17 * 3600), mppwrite::pack_date_ymd(2026, 1, 12, h8),
-             "Friday 17:00 is Monday 08:00");
+        maps(mppwrite::pack_date_ymd(2026, 1, 9, 17 * 3600),
+             mppwrite::pack_date_ymd(2026, 1, 12, h8), "Friday 17:00 is Monday 08:00");
         maps(mppwrite::pack_date_ymd(2026, 1, 5, 7 * 3600), mppwrite::pack_date_ymd(2026, 1, 5, h8),
              "Monday 07:00 is Monday 08:00");
         maps(mppwrite::pack_date_ymd(2026, 1, 5, h8), mppwrite::pack_date_ymd(2026, 1, 5, h8),
@@ -1457,7 +1462,8 @@ void refused_requests() {
         std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
                                    std::filesystem::copy_options::overwrite_existing);
         mppwrite::save_calculate(doc, good, target);
-        check(file_bytes(target) != file_bytes(fixture_path("wave35-calculate-unlinked-control.mpp")),
+        check(file_bytes(target) !=
+                  file_bytes(fixture_path("wave35-calculate-unlinked-control.mpp")),
               "the seam off: the save writes the target");
         std::filesystem::remove(target);
     }
@@ -1538,8 +1544,9 @@ void refused_requests() {
         } catch (std::exception const& failure) {
             text = failure.what();
         }
-        check(text == "saved", "scratch probe not_found with an error code: the save proceeds (got: " +
-                                   text + ")");
+        check(text == "saved",
+              "scratch probe not_found with an error code: the save proceeds (got: " + text +
+                  ")");
         check(file_bytes(target) != before,
               "scratch probe not_found with an error code: the target is written");
         check(!std::filesystem::exists(target + ".calculate.tmp"),
@@ -1588,7 +1595,8 @@ void refused_requests() {
         }
         refuses([&] { mppwrite::save_calculate(doc, good, target); },
                 "already exists; it is not removed", "a plain file on the scratch name");
-        check(!std::filesystem::exists(target), "a plain file on the scratch name: no target written");
+        check(!std::filesystem::exists(target),
+              "a plain file on the scratch name: no target written");
         check(std::filesystem::exists(squat), "a plain file on the scratch name: kept");
         std::filesystem::remove(squat);
         mppwrite::save_calculate(doc, good, target);

@@ -220,7 +220,8 @@ void check_pair(const Pair& p) {
     {
         const core::view::SortKey shown = app::queued_sort_display_key(edit);
         const std::uint32_t want = p.kind == app::SortKeyKind::duration ? 0x0B40001Du : kFieldName;
-        check_size(shown.field, want, label + ": the queued sort's display key is the display field");
+        check_size(shown.field, want,
+                   label + ": the queued sort's display key is the display field");
         check(shown.ascending == p.ascending, label + ": the display key has the edit's direction");
     }
     check(edit.sort_base_order == kBase, label + ": the base order is the file's");
@@ -396,7 +397,8 @@ void check_refusals() {
         app::PlanInput prefix = plan;
         const std::string d = task_by_uid(prefix, 4)->name;
         task_by_uid(prefix, 5)->name = d + "2";
-        expect_refused(prefix, source, name_desc, true, false, "differ at a letter of the same case",
+        expect_refused(prefix, source, name_desc, true, false,
+                       "differ at a letter of the same case",
                        "a sibling name that extends another");
     }
     {
@@ -411,7 +413,8 @@ void check_refusals() {
         app::PlanInput digits = plan;
         task_by_uid(digits, 4)->name = "Task 1";
         task_by_uid(digits, 5)->name = "Task 2";
-        expect_refused(digits, source, name_desc, true, false, "differ at a letter of the same case",
+        expect_refused(digits, source, name_desc, true, false,
+                       "differ at a letter of the same case",
                        "sibling names that differ at a digit");
     }
     {
@@ -471,7 +474,8 @@ void check_refusals() {
             const char* what;
         };
         const std::vector<Shape> shapes = {
-            {{0, 1, 2, 0, 0}, "the plan's outline has levels 1, 2, 3, 1, 1", "a three-level outline"},
+            {{0, 1, 2, 0, 0}, "the plan's outline has levels 1, 2, 3, 1, 1",
+             "a three-level outline"},
             {{0, 0, 0, 0, 0}, "the plan's outline has levels 1, 1, 1, 1, 1", "a flat outline"},
             {{0, 1, 1, 1, 0}, "the plan's outline has levels 1, 2, 2, 2, 1",
              "a third child under the summary"},
