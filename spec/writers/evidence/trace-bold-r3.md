@@ -1,0 +1,12 @@
+# Bold item writer (round 3): partial, negative on the var-slot machinery
+
+_Wed 11 Nov 2026.  Same `bold` trace as `trace-bold.md`.  Calls read through the hash-checked KVP channel (`vm30` `175AFA374699`, `vm31` `274C98F60CF3`, `vm32` `11018F3840D4`, all `sha OK`)._
+
+What round 3 established (new machinery, found in the calculate trace, see `trace-calculate-r3.md`):
+- Var blocks and VarMeta entries of any table go through the append routine RVA 0x3dc7d0 -> the entry inserter RVA 0x3de484 `(table, row, key, offset, flags)`; the VarMeta stream is written by the merge routine RVA 0x376b10 (pending list at `table+0xa8`, sorted by uid then key); the offset of a new block is `[table+0x344]`.
+
+What the `bold` trace shows:
+- Calls of the inserter 0x3de484 with `rcx = ...1f980` (a 3-row table, keys 0x20400006, 0x22400014, 0x2240002f, offsets 0, 0xa650, 0x14d50, 0x16da4, 0x16f25, 0x170c2, 0x171ac) happen at positions e6ab to e6c0 only; the pending list of that table at its merge call (e6c0:2500) holds these 9 entries and no entry with key **0x2240000c**.  Calls of the inserter with the Task table (`...1b030`, keys 0x0b4000a4.., 0x0b400505/506) at fa0c to fa83 are the Read-Facts block creation, not the edit.
+- So the `0x2240000C` item append and the CV_iew VarMeta offset re-pointing are **not** done by 0x3dc7d0/0x3de484 on that table inside the recording; the table whose pending list contains the 214/CV_iew entries was not identified (several view tables exist: the merge routine is called for 20 table objects at e6c0..fc4b).  Next: `ent("376b10")` shows the 20 tables; run `pend(pos)` (chain2.js) at each position and look for offset 0x1878a-class values or the key 0x2240000c; then `wr` on that array's offset word as done for the Task table.
+- Follow-up done in round 3 (`vm33` `F265A299B318`, `sha OK`): the pending lists of all 14 tables at their save-time merge calls (f648:d7e to fc4b) hold no key 0x2240000c and no entry for the 100 KB `CV_iew` stream (the Task table's list has only the Read-Facts entries `0x0b4000a4..aa`, `0x0b400505/506`).  So the CV_iew item/VarMeta/size-byte path is a different class from the 114 table machinery; the next agent should look for the view-stream class (214 storage: `CV_iew` is opened with its own stream writer) rather than for var-slot calls: break on the 214 `Props` stream write (size byte 0x1878a) and walk back from there.
+- The font word's top byte (offset 85327) was not traced further; nothing here changes the conclusion of `trace-bold.md` (varies per session).
