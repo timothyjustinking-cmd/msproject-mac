@@ -542,6 +542,16 @@ int main(int argc, char** argv) {
                             "a table / date format or custom-field formula edit is pending")),
                         "Calculate Project beside a pending date-format edit: the status line "
                         "names it");
+            // W35f-1.6 (R35eG2-4): the advice must not lead into the next refusal.  Saving a
+            // custom-field formula leaves a file Calculate Project refuses, so the line says so
+            // and offers the reopen.
+            gate::check(window.status_left_text().contains(QStringLiteral(
+                            "a file saved with a custom-field formula cannot take Calculate "
+                            "Project) or reopen without saving")) &&
+                            !window.status_left_text().contains(
+                                QStringLiteral("save that edit first")),
+                        "Calculate Project beside a pending edit: the advice names the formula "
+                        "case and the reopen");
         }
     }
 
