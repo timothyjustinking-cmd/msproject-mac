@@ -6281,17 +6281,6 @@ void MainWindow::apply_outline_level(int level) {
         refuse_view_change(level == 0 ? "all subtasks shown" : "a session Show Level")) {
         return;
     }
-    // W35e-1.1 (R35dG1-1): the other order of the same rule.  A session Sort that is shown (not
-    // queued) re-orders the rows, and a level queued now would be written by File > Save over the
-    // file's own order, so the Level is refused until the sort is cleared.  All Subtasks only
-    // expands and queues nothing.
-    if (level != 0 && doc_.sort_active()) {
-        set_message("outline: a session Sort is shown and File > Save would write the file's own "
-                    "order, not a session Show Level; clear the sort first",
-                    true);
-        update_status();
-        return;
-    }
     // A queued persisted level is replaced (Show Level is an exclusive edit) or,
     // for All Subtasks, withdrawn.
     const bool had_queued_level = !structural_.applied().empty() &&
@@ -6325,6 +6314,14 @@ void MainWindow::apply_outline_level(int level) {
         std::string error;
         if (!app::make_show_level_edit(doc_.plan(), doc_.path(), level, edit, error)) {
             persisted_note = "session only; the file keeps its outline (" + error + ")";
+        } else if (doc_.sort_active()) {
+            // W35e-1.1 (R35dG1-1), narrowed by W35f-0.1 (R35eG1-1): the other order of the 1.2
+            // rule.  A session Sort that is shown (not queued) re-orders the rows, and a level
+            // queued now would be written by File > Save over the file's own order, so only the
+            // QUEUE is refused.  A Level that would only ever be session only (a read-only file,
+            // Level 3 to 9, a file the builder refuses) is shown for the session as in wave 31.
+            persisted_note = "session only; a session Sort is shown and File > Save would write "
+                             "the file's own order, so the level is not queued";
         } else if (!structural_.push(std::move(edit), &doc_.plan())) {
             persisted_note =
                 "session only; the file keeps its outline (the level edit was refused)";

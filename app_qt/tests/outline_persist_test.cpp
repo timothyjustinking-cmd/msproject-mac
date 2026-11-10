@@ -688,6 +688,20 @@ int main(int argc, char** argv) {
             }
             return names;
         };
+        const auto is_subsequence = [](const std::vector<QString>& part,
+                                       const std::vector<QString>& whole) {
+            std::size_t next = 0;
+            for (const QString& name : part) {
+                while (next < whole.size() && whole[next] != name) {
+                    ++next;
+                }
+                if (next == whole.size()) {
+                    return false;
+                }
+                ++next;
+            }
+            return true;
+        };
 
         // (a) A session Sort first, then a Level: the Level must not be queued over the sorted
         // rows.  Clearing the sort lets the same Level queue.
@@ -702,16 +716,37 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         gate::check(window.pending_edits().empty(),
                     "sort first: a Level under a session Sort queues nothing");
-        gate::check(status_contains(window, "a session Sort is shown and File > Save would write "
-                                            "the file's own order, not a session Show Level"),
-                    "sort first: the status line names the shown sort");
-        gate::check(shown_names(model) == sorted_names,
-                    "sort first: the refused Level leaves the sorted rows as they were");
+        // W35f-0.1 (R35eG1-1): only the QUEUE is refused.  The Level is shown for the session,
+        // over the sorted rows (a subsequence of them), and the note names the shown sort.
+        gate::check(status_contains(window, "session only; a session Sort is shown and File > Save "
+                                            "would write the file's own order, so the level is "
+                                            "not queued"),
+                    "sort first: the status line names the shown sort and the refused queue");
+        const std::vector<QString> level_names = shown_names(model);
+        gate::check(level_names.size() < sorted_names.size() &&
+                        is_subsequence(level_names, sorted_names),
+                    "sort first: the session Level is shown, over the sorted rows in the sorted "
+                    "order");
         window.apply_outline_level(0);
         QApplication::processEvents();
         gate::check(window.pending_edits().empty() &&
                         !status_contains(window, "a session Sort is shown"),
                     "sort first: All Subtasks is not refused and queues nothing");
+        gate::check(shown_names(model) == sorted_names,
+                    "sort first: All Subtasks shows every sorted row again");
+        // A Level that could never be queued (Level 3 to 9 is not a measured shape) is a
+        // session-only Level with its own note, as in wave 31, not the sort's refusal.
+        window.apply_outline_level(3);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty() &&
+                        status_contains(window, "session only; the file keeps its outline") &&
+                        !status_contains(window, "so the level is not queued"),
+                    "sort first: an unmeasured Level under a session Sort is shown for the session "
+                    "with the builder's note");
+        gate::check(is_subsequence(shown_names(model), sorted_names),
+                    "sort first: the unmeasured session Level keeps the sorted order");
+        window.apply_outline_level(0);
+        QApplication::processEvents();
         window.apply_sort_choice(core::view::SortDefinition{}, "", true);
         QApplication::processEvents();
         window.apply_outline_level(1);
