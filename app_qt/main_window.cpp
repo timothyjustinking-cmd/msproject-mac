@@ -5943,8 +5943,12 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         }
         // Only a CHANGED field is written: an untouched field keeps whatever
         // rendering the sheet gave it, so a formatted value the edit parser does
-        // not accept can never turn an untouched field into an apply failure.
-        if (sheet->cell_text(selected.row, column) == *edit.text) {
+        // not accept can never turn an untouched field into an apply failure.  The
+        // values were built with app::cell_text under the preferences, so that is
+        // the rendering compared (R35eG0-1: the sheet's own text differs under the
+        // hours and days styles and re-committed, and so rounded, an untouched
+        // Duration).
+        if (app::cell_text(*sheet, selected.row, column, prefs_) == *edit.text) {
             continue;
         }
         if (!sheet->begin_edit(selected.row, column)) {
