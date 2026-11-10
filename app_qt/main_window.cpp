@@ -3436,8 +3436,9 @@ void MainWindow::calculate_project() {
     // change, not at File > Save.
     if (document_ != nullptr && document_->has_pending_edits()) {
         set_message("Calculate Project: a table / date format or custom-field formula edit is "
-                    "pending and File > Save would refuse the two together; save that edit "
-                    "first",
+                    "pending and File > Save would refuse the two together; save it (a file "
+                    "saved with a custom-field formula cannot take Calculate Project) or "
+                    "reopen without saving",
                     true);
         update_status();
         return;
