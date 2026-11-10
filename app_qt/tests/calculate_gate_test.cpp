@@ -555,6 +555,47 @@ int main(int argc, char** argv) {
         }
     }
 
+    // --- 2c'. W35f-1.7 (R35eG2-6): the formula edit first, then Calculate Project -------------
+    // The reverse-order block above queues a date format only.  The guard is one predicate
+    // (has_pending_edits), but the formula half of it was never reached by a test.
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control reopens for the formula order");
+        window.show();
+        QApplication::processEvents();
+        bool dialog_seen = false;
+        QTimer::singleShot(0, [&dialog_seen]() {
+            auto* dialog =
+                dynamic_cast<msqt::CustomFormulaDialog*>(QApplication::activeModalWidget());
+            if (dialog == nullptr) {
+                return;
+            }
+            dialog_seen = true;
+            dialog->field_combo()->setCurrentIndex(0);
+            dialog->formula_edit()->setText(QStringLiteral("[Duration]/240"));
+            dialog->accept();
+        });
+        QAction* formula = gate::find_action(window, app::MenuAction::custom_field_formula);
+        gate::check(formula != nullptr && formula->isEnabled(),
+                    "Custom Field Formula is an enabled menu action (formula first)");
+        if (formula != nullptr && formula->isEnabled()) {
+            formula->trigger();
+            QApplication::processEvents();
+            gate::check(dialog_seen && window.document_dirty(),
+                        "a custom-field formula edit is pending before the calculation");
+            gate::check(click_calculate(window),
+                        "Calculate Project clicks beside a pending formula edit");
+            gate::check(window.pending_edits().empty(),
+                        "Calculate Project beside a pending formula edit queues nothing");
+            gate::check(window.status_left_text().contains(QStringLiteral(
+                            "a table / date format or custom-field formula edit is pending")),
+                        "Calculate Project beside a pending formula edit: the status line "
+                        "names it");
+        }
+    }
+
     // --- 2d. W35f-1.5 (R35eG2-2): Undo, then a document edit, then Redo ----------------------
     // Calculate Project, Ctrl+Z (nothing queued, so each dialog accepts), then a table / date
     // format, a custom-field formula or a Custom Fields formula.  The document edit is pending,
