@@ -370,6 +370,10 @@ int main(int argc, char** argv) {
             values.duration_text = "not a duration";
             gate::check(!window.apply_task_information(values),
                         "partial apply: the form edit fails on the Duration");
+            // W35f-1.3 (R35eG0-3): the status says what stuck and that Undo takes it back.
+            gate::check(window.status_left_text().contains(
+                            QStringLiteral("Name applied (Undo takes it back)")),
+                        "partial apply: the status names the field that stuck and Undo");
             gate::check(model->data(model->index(1, name_column)).toString() ==
                             QStringLiteral("Renamed by a partial apply"),
                         "partial apply: the Name field stays committed");

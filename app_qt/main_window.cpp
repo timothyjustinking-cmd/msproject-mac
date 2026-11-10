@@ -5929,6 +5929,8 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
 
     bool ok = true;
     bool applied = false;
+    std::string failure;          // the last failing field's message
+    std::string applied_fields;   // the fields that committed, for the partial-apply status
     for (const FieldEdit& edit : edits) {
         const core::view::FieldId field = app::task_field_id(edit.name);
         std::size_t column = core::sheet::kNoIndex;
@@ -5953,7 +5955,8 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         }
         if (!sheet->begin_edit(selected.row, column)) {
             ok = false;
-            set_message(prefix + ": the " + edit.name + " column is read-only", true);
+            failure = prefix + ": the " + edit.name + " column is read-only";
+            set_message(failure, true);
             continue;
         }
         sheet->set_edit_text(*edit.text);
@@ -5961,10 +5964,14 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         if (!outcome.ok) {
             sheet->cancel_edit();
             ok = false;
-            set_message(prefix + ": " + outcome.error, true);
+            failure = prefix + ": " + outcome.error;
+            set_message(failure, true);
             continue;
         }
-        applied = applied || outcome.changed;
+        if (outcome.changed) {
+            applied = true;
+            applied_fields += (applied_fields.empty() ? "" : ", ") + std::string(edit.name);
+        }
     }
 
     if (!ok && applied) {
@@ -5975,6 +5982,9 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         // builder.  The structural edits of this apply stay unqueued (trial is dropped).
         structural_.clear_redo();
         after_cell_change();
+        // R35eG0-3: after_cell_change leaves the status alone, so the failure is the only
+        // line the user sees; say what stuck and that Undo takes it back.
+        set_message(failure + "; " + applied_fields + " applied (Undo takes it back)", true);
     }
     if (ok) {
         if (structural_applied) {
