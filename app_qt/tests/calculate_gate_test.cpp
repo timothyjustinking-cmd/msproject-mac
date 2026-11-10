@@ -383,6 +383,34 @@ int main(int argc, char** argv) {
             gate::check(model->data(model->index(1, name_column)).toString() ==
                             QStringLiteral("Renamed by a partial apply"),
                         "partial apply: Redo leaves the edited name as it was");
+
+            // W35f-1.2 (R35eG0-2): the Task Form's entry and the structural-trial variant.  A
+            // percent edit (structural), a Name that commits and a Duration that does not parse:
+            // the trial must stay dropped (nothing queued), the Name stays committed, and the
+            // status keeps naming the Duration failure (after_cell_change must not overwrite it).
+            msqt::TaskInformationValues second;
+            gate::check(window.task_information_values(&second),
+                        "partial apply (trial): the values are readable");
+            {
+                second.percent_text = "40%";
+                second.name = "Second partial apply";
+                second.duration_text = "not a duration";
+                gate::check(!window.apply_task_information(second, "task form"),
+                            "partial apply (trial): the task form entry fails on the Duration");
+                gate::check(window.pending_edits().empty(),
+                            "partial apply (trial): the dropped trial queues no percent edit");
+                gate::check(model->data(model->index(1, name_column)).toString() ==
+                                QStringLiteral("Second partial apply"),
+                            "partial apply (trial): the Name field stays committed");
+                gate::check(window.status_left_text().contains(
+                                QStringLiteral("task form: ")) &&
+                                window.status_left_text().contains(QStringLiteral("duration"),
+                                                                   Qt::CaseInsensitive),
+                            "partial apply (trial): the status names the task form's Duration "
+                            "failure");
+                gate::check(!redo->isEnabled(),
+                            "partial apply (trial): the redo list stays cleared");
+            }
         }
     }
 
