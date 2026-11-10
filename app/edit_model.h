@@ -872,6 +872,11 @@ class StructuralEdits {
     // whose save rewrites every live automatic row).  The shell uses it to name
     // the reason when push() refuses a percent/actuals edit.
     bool has_automatic_outline_edit() const noexcept;
+    // W35f-1.8 (R35eW-1): True while an applied edit is one of the exclusive kinds (task mode,
+    // resource rename / add / assign / unassign, Bold, WBS code, Calculate Project, Sort, Show
+    // Level), whose save refuses a table / date format or custom-field formula edit beside it.
+    // The shell uses it to refuse that document edit before its dialog opens.
+    bool has_exclusive_edit() const noexcept;
 
     // Moves the newest applied edit to the redo list; a delete_task's
     // displaced edits return to the applied list in their original order.

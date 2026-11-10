@@ -19,8 +19,11 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QComboBox>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
+#include <QVariant>
 
 #include <array>
 #include <cstddef>
@@ -85,6 +88,32 @@ std::vector<QString> displayed_names(msqt::SheetTableModel* model, int name_colu
 
 bool status_contains(const msqt::MainWindow& window, const char* needle) {
     return window.status_left_text().contains(QString::fromUtf8(needle));
+}
+
+// W35f-1.8 (R35eW-1): drives Table > Date Format through its action; true when the dialog
+// opened (and was accepted).  False when the shell refused before the dialog.
+bool queue_date_format(msqt::MainWindow& window, int format) {
+    bool seen = false;
+    QTimer::singleShot(0, [&seen, format]() {
+        auto* dialog =
+            dynamic_cast<msqt::TableDateFormatDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        seen = true;
+        const int index = dialog->date_format_combo()->findData(QVariant(format));
+        if (index >= 0) {
+            dialog->date_format_combo()->setCurrentIndex(index);
+        }
+        dialog->accept();
+    });
+    QAction* action = gate::find_action(window, app::MenuAction::table_date_format);
+    if (action == nullptr || !action->isEnabled()) {
+        return false;
+    }
+    action->trigger();
+    QApplication::processEvents();
+    return seen;
 }
 
 // True when some displayed row of the Name column reads `text`.
@@ -176,6 +205,43 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
     gate::check(window.pending_edits().empty(), "clearing the sort withdraws the queued edit");
     gate::check(!window.sort_active(), "clearing the sort clears the session sort");
+
+    // W35f-1.8 (R35eW-1): Sort is exclusive in the save, which refuses it beside a table / date
+    // format edit.  The shell refuses at the change, in both orders.
+    {
+        window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                 "Name descending", false);
+        QApplication::processEvents();
+        gate::check(queued_sort(window) != nullptr, "Name descending is queued for the format case");
+        gate::check(!queue_date_format(window, 5),
+                    "Table / Date Format does not open beside a queued sort");
+        gate::check(queued_sort(window) != nullptr, "the queued sort stays queued");
+        gate::check(status_contains(window,
+                                    "a Sort is queued and File > Save would write it, not a "
+                                    "table / date format edit"),
+                    "Table / Date Format beside a queued sort: the status line names it");
+        window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "the format case: the sort is withdrawn");
+
+        // The other order, in a window of its own (a pending format edit cannot be discarded).
+        msqt::MainWindow other;
+        other.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+        QString other_error;
+        gate::check(other.open_file(fixture, &other_error), "the fixture loads for the format-first case");
+        other.show();
+        QApplication::processEvents();
+        gate::check(queue_date_format(other, 5), "the date format is queued first");
+        other.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                "Name descending", false);
+        QApplication::processEvents();
+        gate::check(other.pending_edits().empty(), "a sort beside a pending date format queues nothing");
+        gate::check(status_contains(other,
+                                    "session only; the file keeps its order (a table / date "
+                                    "format or custom-field formula edit is pending"),
+                    "a sort beside a pending date format: the status line names it");
+        gate::check(other.sort_active(), "the sort still applies to the session");
+    }
 
     // W35c-1.4 (R35bW-2): a Sort the user replaced or cleared is withdrawn for good.  Left on
     // the redo list, Ctrl+Y re-queued it under whatever sort the display had by then, and

@@ -428,6 +428,19 @@ Custom Fields... is a third formula surface (its Formula... button feeds the sam
 (W35f-0.2; the `custom_fields` case of the same test). No wrong file was ever reachable; this is
 the message at the moment of the change.
 
+*The other exclusive kinds (W35f-1.8, R35eW-1).* The save refuses a table / date format or
+custom-field formula edit beside every exclusive kind, not Calculate alone, so the Qt shell now
+refuses at the change for all ten (`StructuralEdits::has_exclusive_edit()`): the three dialogs
+refuse while any exclusive edit is queued (Calculate, Show Level and Sort keep their own wording;
+the rest get "an edit is queued that File > Save writes on its own..."), and Manually Schedule,
+Resource Information, Add Resources, Assign Resources, Font Bold and Define WBS Code refuse while
+a document edit is pending. Sort and Show Level keep the session-only fallback instead of a
+refusal (the display still changes; nothing is queued, and the note names the pending edit).
+Tested in qt_task_mode_document_edit_gate (Manually Schedule, both orders, the generic wording),
+qt_sort_persist and qt_outline_persist (both orders each). The refusals at the other five
+builder entries share one helper and are driven only through the Manually Schedule case. The
+AppKit shell has none of this (R35eG2-3, item 1.10).
+
 Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
 FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded
 (the only precedent, `assignment_growth.cpp`, compares the same entry for them and is

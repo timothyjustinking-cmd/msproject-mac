@@ -1661,6 +1661,53 @@ bool MainWindow::refuse_data_change(const std::string& change) {
     return true;
 }
 
+// W35f-1.8 (R35eW-1): File > Save refuses a table / date format or custom-field formula edit
+// beside ANY exclusive structural kind (W35e-2.6 told the user at the change only for
+// Calculate Project).  A queued Calculate, Show Level or Sort keep their own wording; the
+// other exclusive kinds get the generic one.
+std::string MainWindow::document_edit_refusal(const std::string& change) const {
+    if (!structural_.has_exclusive_edit()) {
+        return {};
+    }
+    const std::string reason = data_change_refusal(change);
+    if (!reason.empty()) {
+        return reason;
+    }
+    return "an edit is queued that File > Save writes on its own, so it would refuse " + change +
+           " beside it; save or undo the queued edit first";
+}
+
+bool MainWindow::refuse_document_edit(const std::string& change) {
+    const std::string reason = document_edit_refusal(change);
+    if (reason.empty()) {
+        return false;
+    }
+    set_message(reason, true);
+    update_status();
+    return true;
+}
+
+// The other direction: a pending table / date format or formula edit, and an exclusive
+// structural edit about to be queued.  `command` names the command ("Define WBS Code").
+std::string MainWindow::pending_document_edit_refusal(const std::string& command) const {
+    if (document_ == nullptr || !document_->has_pending_edits()) {
+        return {};
+    }
+    return command +
+           ": a table / date format or custom-field formula edit is pending and File > Save "
+           "would refuse the two together; save it or reopen without saving";
+}
+
+bool MainWindow::refuse_beside_document_edit(const std::string& command) {
+    const std::string reason = pending_document_edit_refusal(command);
+    if (reason.empty()) {
+        return false;
+    }
+    set_message(reason, true);
+    update_status();
+    return true;
+}
+
 bool MainWindow::refuse_view_change(const std::string& change) {
     const std::string reason = view_change_refusal(change);
     if (reason.empty()) {
@@ -3140,6 +3187,9 @@ void MainWindow::manually_schedule_selected() {
         update_status();
         return;
     }
+    if (refuse_beside_document_edit("manually schedule")) {
+        return;
+    }
     // W30-1.0: the file-side shape (the stored precondition bytes and the
     // whole-file conditions) lives in make_task_mode_edit; the shell supplies
     // the displayed plan and the path the edit must agree with.  Auto Schedule
@@ -3191,6 +3241,9 @@ void MainWindow::rename_selected_resource() {
         update_status();
         return;
     }
+    if (refuse_beside_document_edit("resource information")) {
+        return;
+    }
     // W34-4.1: only the name is editable (the measured shape); the builder
     // owns every refusal (assigned, shorter / same-size, non-ASCII, empty).
     QString name;
@@ -3226,6 +3279,9 @@ void MainWindow::add_resource() {
     if (!doc_.has_document()) {
         set_message("Add Resources needs an open project", false);
         update_status();
+        return;
+    }
+    if (refuse_beside_document_edit("add resources")) {
         return;
     }
     // W34-4.2: the name is the only input; the builder owns every refusal
@@ -3274,6 +3330,9 @@ void MainWindow::assign_resources() {
     if (task == nullptr) {
         set_message("select a task first", false);
         update_status();
+        return;
+    }
+    if (refuse_beside_document_edit("assign resources")) {
         return;
     }
     const app::PlanInput& plan = doc_.plan();
@@ -3363,6 +3422,9 @@ void MainWindow::bold_selected_cell() {
         update_status();
         return;
     }
+    if (refuse_beside_document_edit("Font Bold")) {
+        return;
+    }
     // W34-4.5: one cell only.  The measured pair bolds a single Task Name cell,
     // so a range is refused with the reason before anything is built.
     if (!(sheet.anchor() == sheet.focus())) {
@@ -3400,6 +3462,9 @@ void MainWindow::define_wbs_code() {
     if (!doc_.has_document()) {
         set_message("open a project first", false);
         update_status();
+        return;
+    }
+    if (refuse_beside_document_edit("Define WBS Code")) {
         return;
     }
     // W34-4.6: the builder owns every refusal (the task count and shape, a file
@@ -4181,8 +4246,7 @@ void MainWindow::show_custom_fields() {
     // W35f-0.2 (R35eG2-1): the third custom-field formula surface.  The dialog's Formula...
     // button feeds apply_custom_formula, which File > Save refuses beside a queued Calculate
     // Project, so say so before the dialog opens, as show_custom_formula does (W35e-2.6).
-    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project) &&
-        refuse_data_change("a custom-field formula edit")) {
+    if (refuse_document_edit("a custom-field formula edit")) {
         return;
     }
     // The Task fields whose storage the port knows, with the file's stored
@@ -4881,8 +4945,7 @@ void MainWindow::show_table_date_format() {
     }
     // W35e-2.6 (R35dG2-2): the save refuses this edit beside a queued Calculate Project, so
     // refuse it now (before the dialog opens), with the Calculate named.
-    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project) &&
-        refuse_data_change("a table / date format edit")) {
+    if (refuse_document_edit("a table / date format edit")) {
         return;
     }
     if (!document_) {
@@ -4935,8 +4998,7 @@ void MainWindow::show_custom_formula() {
         return;
     }
     // W35e-2.6 (R35dG2-2): as show_table_date_format, before the dialog opens.
-    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project) &&
-        refuse_data_change("a custom-field formula edit")) {
+    if (refuse_document_edit("a custom-field formula edit")) {
         return;
     }
     if (!document_) {
@@ -6196,6 +6258,12 @@ void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
     std::string persisted_note = "session only";
     if (!read_only_reason_.empty()) {
         persisted_note = "session only; " + read_only_reason_;
+    } else if (document_ != nullptr && document_->has_pending_edits()) {
+        // W35f-1.8 (R35eW-1): a Sort is exclusive in the save, which refuses it beside a
+        // pending table / date format or formula edit, so it is shown, not queued.
+        persisted_note = "session only; the file keeps its order (a table / date format or "
+                         "custom-field formula edit is pending and File > Save would refuse "
+                         "the two together)";
     } else if (definition.keys.size() != 1) {
         persisted_note = "session only; the file keeps its order (Sort with " +
                          std::to_string(definition.keys.size()) +
@@ -6348,6 +6416,11 @@ void MainWindow::apply_outline_level(int level) {
     std::string persisted_note = "session only";
     if (!read_only_reason_.empty()) {
         persisted_note = "session only; " + read_only_reason_;
+    } else if (document_ != nullptr && document_->has_pending_edits()) {
+        // W35f-1.8 (R35eW-1): as for Sort; a Show Level is exclusive in the save.
+        persisted_note = "session only; the file keeps its outline (a table / date format or "
+                         "custom-field formula edit is pending and File > Save would refuse "
+                         "the two together)";
     } else {
         app::StructuralEdit edit;
         std::string error;
