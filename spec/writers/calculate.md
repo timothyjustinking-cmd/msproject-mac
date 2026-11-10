@@ -438,8 +438,18 @@ a document edit is pending. Sort and Show Level keep the session-only fallback i
 refusal (the display still changes; nothing is queued, and the note names the pending edit).
 Tested in qt_task_mode_document_edit_gate (Manually Schedule, both orders, the generic wording),
 qt_sort_persist and qt_outline_persist (both orders each). The refusals at the other five
-builder entries share one helper and are driven only through the Manually Schedule case. The
-AppKit shell has none of this (R35eG2-3, item 1.10).
+builder entries share one helper and are driven only through the Manually Schedule case.
+
+*The AppKit shell (W35f-1.10, R35eG2-3).* It had neither half of 2.6, and no record said so. It
+now mirrors both halves and the redo clear in `app/main.mm`: `tableDateFormat:` and
+`customFieldFormula:` refuse before their dialog while any exclusive edit is queued
+(`document_edit_refusal`), `calculateProject:`, `addResources:`, `resourceInformation:`,
+`assignResources:`, `fontBold:` and `defineWbsCode:` refuse while a document edit is pending
+(`pending_document_edit_refusal`, and the Calculate text of the Qt shell), and both dialogs end
+the structural redo list. It has no Sort, Show Level or Manually Schedule command, so those
+three have nothing to mirror. `app/main.mm` cannot be compiled or run here and nothing tests
+it: the `macos-appkit` job (`app-macos.yml`, `-Werror`, runs on push) is the gate, so this is
+fixed in source and not called closed.
 
 Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
 FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded
