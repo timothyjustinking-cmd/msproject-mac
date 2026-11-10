@@ -1,0 +1,127 @@
+[len 7778 sha OK D514696728E5]
+wave23-flags : wave23-flags saved B6EB3CA0 52968381 0CF26C46 1DF70069 07C8AC1D 862040EC EC6EEE70 E1D8C474 size 242176 run MB 1328
+   96 streams, 94 checked, 17 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 586->600
+   EXTRA size-differs Props14 524->500
+   sha256 5b52895
+wave27-percent-actuals : wave27-percent-actuals saved 751424D6 A6AF1746 EBF773E3 A12ECB28 29D37E22 F9BADD57 BA2A8489 6F850208 size 239104 run MB 1304
+   96 streams, 94 checked, 16 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 492->506
+   EXTRA size-differs Props14 544->520
+   sha256 7b67426
+wave27-priority-750 : wave27-priority-750 saved 44541821 A8DC8CC5 4CC62282 EDF36B51 72BFA12F 17BFC4FD C82DE00E 2BE83910 size 239104 run MB 1412
+   96 streams, 94 checked, 16 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 486->500
+   EXTRA size-differs Props14 538->514
+   sha256 7038360
+wave27-unlink : wave27-unlink saved 6E5777C3 D504E02D 5E6535F2 8F467E37 9CB91A86 204AAED0 F63668B5 77684D96 size 242176 run MB 1188
+   96 streams, 94 checked, 17 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 528->542
+   EXTRA size-differs Props14 526->502
+   sha256 21fc46f
+wave28-newtask-auto : wave28-newtask-auto saved 3B14C300 C56B2BBC 0B99FFB2 533910E0 FF359CD3 35665D9F 48789655 92FBCB54 size 239104 run MB 1388
+   96 streams, 94 checked, 16 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 504->500
+   EXTRA size-differs Props14 556->514
+   sha256 84ff16b
+wave28-newtask-manual : wave28-newtask-manual saved 509D9C02 12DC7446 69A3C76B 9C199955 2D6E8C9B 319E4A27 F4D01D82 E653D7F9 size 239104 run MB 1388
+   96 streams, 94 checked, 16 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 508->504
+   EXTRA size-differs Props14 560->518
+   sha256 d5d1e6a
+wave28-outline-indent : wave28-outline-indent saved 4D4696BE B3AEF47F 12221B3B 69475208 E05A9448 E81ED613 07B3D6EB 45CFF6F9 size 239104 run MB 1468
+   96 streams, 94 checked, 11 problems
+   sha256 dd984a3
+wave28-outline-outdent : wave28-outline-outdent saved 51D93AB9 3565E854 57996277 347E6D88 1B527385 37DBD969 36DF9D87 DC83443E size 239104 run MB 1512
+   96 streams, 94 checked, 12 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   sha256 81ff38d
+wave28-outline-summary : wave28-outline-summary saved B514AD06 36AF2948 188D6949 DC84AA1F 5D93EBBB 7B882774 C5B81243 92608122 size 238080 run MB 1512
+   96 streams, 94 checked, 11 problems
+   sha256 f8cc9a2
+wave28-percent-auto0 : wave28-percent-auto0 saved 6A9FC360 D34657BA D6A43BA1 EE268F9B BE30195A FAC59E68 32330751 79F20CD9 size 239104 run MB 2112
+   96 streams, 94 checked, 11 problems
+   sha256 033d357
+wave28-percent-auto100 : wave28-percent-auto100 saved 8581245F 8F9D0B8B E3C4A985 2ED96F2D 2EB645A4 738625F3 F85499F3 3BD941C7 size 239104 run MB 1788
+   96 streams, 94 checked, 11 problems
+   sha256 4e9ed67
+wave28-percent-auto40 : wave28-percent-auto40 saved 8209D47D AD8B63E5 AB676A11 FD8FF0D7 F98C75EA 2DD99AEC B3A8B479 D266A3EB size 239104 run MB 1488
+   96 streams, 94 checked, 11 problems
+   sha256 eef205e
+wave28-percent-manual40 : wave28-percent-manual40 saved FB77E822 66A20CAE 63827748 1E2A4B3E FC5D23FA C38F6F02 04A7CCE4 9FE6F776 size 239104 run MB 1460
+   96 streams, 94 checked, 12 problems
+   sha256 4074884
+wave28-split : wave28-split saved 789E28AC 335C0449 A68CD5AB FB6169A3 D31C0824 C20F7934 3F45F038 E353A6FE size 239104 run MB 1496
+   96 streams, 94 checked, 16 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 490->486
+   EXTRA size-differs Props14 542->500
+   sha256 86ef5b6
+wave28-update : wave28-update saved C3A8541F 4A4A8EB5 841846EB B536231D 9E24FD0D F2C34CEE 90F460F2 66DD50FB size 239104 run MB 1508
+   96 streams, 94 checked, 11 problems
+   sha256 93beffb
+wave29-outline-auto-indent : wave29-outline-auto-indent saved A365CD0B 61691F94 94E9BEFA 02E466B1 E1E0311E D2093DA7 BB65D794 752D3F90 size 239104 run MB 1524
+   96 streams, 94 checked, 13 problems
+   sha256 ffba245
+wave29-outline-auto-outdent : wave29-outline-auto-outdent saved DBC9EAED 98086C2F 5318510D 2AC7C7B2 55FDC8D2 EFDD8423 CFAC803D 32EF19E8 size 239104 run MB 1596
+   96 streams, 94 checked, 14 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   sha256 a1967f3
+wave29-outline-auto-summary : wave29-outline-auto-summary saved 3580CEF4 96300BB8 0FA980C2 BC1D15FD 9372AD36 47777F56 00EAB1CC B10AE709 size 239104 run MB 1608
+   96 streams, 94 checked, 13 problems
+   sha256 9aed5ce
+wave29-outline-manual-parent : wave29-outline-manual-parent saved 68AE31EB 5130B7C2 8301EBCA 75368597 FCB306BC F64163E9 D9B50D22 AA90B616 size 239104 run MB 1548
+   96 streams, 94 checked, 14 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   sha256 987f4db
+wave29-percent-leaf40 : wave29-percent-leaf40 saved F7CF8E3E BEB59D6D CB1DA959 E83A81D6 0E29F043 4C4D27AD 437038CB 2DE40389 size 243200 run MB 2592
+   96 streams, 94 checked, 16 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   EXTRA bytes-differ ???114/TBkndTask/FixedData 3
+   sha256 a573cc2
+wave29-percent-mid60 : wave29-percent-mid60 saved 68B3C37B C86A971D 5B502D92 875B91BC 9945F9E6 01D68E4E AFD9FF4E F2998172 size 243200 run MB 2632
+   96 streams, 94 checked, 16 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   EXTRA bytes-differ ???114/TBkndTask/FixedData 3
+   sha256 693b10d
+wave29-percent-milestone100 : wave29-percent-milestone100 saved 66036FA3 720A15E4 400510AB 85C4DA08 1763E55A C9C1B8E2 C19D6CF4 599751AB size 243200 run MB 2572
+   96 streams, 94 checked, 16 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   EXTRA bytes-differ ???114/TBkndTask/FixedData 3
+   sha256 f9b505d
+wave29-percent-work40 : wave29-percent-work40 saved A3936B0C A07DE0EF 4378AD34 12CE2E0F 54BDC999 68D9B974 52A9A7C6 FFC3A14D size 243200 run MB 2580
+   96 streams, 94 checked, 16 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   EXTRA bytes-differ ???114/TBkndTask/FixedData 3
+   sha256 a573cc2
+wave29-update-60-after : wave29-update-60-after saved 67D1EA15 BFC05460 139B8E7C 68352563 3CFA8740 1A919673 05EE89EE CB60DB0A size 239616 run MB 2324
+   96 streams, 94 checked, 14 problems
+   sha256 13a42be
+wave29-update-60-before : wave29-update-60-before saved B58A5223 C02AB5A6 2740E207 C1C5F1C8 C9EAF429 C0723DCC 984FD414 65C761C5 size 239616 run MB 2316
+   96 streams, 94 checked, 14 problems
+   sha256 db9e591
+wave29-update-60-selected : wave29-update-60-selected saved 814ED929 442BB498 407E03B1 9BB86630 7F629BBB 0C7E8668 90A13845 A94953F5 size 239616 run MB 2280
+   96 streams, 94 checked, 13 problems
+   sha256 c217a3d
+wave31-fill : wave31-fill saved 1C572AA2 F7B0DF5F 972A27FE DF2DACB3 3217A65F 8FB0D1B2 EEDC0141 798E2ED2 size 236544 run MB 1420
+   96 streams, 94 checked, 13 problems
+   sha256 163fcbd
+wave31-resource-sheet : wave31-resource-sheet saved 8A2DCCF7 3DF437C9 2AF44949 4CB99CC9 964E693C 97FE7FFE CB561224 824CB15C size 248832 run MB 2664
+   96 streams, 94 checked, 18 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 18
+   EXTRA bytes-differ ???114/TBkndRsc/Var2Data 9
+   EXTRA size-differs ???214/CEdl/Var2Data 516->496
+   EXTRA size-differs Props14 572->518
+   sha256 b651903
+wave31-tables : wave31-tables saved 9FFC0610 12E78D0F 0F3EDCB6 401A2B6F 4D3A25C7 30EE5515 A07813AD 316AE585 size 240128 run MB 1272
+   96 streams, 94 checked, 16 problems
+   EXTRA size-differs ???214/CEdl/Var2Data 552->488
+   EXTRA size-differs Props14 540->502
+   sha256 acb1818
+wave31-usage : wave31-usage saved 5685971D E962DA65 ACE60DC0 158F08D9 95D7C8E8 23CE508F 13637AFE FD6672D2 size 268288 run MB 2704
+   96 streams, 94 checked, 18 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 18
+   EXTRA bytes-differ ???114/TBkndRsc/Var2Data 9
+   EXTRA size-differs ???214/CEdl/Var2Data 444->426
+   EXTRA size-differs Props14 552->500
+   sha256 9594e8d
+free GB 33.7

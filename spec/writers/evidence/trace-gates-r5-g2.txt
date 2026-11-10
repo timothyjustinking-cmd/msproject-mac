@@ -1,0 +1,58 @@
+[len 3562 sha OK 42082953848F]
+wave34-assign-add-second : wave34-assign-add-second saved 9B94976A 8A9515A9 9E199C32 2A3ADA72 99B80B4F AC0A3A83 B278828A 8035BF38 size 240640 run MB 1468
+   96 streams, 91 checked, 16 problems
+   EXTRA size-differs ???114/TBkndAssn/Fixed2Meta 281->228
+   EXTRA size-differs ???114/TBkndAssn/FixedMeta 186->152
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   sha256 eac83e6
+wave34-assign-add-third : wave34-assign-add-third saved 60318785 D35416C1 F78F7A4E D533A0B1 80B285F1 2981E91C 9703C9C1 3D28D2D9 size 241152 run MB 1452
+   96 streams, 91 checked, 16 problems
+   EXTRA size-differs ???114/TBkndAssn/Fixed2Meta 334->281
+   EXTRA size-differs ???114/TBkndAssn/FixedMeta 220->186
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   sha256 6a4e6f2
+wave34-delete-task : wave34-delete-task saved 3561273F 4183569A 74B62A43 09BB7134 8D797A41 6647EA7E 6B7CD587 A48F8AF9 size 239104 run MB 1384
+   96 streams, 93 checked, 14 problems
+   sha256 790b0ec
+wave34-field-clear : wave34-field-clear saved 5789363C EF4C5C36 49C3877F 4417F7E8 6D4B655C F2E1659C 96BC413C 85A78336 size 239104 run MB 1320
+   96 streams, 93 checked, 14 problems
+   sha256 d97c9c1
+wave34-field-set : wave34-field-set saved 40963DE9 4554DFD8 451BE0D4 2C04E4CB 8D7DEEFC D9F279E9 0FF19558 C8B4A441 size 239104 run MB 1344
+   96 streams, 93 checked, 14 problems
+   sha256 f721a15
+wave34-insert-task : wave34-insert-task saved 9C83AD29 95180E90 E9D605DD 10638648 9E9C1BDF 9052B43B F4535929 32BCA9A5 size 240128 run MB 1384
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   EXTRA bytes-differ ???114/TBkndTask/FixedData 3
+   sha256 6b4d0a9
+wave34-link-add : wave34-link-add saved 3B333AAB 0A3AC29E 3A9FB470 6D968080 1422791C AAE11EC6 95A206E1 FCDF5A3A size 239104 run MB 1352
+   96 streams, 93 checked, 14 problems
+   sha256 879d31c
+wave34-note-clear : wave34-note-clear saved 60AE4BB2 041F75A7 62554B2A 1937E800 A71FC65C BCE3D089 ECB97184 88EAC0BE size 239104 run MB 1276
+   96 streams, 93 checked, 14 problems
+   sha256 12fac24
+wave34-note-escape : wave34-note-escape saved BF5CAA4B DDE3BAC8 DDC856B3 220FEFC3 66EC530E 5FD2450E 9DBE6986 22A56BB3 size 239104 run MB 1332
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndTask/Var2Data 6
+   sha256 58567a8
+wave34-note-multiline : wave34-note-multiline saved 77BE9A8B DBC3D4FC 038A633C 067578FE 8BE075F0 F322BEB1 3BC0C56D 3523B169 size 239104 run MB 1284
+   96 streams, 93 checked, 14 problems
+   EXTRA bytes-differ ???114/TBkndTask/Var2Data 6
+   sha256 cd3b3f3
+wave34-note-nonascii : wave34-note-nonascii saved 99D8C450 D886FD9D 98BFE997 F552B8DE A2B3BC61 E9A34139 8DAECDE1 D63B5EC0 size 239104 run MB 1284
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndTask/Var2Data 6
+   sha256 8c78126
+wave34-note-replace : wave34-note-replace saved 1A3EBF77 A2D84C93 AFF5C237 463A6E67 548D90ED B86D0716 E33F0785 8141FA7C size 239104 run MB 1324
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndTask/Var2Data 6
+   sha256 92c94c5
+wave34-note-two : wave34-note-two saved E52C9882 769F1155 AD2E6A7D A4B0EADF 2B6040E0 AA6AF44F FFA105A1 C5908F39 size 239616 run MB 1320
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndTask/Var2Data 6
+   sha256 6e1c134
+wave34-resource-add-third : wave34-resource-add-third saved 3B901D1E 08EF45DA 1D9818B5 015B1D96 9CF5A79E 69807208 FF995F58 7448A6D4 size 239616 run MB 1168
+   96 streams, 93 checked, 14 problems
+   EXTRA bytes-differ ???114/TBkndRsc/Var2Data 3
+   sha256 e07124a
+free GB 49.6

@@ -1,0 +1,53 @@
+[len 3847 sha OK 77B0D8555C78]
+wave35-viewstate-outline-all : wave35-viewstate-outline-all saved 223BC8E7 2882D4D4 491B4C46 B6D04BE3 11E54320 EF3E2769 70297843 B34E4A82 size 240128 run MB 1344
+   96 streams, 93 checked, 12 problems
+   sha256 00ae4f2
+wave35-viewstate-outline-deep-level1 : wave35-viewstate-outline-deep-level1 saved 34703A52 C300BEB0 252FEC83 B474FF01 8C2CFE32 01885C7A 702C7957 ACD47D9C size 241152 run MB 1436
+   96 streams, 93 checked, 12 problems
+   sha256 81512fe
+wave35-viewstate-outline-deep-level2 : wave35-viewstate-outline-deep-level2 saved 574E1D70 917DFC4B 3D1B68B5 C066ACEC FDB172AD E2782039 AE8299C0 2DAE723D size 241152 run MB 1400
+   96 streams, 93 checked, 12 problems
+   sha256 961cd1a
+wave35-viewstate-outline-level1 : wave35-viewstate-outline-level1 saved 5171F093 CBCAC75C 587D6D87 5819FCCD 4F3635ED A108FFBB 453CE61A 04FF79A2 size 240128 run MB 1392
+   96 streams, 93 checked, 13 problems
+   sha256 491fe4d
+wave35-viewstate-outline-level2 : wave35-viewstate-outline-level2 saved E5FD7624 4DA37417 5FE01100 482E1526 6A19E6F1 C9C0EA16 CFF6041F 7F245EC4 size 240128 run MB 1328
+   96 streams, 93 checked, 12 problems
+   sha256 3be7690
+wave35-viewstate-sort-duration-desc : wave35-viewstate-sort-duration-desc saved F61FA055 38561C8F EBFCDE77 E0B88823 E6B8EBEF EEBEF138 172C458F 50C4DB1E size 240128 run MB 1384
+   96 streams, 93 checked, 12 problems
+   sha256 d2c781e
+wave35-viewstate-sort-flat-name-desc : wave35-viewstate-sort-flat-name-desc saved 522A64FE 98113611 8C6028D5 AAA50BC0 24A6CEB0 33365306 28011962 903D0601 size 240128 run MB 1380
+   96 streams, 93 checked, 12 problems
+   sha256 d31f5b1
+wave35-viewstate-sort-name-asc : wave35-viewstate-sort-name-asc saved BD8FACEF E1798202 B746D352 08A6B239 6686564E 29D734C5 0BD70491 6C279EB6 size 240128 run MB 1380
+   96 streams, 93 checked, 12 problems
+   sha256 15ec51b
+wave35-viewstate-sort-name-desc : wave35-viewstate-sort-name-desc saved 7F92AFDA A2EF6673 86FE005B DFE57C09 6D0F7165 F16399A1 D0A91ECF 054FF861 size 240128 run MB 1404
+   96 streams, 93 checked, 12 problems
+   sha256 100d6ce
+wave35-viewstate-sort-two-keys : wave35-viewstate-sort-two-keys saved 347C6925 0D4504BE 8D140233 F680D124 66DB1208 8EAF53AC C457D83C 93EC3323 size 240128 run MB 1392
+   96 streams, 93 checked, 12 problems
+   sha256 1850149
+wave35-viewstate-table-cost : wave35-viewstate-table-cost saved EE2436A5 C581D8D3 2BAF7791 D209C577 CF25F58F 08ADB467 E9B79F19 B2572D0C size 241152 run MB 1396
+   96 streams, 93 checked, 13 problems
+   sha256 c141896
+wave35-viewstate-table-schedule : wave35-viewstate-table-schedule saved 1501D986 6EB806D0 D558A6B5 5C73443D 6815AC05 3BCE6263 5923DF7A 4DDC809B size 241152 run MB 1420
+   96 streams, 93 checked, 12 problems
+   sha256 489335c
+wave35-viewstate-zoom-custom : wave35-viewstate-zoom-custom saved 126DEE1B FA9E9BD2 7692FE76 92554C1D 728BE829 FC82012C 572E2E9D A1BE7D26 size 240128 run MB 1404
+   96 streams, 93 checked, 12 problems
+   sha256 7d2fb3f
+wave35-viewstate-zoom-custom-10d : wave35-viewstate-zoom-custom-10d saved 419F688D 73077D95 A81294FC D195ED73 E51E55DE 3A5D4F63 589146DE 11B61793 size 240128 run MB 1392
+   96 streams, 93 checked, 12 problems
+   sha256 2d557ed
+wave35-viewstate-zoom-custom-narrow : wave35-viewstate-zoom-custom-narrow saved 61DA1F64 E19EBC15 3F62C9B3 2D292F9F 62FB8DC1 45224637 E8A59C1F D41E3351 size 240128 run MB 1548
+   96 streams, 93 checked, 12 problems
+   sha256 f851096
+wave35-viewstate-zoom-entire : wave35-viewstate-zoom-entire saved 9463F756 34E932AE 2C2F5360 3574FBF3 E1E0DB5F 0DFC8294 96C14C61 2D8B7597 size 240128 run MB 1396
+   96 streams, 93 checked, 12 problems
+   sha256 f1ad537
+wave35-viewstate-zoom-reset : wave35-viewstate-zoom-reset saved 13F28562 3F7D5C2C 1C14A9C4 EB5524BA 1CB27CC3 04DA768D 6F59D8D0 74F712B7 size 240128 run MB 1388
+   96 streams, 93 checked, 12 problems
+   sha256 2cc0041
+free GB 33.8

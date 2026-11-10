@@ -1,0 +1,61 @@
+[len 3825 sha OK 67A054342177]
+wave30-assign-add : wave30-assign-add saved 73C1D372 23E78477 F5566458 D4B0A033 B3323D5F 31213E55 A7400000 FE6A7E96 size 239616 run MB 2288
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   sha256 1e59f66
+wave30-assign-delete : wave30-assign-delete saved 10EC9876 23F239D8 AAFFB532 4985B669 F81D04CE 8DE50E97 BB9ABE98 F8FBF3E2 size 239616 run MB 2296
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Var2Data 3
+   sha256 7a44fc0
+wave30-inactivate : wave30-inactivate saved 36CDC038 E54A41DD 01896F2E 3B04A0BE 36B2EB4D DCEAF9E4 3577A482 6E7051FF size 239104 run MB 1284
+   96 streams, 93 checked, 13 problems
+   sha256 6cd4c1c
+wave30-inactivate-second : wave30-inactivate-second saved C26B444C 51026360 7CFB8F96 DA323827 F57B81DB E9241585 37117F79 9419A791 size 239104 run MB 1292
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndAssn/Fixed2Meta 1
+   EXTRA bytes-differ ???114/TBkndTask/FixedMeta 1
+   sha256 6417b48
+wave30-level : wave30-level saved 3084D06B AAC945D2 730DCC73 E55C34D1 87DE99F5 3C41728D 9BBD8A1D 71593CAD size 240128 run MB 1504
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndTask/FixedMeta 2
+   sha256 5952b63
+wave30-move-back : wave30-move-back saved EDE595B4 EF3993F3 2E794E19 4D4EA68C B73AC428 B2DFE7F0 E7EC03DC B1F1A8B9 size 239104 run MB 1332
+   96 streams, 93 checked, 13 problems
+   sha256 d82dacc
+wave30-move-forward : wave30-move-forward saved 827A24EB 8DF821BA 7445DECE 8DE7D94C FD027831 0ED3E22E 41195779 36362D78 size 239104 run MB 1316
+   96 streams, 93 checked, 14 problems
+   sha256 a07ac1f
+wave30-notes : wave30-notes saved DC7EA92B D35A65DB 5A9EA59D 56DDDA0E F69D6552 D4521C5A FC754FCC 66B4C044 size 239104 run MB 1292
+   96 streams, 93 checked, 14 problems
+   EXTRA bytes-differ ???114/TBkndTask/Var2Data 3
+   sha256 3ae8f12
+wave30-resource-add : wave30-resource-add saved 2970A56E DEAF8322 BCD53EE8 A2F9FC5E 0F9FBEA2 6D886E57 4099B3E7 85CCE1D7 size 239104 run MB 2036
+   96 streams, 93 checked, 15 problems
+   EXTRA bytes-differ ???114/TBkndRsc/Var2Data 3
+   sha256 a9c8479
+wave30-resource-notes : wave30-resource-notes saved A27B7FFA 49CF23ED F012D706 D975CF95 7F5739A7 9BAB504F B5259E98 EB3E80DA size 239104 run MB 2212
+   96 streams, 93 checked, 14 problems
+   EXTRA bytes-differ ???114/TBkndRsc/Var2Data 3
+   sha256 4ead275
+wave30-resource-rename : wave30-resource-rename saved A90D7B8F 6FF8C6E9 47EC526D 616D0ED9 EEBC3157 C08E567B 2F3CAF64 4E0C620E size 239104 run MB 2204
+   96 streams, 93 checked, 13 problems
+   sha256 8c2d4d7
+wave30-respect-links-auto : wave30-respect-links-auto saved EB102E7C 987EBB71 A76E3F94 B893E387 39A0BEA6 3221B1FA 43986B33 E6CE365C size 242176 run MB 1360
+   96 streams, 93 checked, 14 problems
+   sha256 103867c
+wave30-respect-links-manual : wave30-respect-links-manual saved B464A7B5 CF6100BD 8710F544 804CF5BB 81A7A43A DD038AD8 91E690A2 15D0DC5E size 242176 run MB 1372
+   96 streams, 93 checked, 14 problems
+   sha256 16b4802
+wave30-task-mode-auto : wave30-task-mode-auto saved 70572BCD 1BC143CD E919D0A7 39E55C70 635DF415 1554FA03 AF29319E 59BAB126 size 239104 run MB 1300
+   96 streams, 93 checked, 13 problems
+   sha256 b0c1895
+wave30-task-mode-manual : wave30-task-mode-manual saved B14B7F0A 0AD89CDA 681CC4BB 3EAAA67A 189111FA 8E46EBF6 12267F51 B59ED917 size 239104 run MB 1296
+   96 streams, 93 checked, 13 problems
+   sha256 0021e72
+wave30-timeline : wave30-timeline saved 329522AE 4565E95D 133D2CCB 4CE53521 37A11F3E DE4B4449 60B44908 CD6A75C2 size 239104 run MB 1260
+   96 streams, 93 checked, 14 problems
+   sha256 d5ae249
+wave30-wbs : wave30-wbs saved 31B0FE17 684B7D85 140B5CC1 4552EEC2 C8214079 6F0641D4 D3AA8D4C ACC5A631 size 239104 run MB 1372
+   96 streams, 93 checked, 14 problems
+   sha256 491316d
+free GB 33.9
