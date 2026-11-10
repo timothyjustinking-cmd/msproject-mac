@@ -23,6 +23,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -266,6 +267,17 @@ Bytes file_bytes(std::string const& path) {
     std::ifstream in(path, std::ios::binary);
     return Bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
 }
+
+/* W35f-1.12 (R35eG2-8): the scratch-probe seam's scope guard, as FaultSeamReset is for the fault
+ * seam.  Declared before the seam is set, it turns the seam off however the block ends, so a
+ * check or file read that throws between the set and the reset cannot leave every later
+ * Calculate save failing (or faking a free path). */
+struct ProbeSeamReset {
+    ~ProbeSeamReset() {
+        mppwrite::set_calculate_scratch_probe_fault(std::filesystem::file_type::none,
+                                                    std::error_code());
+    }
+};
 
 template <typename Fn>
 void refuses(Fn&& fn, std::string_view needle, std::string const& what) {
@@ -1486,6 +1498,7 @@ void refused_requests() {
                                    std::filesystem::copy_options::overwrite_existing);
         Bytes const before = file_bytes(target);
         std::error_code const denied = std::make_error_code(std::errc::permission_denied);
+        ProbeSeamReset const reset;
         mppwrite::set_calculate_scratch_probe_fault(std::filesystem::file_type::none, denied);
         std::string text;
         try {
@@ -1494,8 +1507,6 @@ void refused_requests() {
         } catch (std::exception const& failure) {
             text = failure.what();
         }
-        mppwrite::set_calculate_scratch_probe_fault(std::filesystem::file_type::none,
-                                                    std::error_code());
         check(text.find("cannot check whether the scratch path") != std::string::npos &&
                   text.find(denied.message()) != std::string::npos,
               "scratch probe failure: the refusal names the OS error (got: " + text + ")");
@@ -1517,6 +1528,7 @@ void refused_requests() {
         std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
                                    std::filesystem::copy_options::overwrite_existing);
         Bytes const before = file_bytes(target);
+        ProbeSeamReset const reset;
         mppwrite::set_calculate_scratch_probe_fault(
             std::filesystem::file_type::not_found,
             std::make_error_code(std::errc::no_such_file_or_directory));
@@ -1526,14 +1538,40 @@ void refused_requests() {
         } catch (std::exception const& failure) {
             text = failure.what();
         }
-        mppwrite::set_calculate_scratch_probe_fault(std::filesystem::file_type::none,
-                                                    std::error_code());
         check(text == "saved", "scratch probe not_found with an error code: the save proceeds (got: " +
                                    text + ")");
         check(file_bytes(target) != before,
               "scratch probe not_found with an error code: the target is written");
         check(!std::filesystem::exists(target + ".calculate.tmp"),
               "scratch probe not_found with an error code: no scratch file left");
+        std::filesystem::remove(target);
+    }
+    {
+        /* W35f-1.12 (R35eG2-8): the guard itself.  The seam is armed and a step between the set
+         * and the end of the block throws (a failed check or file read would); the guard turns
+         * the seam off, so the next save is not refused for a scratch path that is free. */
+        CfbDocument doc = control;
+        std::string const target = out_path("w35-calculate-atomic-target8.mpp");
+        std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"), target,
+                                   std::filesystem::copy_options::overwrite_existing);
+        Bytes const before = file_bytes(target);
+        try {
+            ProbeSeamReset const reset;
+            mppwrite::set_calculate_scratch_probe_fault(
+                std::filesystem::file_type::none,
+                std::make_error_code(std::errc::permission_denied));
+            throw std::runtime_error("a step between the set and the reset failed");
+        } catch (std::runtime_error const&) {
+        }
+        std::string text = "saved";
+        try {
+            mppwrite::save_calculate(doc, good, target);
+        } catch (std::exception const& failure) {
+            text = failure.what();
+        }
+        check(text == "saved",
+              "scratch probe guard: the seam is off after a block that threw (got: " + text + ")");
+        check(file_bytes(target) != before, "scratch probe guard: the target is written");
         std::filesystem::remove(target);
     }
     {
