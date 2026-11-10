@@ -27,6 +27,10 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
+#include <QInputDialog>
+#include <QLineEdit>
+#include <QListWidget>
+#include <QPushButton>
 #include <QTimer>
 #include <QVariant>
 #include <QWidget>
@@ -49,6 +53,7 @@
 #include "fixture_guard.h"
 #include "gate_util.h"
 #include "main_window.h"
+#include "project_dialogs_qt.h"
 #include "ribbon_bar.h"
 #include "save_pair_compare.h"
 #include "sheet_table_model.h"
@@ -96,6 +101,20 @@ bool click_calculate(msqt::MainWindow& window) {
     QApplication::processEvents();
     QApplication::processEvents();
     return true;
+}
+
+// Fills and accepts the modal QInputDialog the Custom Fields dialog's Formula... button opens.
+// It polls (the dialog is not the active modal widget until its event loop is running) and
+// gives up after `tries` rounds, so a missing dialog cannot hang the gate.
+void fill_input_dialog(const QString& text, int tries) {
+    QTimer::singleShot(10, [text, tries]() {
+        if (auto* input = dynamic_cast<QInputDialog*>(QApplication::activeModalWidget())) {
+            input->setTextValue(text);
+            input->accept();
+        } else if (tries > 0) {
+            fill_input_dialog(text, tries - 1);
+        }
+    });
 }
 
 struct PairContext {
@@ -523,6 +542,113 @@ int main(int argc, char** argv) {
                             "a table / date format or custom-field formula edit is pending")),
                         "Calculate Project beside a pending date-format edit: the status line "
                         "names it");
+        }
+    }
+
+    // --- 2d. W35f-1.5 (R35eG2-2): Undo, then a document edit, then Redo ----------------------
+    // Calculate Project, Ctrl+Z (nothing queued, so each dialog accepts), then a table / date
+    // format, a custom-field formula or a Custom Fields formula.  The document edit is pending,
+    // so Ctrl+Y would re-queue the withdrawn Calculate beside it without push(): the shell ends
+    // the structural redo list instead and Redo is disabled.
+    {
+        enum class Route { date_format, custom_formula, custom_fields };
+        const struct {
+            Route route;
+            const char* label;
+        } routes[] = {{Route::date_format, "Table / Date Format"},
+                      {Route::custom_formula, "Custom Field Formula"},
+                      {Route::custom_fields, "Custom Fields"}};
+        for (const auto& item : routes) {
+            const std::string label = item.label;
+            msqt::MainWindow window;
+            window.resize(msqt::kParityWidth, 800);
+            QString error;
+            gate::check(window.open_file(copy, &error),
+                        (label + ": the control reopens for the redo case").c_str());
+            window.show();
+            QApplication::processEvents();
+            QAction* undo = gate::find_action(window, app::MenuAction::undo);
+            QAction* redo = gate::find_action(window, app::MenuAction::redo);
+            if (undo == nullptr || redo == nullptr) {
+                gate::check(false, (label + ": Undo and Redo exist").c_str());
+                continue;
+            }
+            gate::check(click_calculate(window) && window.pending_edits().size() == 1,
+                        (label + ": Calculate Project is queued").c_str());
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        (label + ": Undo withdraws Calculate Project onto the redo list").c_str());
+
+            bool dialog_seen = false;
+            QAction* action = nullptr;
+            if (item.route == Route::date_format) {
+                action = gate::find_action(window, app::MenuAction::table_date_format);
+                QTimer::singleShot(0, [&dialog_seen]() {
+                    auto* dialog = dynamic_cast<msqt::TableDateFormatDialog*>(
+                        QApplication::activeModalWidget());
+                    if (dialog == nullptr) {
+                        return;
+                    }
+                    dialog_seen = true;
+                    const int index = dialog->date_format_combo()->findData(QVariant(4));
+                    if (index >= 0) {
+                        dialog->date_format_combo()->setCurrentIndex(index);
+                    }
+                    dialog->accept();
+                });
+            } else if (item.route == Route::custom_formula) {
+                action = gate::find_action(window, app::MenuAction::custom_field_formula);
+                QTimer::singleShot(0, [&dialog_seen]() {
+                    auto* dialog = dynamic_cast<msqt::CustomFormulaDialog*>(
+                        QApplication::activeModalWidget());
+                    if (dialog == nullptr) {
+                        return;
+                    }
+                    dialog_seen = true;
+                    dialog->field_combo()->setCurrentIndex(0);
+                    dialog->formula_edit()->setText("[Duration]/240");
+                    dialog->accept();
+                });
+            } else {
+                action = gate::find_action(window, app::MenuAction::custom_fields);
+                // The dialog's Formula... button opens a nested input dialog: a second timer
+                // fills and accepts it while the first is inside click().
+                QTimer::singleShot(0, [&dialog_seen]() {
+                    auto* dialog =
+                        dynamic_cast<msqt::CustomFieldsDialog*>(QApplication::activeModalWidget());
+                    if (dialog == nullptr) {
+                        return;
+                    }
+                    dialog_seen = true;
+                    for (int row = 0; row < dialog->field_list()->count(); ++row) {
+                        if (dialog->field_list()->item(row)->text() == QStringLiteral("Text1")) {
+                            dialog->field_list()->setCurrentRow(row);
+                        }
+                    }
+                    fill_input_dialog(QStringLiteral("[Duration]/240"), 200);
+                    dialog->formula_button()->click();
+                    dialog->accept();
+                });
+            }
+            gate::check(action != nullptr && action->isEnabled(),
+                        (label + " is an enabled menu action (redo case)").c_str());
+            if (action == nullptr || !action->isEnabled()) {
+                continue;
+            }
+            action->trigger();
+            QApplication::processEvents();
+            gate::check(dialog_seen && window.document_dirty(),
+                        (label + ": the document edit is pending after Undo").c_str());
+            gate::check(!redo->isEnabled(),
+                        (label + ": the pending document edit ends the structural redo list "
+                                 "(Redo is disabled)")
+                            .c_str());
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        (label + ": Redo re-queues no Calculate Project beside the document edit")
+                            .c_str());
         }
     }
 

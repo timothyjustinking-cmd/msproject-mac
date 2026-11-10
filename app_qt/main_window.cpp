@@ -4227,6 +4227,10 @@ void MainWindow::show_custom_fields() {
         update_status();
         return;
     }
+    // W35f-1.5 (R35eG2-2): a pending document edit ends the structural redo list.  Left on it,
+    // Ctrl+Y re-queued a withdrawn Calculate Project beside the edit without push(), and Save
+    // refuses the pair (the Redo route W35d-0.5 closed for Cut and Paste).
+    structural_.clear_redo();
     update_window_title();
     update_menu_state();
     set_message("queued the formula for field 0x" +
@@ -4910,6 +4914,10 @@ void MainWindow::show_table_date_format() {
         update_status();
         return;
     }
+    // W35f-1.5 (R35eG2-2): a pending document edit ends the structural redo list.  Left on it,
+    // Ctrl+Y re-queued a withdrawn Calculate Project beside the edit without push(), and Save
+    // refuses the pair (the Redo route W35d-0.5 closed for Cut and Paste).
+    structural_.clear_redo();
     update_menu_state();
     update_window_title();
     set_message("table / date format edit pending; File > Save writes 214/CTable", false);
@@ -4959,6 +4967,10 @@ void MainWindow::show_custom_formula() {
         update_status();
         return;
     }
+    // W35f-1.5 (R35eG2-2): a pending document edit ends the structural redo list.  Left on it,
+    // Ctrl+Y re-queued a withdrawn Calculate Project beside the edit without push(), and Save
+    // refuses the pair (the Redo route W35d-0.5 closed for Cut and Paste).
+    structural_.clear_redo();
     set_message("custom-field formula for field " + std::to_string(edit.field_id) +
                     " is pending; Save writes it",
                 false);
