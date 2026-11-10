@@ -361,9 +361,10 @@ then be exempted on that evidence.  Until then nothing is lifted.
 
 **Files the port itself saved that are now refused.** A file the port saved after an edit that
 writes `114/Props` no longer matches the control there, and Calculate Project refuses it.  An
-Add Resources save meets the resource-table check first, and a custom-field set the
-variable-record check, when they come before the pin (W35e-1.2, R35dW-4); the pin's records for
-each are:
+Add Resources or Assign Resources save meets the resource-table check first, and a custom-field
+set the variable-record check, before the pin is reached (W35e-1.2, R35dW-4; those checks always
+run first and the pin last, `calculate.cpp`'s `check_unvaried_parameters` and `check_props_pin`;
+W35f-1.13, R35eG1-6); the pin's records for each are:
 - Define WBS Code (records `0x0240138b` and `0x024013be`);
 - a custom-field set (`0x02401392`, `0x024013c5`);
 - Add Resources (tail scalars Resource count `0x02000001`, Resource size `0x02000100` and
