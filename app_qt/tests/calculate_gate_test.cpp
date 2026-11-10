@@ -291,7 +291,8 @@ int main(int argc, char** argv) {
 
                 QAction* copy_action = gate::find_action(window, app::MenuAction::copy);
                 QAction* paste = gate::find_action(window, app::MenuAction::paste);
-                gate::check(copy_action != nullptr && paste != nullptr, "Copy and Paste are menu actions");
+                gate::check(copy_action != nullptr && paste != nullptr,
+                            "Copy and Paste are menu actions");
                 if (copy_action != nullptr && paste != nullptr) {
                     window.sheet()->select_cell(2, static_cast<std::size_t>(name_column));
                     window.refresh_menu_state();
