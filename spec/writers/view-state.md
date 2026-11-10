@@ -376,7 +376,9 @@ longer shows).
 | Show Level | clearing the sort | accepted: a cleared sort shows the file's own order, which is what the level is relative to |
 | Show Level | another level, All Subtasks | replaces or withdraws the queued level (unchanged) |
 | a session Sort shown, nothing queued | a session Show Level 1 or deeper | the queue is refused (W35e-1.1, R35dG1-1(a); narrowed by W35f-0.1, R35eG1-1): the level would queue and Save would write it over the file's own order, so it is shown for the session only with the sort named; a level that could never queue (a read-only file, Level 3 to 9, a file the builder refuses) is a session-only level with its own note, as in wave 31; All Subtasks queues nothing and is accepted; clearing the sort lets the level queue |
-| Show Level or Sort on the redo list (Undo withdrew it) | a sort choice or clearing the sort | ends the redo list (W35e-1.1, R35dG1-1(b); for a Sort since W35d-0.4): Ctrl+Y would re-queue the edit without `push()` under the sort chosen now |
+| Show Level or Sort on the redo list (Undo withdrew it) | a sort choice | ends the redo list (W35e-1.1, R35dG1-1(b); for a Sort since W35d-0.4): Ctrl+Y would re-queue the edit without `push()` under the sort chosen now |
+| a Sort on the redo list | clearing the sort | ends the redo list, as a sort choice does |
+| a Show Level on the redo list | clearing the sort | kept (W35f-1.4, R35eG1-4): a cleared sort shows the file's own order, which the level is relative to, so Ctrl+Y re-queues what the display matches |
 
 Tests: `qt_sort_persist` (Collapse All, the row toggle, the summary toggle, a session Level,
 All Subtasks, clearing the Sort, and Expand All disabled) and `qt_outline_persist` (a session
