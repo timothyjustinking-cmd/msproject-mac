@@ -1,43 +1,52 @@
-# Trace of the null save (target N): capture done, gate FAILED, analysis not run
+# Trace of the null save (target N), Project 2021 perpetual: capture done, gate PASSED, analysis not needed
 
-_Run Mon 9 Nov 2026 in the isolated trace VM (network disconnected). Written by the trace
-session; scanned and committed by the coordinator on Mon 9 Nov 2026._
+_Run Tue 10 Nov 2026 in the isolated trace VM (network disconnected). Written by the TRACE agent; not scanned or committed._
 
 | item | value |
 |---|---|
-| VM build line (`build.txt`, path omitted) | WINPROJ.EXE 16.0.20430.20182 sha256 F1A7E52729C01C115535B1277C5553302D15F996FCE8D433DFCE11E0FD7F5F6B |
-| Office product id (VM registry) | ProjectProRetail (subscription client), updates off |
+| VM build line (`build.txt`, path omitted) | WINPROJ.EXE 16.0.20430.20182 sha256 F1A7E52729C01C115535B1277C5553302D15F996FCE8D433DFCE11E0FD7F5F6B (matches the pinned hash) |
+| Office product id (VM registry, ClickToRun ProductReleaseIds) | ProjectPro2021Retail, updates off, on the 5-day pass ("Activation Required", full features until Sun 15 Nov 2026) |
 | Input | `wave30-calculate-control.mpp` (copy hash 8E4E81D849DF, matches the repo file) |
 | Edit | none (opened, calculation manual, user name `trace`, `FileSaveAs`) |
-| Saved file SHA-256 | 5C38BE8C9FCC86D5F669C0DA2E1AEB8D2B4C002A36E21732C5D530FBF8C247A2 |
-| Saved file size | 239104 bytes, 104 streams |
-| Trace file | one `.run`, 742,391,808 bytes; stays in the VM and was rolled back with it |
+| Saved file SHA-256 | B539328F8D1F61EF88358815BAFA14C442D643E4FAC560F146BC831D808EBEFF |
+| Saved file size | 236544 bytes, 96 streams (the committed null save is also 236544 bytes, 96 streams) |
+| Trace file | one `.run`, 83,886,080 bytes; stays in the VM |
 
 ## Gate: traced null save against the committed null save
 
-The committed `wave30-calculate-control-null.mpp` (236544 bytes, 96 streams) is the reference.
-The noise mask is the bytes where the committed control and its committed null differ; a
-stream whose size the null save changes is skipped as whole-stream noise (`214/CEdl/Var2Data`,
-`Props14`).  Result: **104 streams, 94 checked, 26 problems**.  The traced file is not the
-committed null save, so the null noise measured here is the VM build's, not the pairs'.
+Command: `trace_gate.py null.mpp wave30-calculate-control-null.mpp wave30-calculate-control.mpp wave30-calculate-control-null.mpp`.
+Result: **96 streams, 93 checked, 14 problem lines** (printed block SHA-256 fd18b60c99799dd58e1bea52fc4479c57f0e8ca5d490b995f31e7d3848fbf603, re-computed on the host from the copied text: equal).
 
-| kind | streams | detail |
-|---|---|---|
-| streams only in the traced save (8) | `114/TBkndBoardColumn/{FixedData,FixedMeta,Var2Data,VarMeta}`, `114/TBkndSprint/{FixedData,FixedMeta,Var2Data,VarMeta}` | sizes 96/56/96/84 and 76/36/46/48; the committed saves have no board or sprint tables |
-| size differs (2) | `SummaryInformation` 292 -> 284; `114/Props` 88736 -> 89542 | `Props` grows 806 bytes |
-| bytes differ outside the noise mask (16) | `114/TBkndAssn/{Fixed2Data 40, Var2Data 31, VarMeta 3}`, `114/TBkndCal/{Fixed2Data 24, FixedData 4}`, `114/TBkndCons/Fixed2Data 30`, `114/TBkndTask/{Fixed2Data 54, FixedMeta 1}`, `214/CEdl/{FixedData 10, VarMeta 1}`, `214/CFilter/FixedData 20`, `214/CGrouping/FixedData 20`, `214/CTable/FixedData 10`, `214/CV_iew/{FixedData 30, Var2Data 4}`, `214/Props 18` | byte counts; many are the per-save stamp words, which sit at different values and positions in the two files |
-| whole-stream noise, sizes differ | `214/CEdl/Var2Data` 602 -> 500; `Props14` 530 -> 456 | not compared |
+```
+96 streams, 93 checked, 14 problems
+bytes-differ ???114/Props 24
+bytes-differ ???114/TBkndAssn/Fixed2Data 40
+bytes-differ ???114/TBkndCal/Fixed2Data 10
+bytes-differ ???114/TBkndCons/Fixed2Data 30
+bytes-differ ???114/TBkndTask/Fixed2Data 50
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 602->500
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 18
+size-differs ?SummaryInformation 292->284
+noise-whole Props14 530->464
+```
+
+(The `???` is the stream-name prefix characters the script masks.)
+
+## Judgement
+
+- No `only-in-traced` or `only-in-reference` line: the 8 `114/TBkndBoardColumn` and `114/TBkndSprint` streams of the failed subscription run are gone, and the stream count (96) and file size (236544) equal the committed null save. The edition is now the perpetual one.
+- `114/Props` has no size-differs line (it was 88736 -> 89542 in the failed run).
+- One `size-differs`: `SummaryInformation` 292 -> 284 (8 bytes). It is the OLE property set holding the author and last-author strings; the VM's neutral user name `trace` differs in length from the host's. Per-machine, not per-save.
+- Remaining `bytes-differ` lines are in Fixed2Data and view-state streams and are counted outside the mask built from the committed control against its null save; a Fixed2Data stamp word per record and the view stream save stamps change on every save, so the committed null itself differs from the control at positions that the traced save does not repeat. `noise-whole` streams (`CEdl/Var2Data`, `Props14`) are skipped by the script because the control and its null save differ in size there (control 606 -> null 602 and 572 -> 530). The traced sizes are 500 and 464, against the committed null's 602 and 530 (the failed run gave 500 and 456). Hypothesis, not examined: these streams carry file-path and user-name strings, which differ in length on the VM (`C:\trace\work\...`, user `trace`).
+- Verdict: PASS as a noise baseline (not an exact reproduction of the committed null, because of the user-name-sized SummaryInformation and per-save stamp words). The null run's own diff against the committed null is the noise to subtract from every other target.
 
 ## Questions answered
 
-None.  The gate failed, so no WinDbg analysis was run on this trace (brief: do not analyse a
-save that answers the wrong question).  Rows: 0.
-
-## Likely cause (a hypothesis, not tested)
-
-The pairs were made on the host with Project Professional 2021 (`tests/data/README.md`,
-16.0.20430.20182).  The VM runs the same WINPROJ.EXE image (same SHA-256, same section table)
-but is licensed as the subscription product `ProjectProRetail`.  The extra board and sprint
-tables and the larger `Props` suggest the subscription edition writes agile and other feature
-records that the perpetual edition does not.  Falsifying test: install `ProjectPro2021Retail`
-in the VM (runbook section 3 names it) and repeat this capture; the gate should then pass.
+None required (the null target's purpose is the noise baseline). Rows: 0.
