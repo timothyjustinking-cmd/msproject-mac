@@ -88,3 +88,81 @@ No writer added, no refusal that guards a save lifted, no new Project pair measu
 or trace touched, nothing pushed, no workflow dispatched.
 
 WAVE-35f-G1-COMPLETE
+
+## CLOSE
+
+### CLOSE gates
+
+Fresh trees `build/w35f-close-fresh`, `-app` and `-qt` at `135d253` (the last code change is
+`76c8927`/`5ce1c73` in `core/mppwrite` and `26be753` in `app/main.mm`; every later commit is a
+record or a rewrap), configured from scratch with `CORE_WARNINGS_AS_ERRORS=ON`; script
+`build/w35f/W35f-CLOSE-fresh-gates.ps1`, log `build/w35f/W35f-CLOSE-fresh-gates.log` (summary:
+`build/w35f/close_log_summary.py`). This record, written after that run, is a document and no gate
+reads it.
+
+- core build exit 0 with warnings as errors; `ctest -E plan_recalc` 65/65;
+- `plan_recalc_tests` 512 checks with the corpus, 266 with `MPP_NO_CORPUS=1`;
+- engine self-test 265 checks, 0 failures; `engine_diff.py --selftest` 53 checks; engine suite 8
+  scenarios, 7 pass and the expected `constraint-mso` failure (1 of 247 fields);
+- reader tests 1469 checks with the corpus, 789 without; M2 `recalc --compare` 332 of 332 fields;
+- app build exit 0 and ctest 34/34, with and without `MPP_NO_CORPUS=1`;
+- app_qt build exit 0 and ctest 52/52; no run reported "No tests were found";
+- `check_fixtures.py`, `check_markers.py` (self-test 19 checks, worktree, `main..HEAD`) and
+  `check_command_backlog.py` (114 pins, 114 rows) exit 0; `gen_calculate_props_pin.py --check` up
+  to date; `scan_client_names.py` on the head and on the `main..HEAD` messages 0 hits;
+  `guard_names.py main..HEAD` exit 0; the client-string grep finds none; 0 CR in the LF-pinned
+  types; `git diff --check main..HEAD` exit 0.
+- The gcc, clang and AppleClang jobs cannot run here. **CI is the only proof of W35f-1.10**
+  (`app/main.mm`, the AppKit mirror): its gate is the `macos-appkit` job of `app-macos.yml`, which
+  runs on push, so the merge check "CI green on three OSs" must include that run for `wave35f`.
+  R35cW-CI1, R35cW-CI2 and R35dW-5 stay "fixed in source; CI is its gate" until the coordinator's
+  run is green.
+- Trailer `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 35f)`: present on all 23 builder
+  commits in `47665e1..135d253` (checked by script at CLOSE). The one commit without it,
+  `d884b57`, is the coordinator's wave 35f brief.
+
+### Ids, with the commit that closes each
+
+Nothing here is called closed: only the coordinator's review closes an id (R35eG1-5).
+
+| Group | Ids | Result |
+|---|---|---|
+| G0 | R35eG1-1 | fixed `fd457b4` |
+| G0 | R35eG2-1 | fixed `08b83f9` |
+| G0 | R35eG1-3 | fixed `1a2436e` |
+| G0 | R35eG1-2, R35eG2-9, R35eG1-5 | fixed `fdff5d8` (records) |
+| G1 | R35eG0-1, R35eG0-2, R35eG0-3 | fixed `9e37503`, `6d93f13`, `ae36884` |
+| G1 | R35eG1-4 | fixed `d880529`, record `b3c19d3` |
+| G1 | R35eG2-2, R35eG2-4, R35eG2-6 | fixed `e303559`, `5506509`, `4ffd8a7` |
+| G1 | R35eW-1 | fixed `a0bf0c2`, with a coverage limit (one helper, exercised through the Manually Schedule case) |
+| G1 | R35eW-3 | recorded `66c1555`: the Qt call site is defensive and unreached |
+| G1 | R35eG2-3 | **fixed in source `26be753`; `macos-appkit` is its gate** |
+| G1 | R35eG2-7, R35eG2-8 | fixed `76c8927`, `5ce1c73` |
+| G1 | R35eG1-6, R35eG2-5 with R35eW-4, R35eW-2, R35eG2-10 | fixed `7f63a01`, `6a687db`, `5676398`, `336f197` (records, rewrap) |
+
+Every id in the wave 35e open queue (`wave35e-verification/coord-gates-close.md`) appears in this
+file. Nothing in this wave is deferred. Only R35eG2-3 waits on CI. Carried, not part of this wave's
+queue: R35dG2-1 (Fill Down's guard has no test route), R35cG0-2 (the plan half) and R35cG0-4 (the
+plan-side Props digest), both refused at the writer or the save; the open and unassigned R35bG0-9,
+R35bG1-10 and R35bG2-9.
+
+**Guards seen red:** per group in the G0 and G1 rows above; the logs are
+`build/w35f/*-red-*.log` and `*-mut-*.log`. CLOSE adds no guard.
+
+**Found, not fixed** (carried from the group rows; nothing new at CLOSE):
+- Under a shown Sort a Level the builder would accept changes the display for the session while
+  File > Save keeps the file's outline, as every session-only Level does (G0).
+- Fill Down's Calculate guard has no test and no route to one; `apply_session_sort` has no
+  queued-view guard (`wave35e-verification/gates-g2.md`).
+- The AppKit mirror (1.10) has no test and was not compiled here.
+- The plan half of R35cG0-2 and the plan-side Props digest of R35cG0-4.
+
+**For the coordinator, after CLOSE:** push `wave35f` and dispatch `qt.yml` and `ci.yml`
+(`macos-appkit` runs on push); mutations at each new guard; an independent review of
+`main..wave35f`. 4(e) is a rerun only if a writer's output changed; this wave adds no writer.
+Merging waits on CI green on all three OSs and no open Critical or High.
+
+No writer added, no refusal that guards a save lifted, no pair measured, no COM, no VM or trace
+touched, nothing pushed, no workflow dispatched, no history rewrite.
+
+WAVE-35f-COMPLETE
