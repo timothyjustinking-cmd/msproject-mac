@@ -1,37 +1,55 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-11-10, wave 35e (fix-only) closed on branch `wave35e` (cut from `wave35d`,
-`wave35c`, `wave35b`, `wave35`, `wave34b`, `wave34`, from `main` = `4fd9b90`).  Waves 34 to 35d
-are NOT merged: CI on all three OSs is not yet green for them and the coordinator's open queue
-(below) stands.  Nothing is pushed.  Keep this file current at every wave close; it is the only
-file a new session must read first._
+_Updated 2026-11-10, wave 35f (fix-only) in progress on branch `wave35f` (cut from `main` at
+`47665e1`).  **Waves 34 to 35e are MERGED into `main`** (`5e1c8ea`, a fast-forward from
+`4fd9b90`: CI green on all seven jobs at `c0c81e5`, no Critical or High open, 4(e) passes; see
+`docs/handoff/status-2026-11-10.md`).  The "NOT merged" and "NOT pushed" sentences in the wave 34
+to 35d bullets below are history, written at each wave's close.  Nothing of wave 35f is pushed.
+Keep this file current at every wave close; it is the only file a new session must read first._
 
 ## The 30-second state
 
-* **Wave 35e (fix-only) is closed on branch `wave35e`** (cut from `wave35d` at `2ea87e5`;
-  `docs/handoff/wave35e-brief.md`, `docs/handoff/wave35e-complete.md`, `WAVE-35e-COMPLETE`,
-  builder Claude Sonnet 5.5; fresh-tree gates at `2dbb5d9` in
-  `build/w35e/W35e-CLOSE-fresh-gates.log`, all green; nothing is pushed).  The coordinator pushes
-  `wave35e`, dispatches `qt.yml` and `ci.yml` and runs mutations and an independent review of
-  `wave35d..wave35e`.  It works the open queue wave 35d left, which is
-  `wave35d-verification/coord-gates-close.md` (the coordinator's list; this file does not
-  shorten it).  **The queue, High first:**
-  * **High:** R35dG0-1 (a partly applied Task Information or Task Form edit keeps the structural
-    redo list; with R35dW-1, the same route re-queues a Calculate Project).  Fixed in source by
-    W35e-0.1 `b8ee455` (`WAVE-35e-G0-COMPLETE`); it stays open until the coordinator's mutations
-    and independent review of G0.
-  * **Mediums:** R35dG0-2, R35dG1-1, R35dG1-2, R35dG1-3, R35dW-2, R35dW-3.  G1's items 1.1
-    (R35dG1-1, `39c8e37`), 1.2 (R35dG1-2 with R35dW-4, `1da3997`) and 1.3 (R35dG1-3, R35dW-2,
-    R35dW-3: these records) are fixed in the builder's tree and await the same review.
-  * **Lows:** R35dG0-3 to -5, R35dG1-4 to -7, R35dG2-1 to -5, R35dW-4 to -6 (G2, `wave35e-complete.md`: all fixed in the builder's tree except R35dG2-1, partly fixed because Fill Down's guard has no test route, and R35dW-5, fixed in source with CI as its gate).
-  * **CI:** R35cW-CI1 and R35cW-CI2 are **fixed in source; CI is their gate** until the
-    coordinator's run is green (`wave35d` was pushed and dispatched at 18:11 UTC on 9 November,
-    and GitHub's Actions incident left `ubuntu-gcc`, `windows-qt` and `macos-qt` unrun).
-  * **Partly fixed, not closed (the wave 35c ids that wave 35d only partly fixed):** R35cG1-2
-    (remainder R35dG0-1), R35cG1-4 (R35dG1-1), R35cW-1 (R35dG1-3, R35dW-2), R35cG0-3 (R35dG1-2,
-    R35dW-4), R35cW-4 (R35dW-1), and R35cG0-2 and R35cG0-4 as before.
-  * **Not open:** R35bG0-1 and R35bG0-2 (the two Calculate Project Highs) were fixed in wave 35c
-    (`7d923dc`, `743ad8b`).
+* **Wave 35f (fix-only) is in progress on branch `wave35f`** (cut from `main` at `47665e1`;
+  `docs/handoff/wave35f-brief.md`, `docs/handoff/wave35f-complete.md`, builder Claude Sonnet 5.5;
+  nothing is pushed).  It works the open queue wave 35e left, which is
+  `wave35e-verification/coord-gates-close.md` (the coordinator's list; this file does not
+  shorten it).  **No Critical or High is open.**  The queue:
+  * **Mediums:** R35eG1-1 (fixed in source by W35f-0.1 `fd457b4`), R35eG2-1 (W35f-0.2 `08b83f9`),
+    R35eG1-3 (W35f-0.3 `1a2436e`) and R35eG1-2 (W35f-0.4, these records) are fixed in the builder's
+    tree (G0) and await the coordinator's mutations and review.
+  * **Lows:** R35eG0-1 to -3, R35eG1-4 to -6, R35eG2-2 to -10, R35eW-1 to -4 (G1 of wave 35f:
+    shell, AppKit, Calculate seams and records).  Still open until G1 and the review.
+  * **Partly fixed, not closed:**
+    * R35dG2-1: Fill Down's Calculate guard has no test route (wave 35e `ae4782a`).
+    * R35cG0-2 (the plan reads Start word +104 only) and R35cG0-4 (the plan has no Props digest),
+      both refused at the writer or the save.
+    * R35cW-4: remainders R35dW-1 (fixed by W35e-0.1 `b8ee455`, closed by the coordinator's
+      review) and R35dW-5 (the AppKit shell's 2.11 refusal, W35e-2.7 `e03da3e`: fixed in source;
+      CI's `macos-appkit` job, green at `c0c81e5`, is its gate; to be closed by the coordinator).
+    * The four wave 35b ids that wave 35c recorded partly fixed: **R35bW-1** (remainders R35cG1-2,
+      through R35dG0-1 closed by W35e-0.1, and R35cG1-3, closed by W35d-1.1), **R35bW-2** (R35cG1-1,
+      closed by W35d-0.4), **R35bG2-2** (R35cG2-1, closed by W35d-1.3) and **R35bG3-1** (R35cG1-4,
+      through R35dG1-1 fixed by W35e-1.1, whose follow-ons are R35eG1-1 and R35eG1-3 above).  Their
+      remainders are closed or fixed in source; none is closed by this file, only the coordinator's
+      review closes an id.
+    * R35bG1-3 and R35bG2-6, recorded as defence in depth.
+  * **Still open and unassigned:** R35bG0-9 and R35bG1-10 (the untested guards in the wave 35b
+    `gates-g0.md` and `gates-g1.md`) and R35bG2-9 (watch: the intermittent
+    `qt_assign_resources_gate`).
+  * **CI:** R35cW-CI1 and R35cW-CI2 were fixed in source and proved by the green wave 35d run
+    (`3d22c39`); wave 35e's run (`c0c81e5`) is green on all seven jobs.  Wave 35f's own CI is the
+    coordinator's after CLOSE.
+  * **Closed by the coordinator:** R35dG0-1, with R35dW-1 (the last High), by the wave 35e G0
+    review; the wave 35d ids not named above are not in the coordinator's open queue
+    (`wave35e-verification/coord-gates-close.md`).  R35bG0-1 and R35bG0-2 (the two Calculate
+    Project Highs) were fixed in wave 35c (`7d923dc`, `743ad8b`).
+
+* **Wave 35e (fix-only) is closed and merged** (branch `wave35e`, cut from `wave35d` at
+  `2ea87e5`; `docs/handoff/wave35e-brief.md`, `docs/handoff/wave35e-complete.md`,
+  `WAVE-35e-COMPLETE`, builder Claude Sonnet 5.5; G1's commits `39c8e37` (1.1), `1da3997` (1.2),
+  `02f1900` (1.3) and `f244d02` (1.4); fresh-tree gates at `2dbb5d9` in
+  `build/w35e/W35e-CLOSE-fresh-gates.log`, all green).  The coordinator's reviews found 0 Critical,
+  0 High, four Mediums and the Lows, which are the wave 35f queue above.
 
 * **Wave 35d (fix-only) is closed on branch `wave35d`** (cut from `wave35c`;
   `docs/handoff/wave35d-brief.md`, `docs/handoff/wave35d-complete.md`, `WAVE-35d-COMPLETE`,
@@ -50,7 +68,7 @@ file a new session must read first._
   * **G2 (the Lows and the Calculate Medium):** fixed R35cG0-5 (`ec2429c`), R35cG0-6
     (`7d908c6`), R35cG1-5 to -7 (`c250aef`, `f9771b6`, `a85d8b3`), R35cG2-2 to -7 (`fc12254`,
     `f3c38d9`, `bb4a398`, `e415fe2`, `51c474b`, `6652ded`) and R35cW-3 and -5 (`6f5cc18`,
-    `492f10c`); R35cW-4 (`4dcfcd7`) is **partly fixed** (remainder R35dW-1).  **Partly fixed,
+    `492f10c`); R35cW-4 (`4dcfcd7`) is **partly fixed** (remainders R35dW-1 and R35dW-5).  **Partly fixed,
     still open:** R35cG0-2 (the plan reads Start word
     +104 only; the writer half is closed) and R35cG0-4 (the plan has no Props digest, a recorded
     gap); both are refused at the writer or the save.
@@ -60,7 +78,9 @@ file a new session must read first._
   `docs/handoff/wave35c-complete.md`, `WAVE-35c-COMPLETE`, builder Claude Sonnet 5.5).  It fixed
   both Calculate Project Highs (R35bG0-1, R35bG0-2), the GCC 13 `dangling-reference` break
   (R35bW-CI1, **CI is its only proof**) and the wave 35b Mediums and Lows, adding no writer;
-  partly fixed: R35bG1-3 and R35bG2-6.  Still open and unassigned: R35bG0-9 and R35bG1-10.
+  partly fixed: R35bG1-3 and R35bG2-6, and R35bW-1, R35bW-2, R35bG2-2 and R35bG3-1 (remainders
+  R35cG1-2 with R35cG1-3, R35cG1-1, R35cG2-1 and R35cG1-4; see the wave 35f line above and
+  `wave35c-complete.md`).  Still open and unassigned: R35bG0-9 and R35bG1-10.
   Fresh-tree gates at `319d187` (`build/w35c/W35c-CLOSE-fresh-gates.log`) are all green,
   `guard_names` included.  Nothing is pushed: the coordinator pushes `wave35c`, dispatches
   `qt.yml` and `ci.yml`, runs mutations and an independent review of `wave35b..wave35c`.
@@ -79,7 +99,7 @@ file a new session must read first._
   calculation options are not pinned); **both were fixed in wave 35c** (`7d923dc`, `743ad8b`)
   and are no longer open.  Nothing is pushed; the coordinator's part is the `9fa599b` decision, push, both CI
   dispatches (CI is the only gate for `app/main.mm` and for macos-qt, W35b-0.1), an
-  independent review of `wave35..wave35b`, and the 4(e) Project reopen check.  Wave 35c closed the rest of that queue (the G4 and CLOSE review ids, complete in `wave35b-verification/coord-gates-close.md`) except: R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth.  What 35c left open is in the wave 35d line above.
+  independent review of `wave35..wave35b`, and the 4(e) Project reopen check.  Wave 35c closed the rest of that queue (the G4 and CLOSE review ids, complete in `wave35b-verification/coord-gates-close.md`) except: R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth, as are R35bW-1, R35bW-2, R35bG2-2 and R35bG3-1 (remainders R35cG1-2 with R35cG1-3, R35cG1-1, R35cG2-1 and R35cG1-4; see the wave 35f line at the top).  What 35c left open is in the wave 35f line at the top.
 
 * **Wave 35 (the scheduler save path, view-state persistence, the wave-34 deferrals, the macOS
   shell) is closed on branch `wave35`** (`docs/handoff/wave35-complete.md`, builder Claude
@@ -337,16 +357,12 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, docs/handoff/standing-rules.md, docs/handoff/wave35-complete.md
-and the files in docs/handoff/wave35-verification/.  Wave 35 is COMPLETE on branch wave35
-(WAVE-35-COMPLETE) and NOT mergeable: High findings are open (Calculate Project R35G1-1..3
-and RW35-W2; view state R35G2-1..4 and RW35-R2; removal from a port-saved file R35G3-1 and
-RW35-W1) and guard_names reports the two 9fa599b blobs, which need a history rewrite before
-any push.  Waves 23-32 are merged into main as 17f5782 (ids in the wave 23-32 records are
-pre-rewrite; map through docs/handoff/wave32-verification/rewrite-sha-map.txt); waves 33 and
-33b are merged (main = 4fd9b90); waves 34 and 34b are closed on their branches and need the
-coordinator's push, both CI dispatches and the brief-4(e) reopen check.  The next step is the
-fix-only wave35b (queued in docs/handoff/plan-waves27-30.md, "Queued from wave 35"), Highs
-first.  Keep every gate in wave35-complete green before each commit and run BOTH name scans
-and scripts/check_markers.py.
+Read docs/START-HERE.md, docs/handoff/standing-rules.md and docs/handoff/wave35f-brief.md.
+Waves 23-32 are merged into main as 17f5782 (ids in the wave 23-32 records are pre-rewrite;
+map through docs/handoff/wave32-verification/rewrite-sha-map.txt); waves 33 and 33b, then waves
+34 to 35e, are merged (main = 5e1c8ea at the wave 35e merge; CI green on all seven jobs, no
+Critical or High open, 4(e) passes).  The next step is the fix-only wave35f on branch wave35f
+(its queue is docs/handoff/wave35e-verification/coord-gates-close.md: four Mediums and the Lows;
+see "The 30-second state" above and docs/handoff/plan-waves27-30.md, "Queued from wave 35e").
+Keep every gate green before each commit and run BOTH name scans and scripts/check_markers.py.
 ```

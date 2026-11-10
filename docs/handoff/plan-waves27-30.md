@@ -403,6 +403,12 @@ rewrite), RW35-W13, and the measuring-wave list at the end of the wave 35b brief
 
 Wave 35c closed the G4 and CLOSE review queue (`wave35b-verification/coord-gates-close.md`) except R35bG0-9 and R35bG1-10 (the untested guards recorded in `gates-g0.md` and `gates-g1.md`; assigned to no item), R35bG2-9 (watch: the intermittent `qt_assign_resources_gate`, green on macOS) and R35bW-3 (answered by the coordinator's map); R35bG1-3 and R35bG2-6 are partly fixed and recorded as defence in depth.
 
+The four wave 35b ids that wave 35c recorded **partly fixed**, with their remainders (W35f-0.4,
+R35eG1-2): R35bW-1 (remainders R35cG1-2, through R35dG0-1 closed by W35e-0.1, and R35cG1-3, closed
+by W35d-1.1), R35bW-2 (R35cG1-1, closed by W35d-0.4), R35bG2-2 (R35cG2-1, closed by W35d-1.3) and
+R35bG3-1 (R35cG1-4, through R35dG1-1 fixed by W35e-1.1, whose follow-ons are R35eG1-1 and
+R35eG1-3, below).  See `wave35c-complete.md`.
+
 ## Queued from wave 35c (CLOSE): the fix-only `wave35d` (10 November 2026)
 
 The complete queue is `wave35c-verification/coord-gates-close.md`, Highs first; `wave35d` (branch
@@ -417,7 +423,7 @@ The complete queue is `wave35c-verification/coord-gates-close.md`, Highs first; 
   R35dG1-2 and R35dW-4) and R35cW-1 (`4410935`; remainder R35dG1-3 and R35dW-2).
 - **G2 (the Lows and the Calculate Medium):** fixed R35cG0-5, R35cG0-6, R35cG1-5 to -7, R35cG2-2
   to -7 and R35cW-3 and -5 (commits in `wave35d-complete.md`); R35cW-4 is **partly fixed**
-  (`4dcfcd7`; remainder R35dW-1).  **Partly fixed, still open:**
+  (`4dcfcd7`; remainders R35dW-1 and R35dW-5).  **Partly fixed, still open:**
   R35cG0-2 (the plan reads Start word +104 only; the writer half is closed) and R35cG0-4 (the plan
   has no Props digest, a recorded gap); both are refused at the writer or the save.
 - Every 35d fix awaits an independent review.
@@ -429,13 +435,34 @@ first); `wave35e` (branch `wave35e`, brief `wave35e-brief.md`, record `wave35e-c
 it.  The open ids are:
 
 - **High:** R35dG0-1, with R35dW-1 (a partly applied Task Information or Task Form edit keeps the
-  structural redo list).  Fixed in source by W35e-0.1 `b8ee455`; open until the coordinator's
-  review.
+  structural redo list).  Fixed by W35e-0.1 `b8ee455` and **closed by the coordinator's wave 35e
+  G0 review** (`wave35e-verification/coord-gates-g0.md`); no High is open.
 - **Mediums:** R35dG0-2, R35dG1-1, R35dG1-2, R35dG1-3, R35dW-2, R35dW-3 (G1: W35e-1.1
-  `39c8e37`, 1.2 `1da3997`, 1.3 the records).
+  `39c8e37`, 1.2 `1da3997`, 1.3 the records `02f1900`, 1.4 `f244d02`).  The coordinator's review found follow-ons, which
+  are the wave 35f queue below (R35eG1-1 and R35eG1-3 against 1.1, R35eG1-2 against 1.3).
 - **Lows:** R35dG0-3 to -5, R35dG1-4 to -7, R35dG2-1 to -5, R35dW-4 to -6 (W35e-1.2 covers
   R35dW-4).  Wave 35e is closed (`WAVE-35e-COMPLETE`): all are fixed in the builder's tree except
-  R35dG2-1 (partly fixed: Fill Down's guard has no test route) and R35dW-5 (fixed in source; CI is
-  its gate); all await the coordinator's review.
-- **CI:** R35cW-CI1 and R35cW-CI2 stay "fixed in source; CI is its gate" until the coordinator's
-  run is green.
+  R35dG2-1 (partly fixed: Fill Down's guard has no test route) and R35dW-5 (fixed in source;
+  CI's `macos-appkit` job is its gate and was green at `c0c81e5`).
+- **CI:** R35cW-CI1 and R35cW-CI2 were proved by the green wave 35d run (`3d22c39`); wave 35e's
+  run (`c0c81e5`) is green on all seven jobs.
+
+## Queued from wave 35e (CLOSE): the fix-only `wave35f` (10 November 2026)
+
+Waves 34 to 35e are merged into `main` (`5e1c8ea`).  The complete queue is
+`wave35e-verification/coord-gates-close.md` (the coordinator's list; no Critical or High); `wave35f`
+(branch `wave35f`, brief `wave35f-brief.md`, record `wave35f-complete.md`) works it.  Only the
+coordinator's review closes an id.
+
+- **Mediums:** R35eG1-1 (W35f-0.1 `fd457b4`: a session-only Level under a session Sort is shown
+  again, only the queue is refused), R35eG2-1 (W35f-0.2 `08b83f9`: the Custom Fields dialog's
+  Formula... button guards a queued Calculate), R35eG1-3 (W35f-0.3 `1a2436e`: the five-task
+  Undo-Sort-then-Level test and the corrected 1.1 record) and R35eG1-2 (W35f-0.4: these records).
+  All four are fixed in the builder's tree and await the coordinator's mutations and review.
+- **Lows:** R35eG0-1 to -3, R35eG1-4 to -6, R35eG2-2 to -10, R35eW-1 to -4 (wave 35f G1: shell,
+  AppKit, Calculate seams, records).
+- **Still partly fixed:** R35dG2-1 (Fill Down's guard has no test route), R35cG0-2 (the plan
+  reads Start word +104 only), R35cG0-4 (no plan-side Props digest), R35cW-4 (remainders R35dW-1,
+  closed, and R35dW-5, fixed in source with `macos-appkit` as its gate), and the four 35b ids
+  above (R35bW-1, R35bW-2, R35bG2-2, R35bG3-1).  Still open and unassigned: R35bG0-9, R35bG1-10
+  and R35bG2-9.

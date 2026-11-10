@@ -15,7 +15,7 @@ time: `check_fixtures.py`, `check_markers.py --range main..HEAD`, `guard_names.p
 
 | Item | Finding | Commit | Status |
 |---|---|---|---|
-| 2.1 | R35cG0-2, R35cW-3 | `6f5cc18` | **partly fixed**: the writer half is recorded as closed by W35c-2.2 (its +104 check runs before 0.2); the plan half is open, since the plan never reads +96; the stale test comment is corrected |
+| 2.1 | R35cG0-2 (R35cW-3 is fixed `6f5cc18`, a record; W35f-0.4, R35eG2-9) | `6f5cc18` | **partly fixed** (R35cG0-2): the writer half is recorded as closed by W35c-2.2 (its +104 check runs before 0.2); the plan half is open, since the plan never reads +96; the stale test comment is corrected |
 | 2.2 | R35cG0-4 | `caa6cb1` | **partly fixed**: the plan layer still has no Props digest, now a recorded gap, and the two wrong sentences that explained it are corrected |
 | 2.3 | R35cG0-5 | `ec2429c` | fixed: a time word of 24:00 or later is refused in `calculate_measured_first_working_start` |
 | 2.4 | R35cG0-6 | `7d908c6` | fixed: the 0.2 and 0.3 tests use the record-kind needle, the start's kind check is tested, a different start that still maps is accepted |
@@ -25,7 +25,7 @@ time: `check_fixtures.py`, `check_markers.py --range main..HEAD`, `guard_names.p
 | 2.8 | R35cW-5 | `492f10c` | fixed: the Props pin is `read_calculate_shape`'s last check |
 | 2.9 | R35cG2-4 | `bb4a398` | fixed by the review's own option: the five-task outline on the second text style is refused by the builder under test, and the inference behind the six-task acceptance is stated in `view-state.md` |
 | 2.10 | R35cG2-5 | `e415fe2` | fixed: `require_measured_view_block`'s `alt_digest_measured` has no default (a signature guard) |
-| 2.11 | R35cW-4 | `4dcfcd7` | fixed: a queued Calculate Project refuses a later cell edit, Cut, Paste, Fill and task-form edit with the Calculate named; the Redo route was closed by W35d-0.5 |
+| 2.11 | R35cW-4 | `4dcfcd7` | **partly fixed** (remainders R35dW-1, closed by W35e-0.1, and R35dW-5, the AppKit shell; W35f-0.4): a queued Calculate Project refuses a later cell edit, Cut, Paste, Fill and task-form edit with the Calculate named; the Redo route was closed by W35d-0.5 |
 | 2.12 | R35cG1-6 | `f9771b6` | fixed: the plan layer reads the session byte of the resource rows the reader skips; one gap recorded (a row with no FixedMeta entry) |
 | 2.13 | R35cG1-5 | `c250aef` | fixed (record): the `4a2133e` subject overstates Show Level, said in both records |
 | 2.14 | R35cG1-7 | `a85d8b3` | fixed: the VarMeta keys are collected in the reader's existing per-task walk; the second scan is gone |
