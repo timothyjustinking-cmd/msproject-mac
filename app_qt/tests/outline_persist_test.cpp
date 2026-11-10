@@ -782,6 +782,41 @@ int main(int argc, char** argv) {
             gate::check(shown_names(model) == resorted,
                         "redo then sort: Ctrl+Y leaves the sorted rows as they were");
         }
+
+        // (c) W35f-1.4 (R35eG1-4): a Level on the redo list, then the sort is CLEARED.  Clearing
+        // does not change the order Save writes (the file's own), so the Redo that matches the
+        // display stays: it re-queues the Level relative to the file order, which is shown.
+        // Both cleared paths: the dialog's [Clear] and the plain clear.
+        for (int path = 0; path < 2; ++path) {
+            const std::string label = path == 0 ? "cleared (dialog path)" : "cleared (plain path)";
+            gate::check(window.open_file(six, &error), "the six-task fixture reopens (redo then clear)");
+            QApplication::processEvents();
+            QAction* undo_c = gate::find_action(window, app::MenuAction::undo);
+            QAction* redo_c = gate::find_action(window, app::MenuAction::redo);
+            if (undo_c == nullptr || redo_c == nullptr) {
+                gate::check(false, "Undo and Redo exist (redo then clear)");
+                break;
+            }
+            window.apply_outline_level(1);
+            QApplication::processEvents();
+            undo_c->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo_c->isEnabled(),
+                        ("redo then " + label + ": Undo withdraws Level 1 onto the redo list").c_str());
+            if (path == 0) {
+                window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            } else {
+                window.clear_session_sort();
+            }
+            QApplication::processEvents();
+            gate::check(redo_c->isEnabled(),
+                        ("redo then " + label + ": the Level stays on the redo list").c_str());
+            redo_c->trigger();
+            QApplication::processEvents();
+            gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,
+                        ("redo then " + label + ": Ctrl+Y re-queues the Level the display shows")
+                            .c_str());
+        }
     }
 
     // W35b-3.4: Level 1 on the five-task control, saved through File > Save, is Project's own

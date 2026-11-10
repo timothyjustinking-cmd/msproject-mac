@@ -6153,7 +6153,11 @@ void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
     // sort choice made now, as a queued one is below.  Left there, Ctrl+Y re-queued it under
     // whatever sort the display had by then.  W35e-1.1 (R35dG1-1): a Show Level on the redo
     // list ends the same way, since Ctrl+Y would queue it under the sort chosen now.
-    if (redo_top_is_view_edit(structural_)) {
+    // R35eG1-4: a CLEARED sort ends a Sort on the redo list only.  Clearing shows the file's
+    // own order again, which is the order a Show Level on the list is relative to, so that
+    // Redo still matches the display and is kept.
+    if (cleared ? redo_top_is(structural_, app::StructuralKind::sort_view)
+                : redo_top_is_view_edit(structural_)) {
         structural_.clear_redo();
     }
     // A queued persisted sort is replaced (Sort is an exclusive edit) or, when the
@@ -6235,7 +6239,8 @@ void MainWindow::clear_session_sort() {
     if (!doc_.has_document()) {
         return;
     }
-    if (redo_top_is_view_edit(structural_)) {
+    // R35eG1-4: as the cleared path of apply_sort_choice, only a Sort on the redo list ends.
+    if (redo_top_is(structural_, app::StructuralKind::sort_view)) {
         structural_.clear_redo();
     }
     doc_.clear_sort();
