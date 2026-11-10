@@ -53,10 +53,17 @@ Level would still leave a sorted display that Redo could re-queue under.
 `sort_view`. A new helper `redo_top_is_view_edit` also matches `show_level`, so a sort choice made
 now ends a Show Level on the redo list and Ctrl+Y queues nothing.
 
-Where the routes are reachable: only where the Sort stays session only. On the five-task file the
-Sort queues (the measured shape) and `push()` clears the redo list itself, so neither route is a
-bypass there. The six-task outline refuses the sort edit and takes it for the session, so the tests
-use it.
+Where the routes are reachable (corrected by W35f-0.3, R35eG1-3, which found the first version of
+this paragraph wrong): (b) only where the Sort stays session only, since on the five-task file the
+Sort queues and `push()` clears the redo list itself. (a) was ALSO reachable on the five-task file:
+queue Sort Name descending, press Ctrl+Z (the Undo leaves the session sort shown with nothing
+queued and the Sort on the redo list), then Level 1, a measured shape there, passed the
+queued-Sort check, was pushed (the push cleared the redo list) and was queued under the sorted
+rows. The `sort_active()` check closed that route too, but 1.1 had no test for it; W35f-0.3 adds
+one to `qt_sort_persist` (it goes red if the check is narrowed to a session-only Sort). The
+six-task outline refuses the sort edit and takes it for the session, so the 1.1 tests use it.
+W35f-0.1 (R35eG1-1) has since narrowed the refusal to the queue (see wave 35f), so the five-task
+Level 1 under a shown Sort is now shown for the session and not queued.
 
 Tests (`qt_outline_persist`, the block after the W35e-0.1 partial apply): (a) the Sort stays
 session only, a Level under it queues nothing, the status line names the shown sort, the sorted
@@ -114,10 +121,11 @@ Nothing.
 
 ## Found, not fixed
 
-- A Level chosen while a `sort_view` sits on the redo list and no sort is shown (for example
-  Sort queued, Ctrl+Z, a Level that stays session only because the builder refuses it) leaves the
-  Sort on the redo list; Ctrl+Y then re-queues it over the session Level. The 1.2 rule's refusals
-  guard a queued Sort, which this is not until Redo. Not reproduced here and not in the brief; a
-  candidate for the coordinator's review.
+- ~~A Level chosen while a `sort_view` sits on the redo list and no sort is shown ... leaves the
+  Sort on the redo list; Ctrl+Y then re-queues it over the session Level.~~ **Withdrawn by
+  W35f-0.3 (R35eG1-3):** after Ctrl+Z the session sort is still shown, so the route had no state
+  with "no sort shown". At 1.1 the Level was refused by 1.1(a); since W35f-0.1 it is shown for the
+  session and not queued, and Ctrl+Y re-queues the Sort the display shows, with every row shown
+  again in the sorted order. Tested in `qt_sort_persist` (the "Undo then Level" block).
 - The "clearing a session sort" exception to the 1.2 rule sentence (R35dG1-6) is a G2 item and
   is not edited here.
