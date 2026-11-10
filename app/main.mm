@@ -1451,6 +1451,31 @@ std::string calculate_queued_refusal(const PlanState& plan, const std::string& c
     return {};
 }
 
+// W35f-1.10 (R35eG2-3): the AppKit counterparts of the Qt shell's document_edit_refusal and
+// pending_document_edit_refusal (W35e-2.6, widened by W35f-1.8).  File > Save refuses a table /
+// date format or custom-field formula edit beside any exclusive structural kind, and an
+// exclusive kind beside one, so each is refused at the change.  Empty when the edit may be
+// made.  CI (macos-appkit) is the only compile check of this file.
+std::string document_edit_refusal(const PlanState& plan, const std::string& change) {
+    if (!plan.edits.has_exclusive_edit()) {
+        return {};
+    }
+    if (const std::string reason = calculate_queued_refusal(plan, change); !reason.empty()) {
+        return reason;
+    }
+    return "an edit is queued that File > Save writes on its own, so it would refuse " + change +
+           " beside it; save or undo the queued edit first";
+}
+
+std::string pending_document_edit_refusal(const PlanState& plan, const std::string& command) {
+    if (plan.document == nullptr || !plan.document->has_pending_edits()) {
+        return {};
+    }
+    return command +
+           ": a table / date format or custom-field formula edit is pending and File > Save "
+           "would refuse the two together; save it or reopen without saving";
+}
+
 // Commits the open edit session.  A rejected commit keeps the session open (so
 // the user can correct the text) and puts EditOutcome::error in the status line.
 bool commit_open_edit(PlanState& plan) {
@@ -3256,6 +3281,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     if (plan.sheet != nullptr && plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
+    // W35f-1.10 (R35eG2-3): the Qt shell's refusal beside a pending document edit.
+    if (const std::string reason = pending_document_edit_refusal(plan, "add resources");
+        !reason.empty()) {
+        note(plan, reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Add Resources"];
     [alert setInformativeText:@"The resource is shown now and written to the .mpp when you "
@@ -3313,6 +3345,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     }
     if (plan.view_mode != app::ViewMode::resource_sheet) {
         note(plan, "resource information is available in the Resource Sheet view", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    // W35f-1.10 (R35eG2-3): the Qt shell's refusal beside a pending document edit.
+    if (const std::string reason = pending_document_edit_refusal(plan, "resource information");
+        !reason.empty()) {
+        note(plan, reason, true);
         [g_view setNeedsDisplay:YES];
         return;
     }
@@ -3405,6 +3444,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     }
     if (plan.sheet == nullptr || !app::view_mode_is_task(plan.view_mode)) {
         note(plan, "Assign Resources is available in the Task Sheet view", false);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
+    // W35f-1.10 (R35eG2-3): the Qt shell's refusal beside a pending document edit.
+    if (const std::string reason = pending_document_edit_refusal(plan, "assign resources");
+        !reason.empty()) {
+        note(plan, reason, true);
         [g_view setNeedsDisplay:YES];
         return;
     }
@@ -3517,6 +3563,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         [g_view setNeedsDisplay:YES];
         return;
     }
+    // W35f-1.10 (R35eG2-3): the Qt shell's refusal beside a pending document edit.
+    if (const std::string reason = pending_document_edit_refusal(plan, "Font Bold");
+        !reason.empty()) {
+        note(plan, reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
@@ -3572,6 +3625,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     if (plan.sheet != nullptr && plan.sheet->editing()) {
         plan.sheet->cancel_edit();
     }
+    // W35f-1.10 (R35eG2-3): the Qt shell's refusal beside a pending document edit.
+    if (const std::string reason = pending_document_edit_refusal(plan, "Define WBS Code");
+        !reason.empty()) {
+        note(plan, reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     app::StructuralEdit edit;
     std::string error;
     if (!app::make_wbs_code_edit(plan.base, plan.path, edit, error)) {
@@ -3606,6 +3666,18 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     }
     if (plan.sheet != nullptr && plan.sheet->editing()) {
         plan.sheet->cancel_edit();
+    }
+    // W35e-2.6 / W35f-1.6 (R35dG2-2, R35eG2-4), mirrored by W35f-1.10 (R35eG2-3): the save
+    // refuses a Calculate beside a pending table / date format or formula edit, so say so now.
+    if (plan.document != nullptr && plan.document->has_pending_edits()) {
+        note(plan,
+             "Calculate Project: a table / date format or custom-field formula edit is "
+             "pending and File > Save would refuse the two together; save it (a file saved "
+             "with a custom-field formula cannot take Calculate Project) or reopen without "
+             "saving",
+             true);
+        [g_view setNeedsDisplay:YES];
+        return;
     }
     app::StructuralEdit edit;
     std::string error;
@@ -4188,6 +4260,14 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     if (plan.document == nullptr) {
         return;
     }
+    // W35f-1.10 (R35eG2-3): the Qt shell's refusal (W35e-2.6, W35f-1.8): the save refuses this
+    // edit beside any queued exclusive edit, so refuse it before the dialog opens.
+    if (const std::string reason = document_edit_refusal(plan, "a table / date format edit");
+        !reason.empty()) {
+        note(plan, reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Table Date Format"];
     [alert setInformativeText:
@@ -4237,6 +4317,9 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         [g_view refreshAfterChange];
         return;
     }
+    // W35f-1.5 (R35eG2-2), mirrored by W35f-1.10: a pending document edit ends the structural
+    // redo list (a Redo would re-queue an exclusive edit beside it without push()).
+    plan.edits.clear_redo();
     note(plan, "table date format " +
                    std::to_string(static_cast<unsigned>(edits.date_format)) +
                    " is pending; Save writes it",
@@ -4282,6 +4365,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         {"Date1", mpp::custom_field_id(mpp::FieldKind::date, 1)},
         {"Flag1", mpp::custom_field_id(mpp::FieldKind::flag, 1)},
     };
+    // W35f-1.10 (R35eG2-3): as tableDateFormat:.
+    if (const std::string reason = document_edit_refusal(plan, "a custom-field formula edit");
+        !reason.empty()) {
+        note(plan, reason, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     NSAlert* alert = [[NSAlert alloc] init];
     [alert setMessageText:@"Custom Field Formula"];
     [alert setInformativeText:
@@ -4355,6 +4445,7 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         [g_view setNeedsDisplay:YES];
         return;
     }
+    plan.edits.clear_redo();  // W35f-1.5 (R35eG2-2), mirrored by W35f-1.10
     note(plan, "custom-field formula for field " + std::to_string(field_id) +
                    " is pending; Save writes it",
          false);
