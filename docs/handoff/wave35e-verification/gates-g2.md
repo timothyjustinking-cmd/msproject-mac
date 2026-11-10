@@ -116,6 +116,8 @@ so only `wave35d-complete.md` and `status-2026-11-10.md` changed; START-HERE and
 ## Found, not fixed
 
 - Fill Down's Calculate guard has no test and no route to one (2.5).
-- The AppKit refusal (2.7) has no test; CI on `macos-qt` is its only gate.
+- The AppKit refusal (2.7) has no test; CI on `macos-appkit` (`app-macos.yml`, `-Werror`, runs on
+  push), and on `macos-qt`, which builds `app/` too, is its only gate (corrected by W35f-1.14,
+  R35eG2-5).
 - The `apply_session_sort` entry point has no queued-view guard (2.3). It is a seam the shell's
   menu does not reach, so nothing is wrong today; a later caller would need to add the guard.
