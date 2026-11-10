@@ -1,0 +1,17 @@
+== 114/TBkndTask/FixedData ctl 856 set 856
+== 114/TBkndTask/Fixed2Data ctl 448 set 448
+   +195 len 1  aa -> be   uid 0 rel 3
+   +259 len 1  ab -> bf   uid 1 rel 3
+   +283 len 1  aa -> be   uid 1 rel 27
+   +323 len 1  ac -> c0   uid 2 rel 3
+   +347 len 1  aa -> be   uid 2 rel 27
+   +387 len 1  ad -> c1   uid 3 rel 3
+   +411 len 1  aa -> be   uid 3 rel 27
+== 114/TBkndAssn/Fixed2Data ctl 144 set 144
+   +3 len 1  b0 -> c5   uid 0 rel 3
+   +19 len 1  ab -> bf   uid 0 rel 19
+   +51 len 1  b1 -> c6   uid 1 rel 3
+   +67 len 1  ac -> c0   uid 1 rel 19
+   +99 len 1  b2 -> c7   uid 2 rel 3
+   +115 len 1  ad -> c1   uid 2 rel 19
+== 114/TBkndAssn/FixedData ctl 330 set 330

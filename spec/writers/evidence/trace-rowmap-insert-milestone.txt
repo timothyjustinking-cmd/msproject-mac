@@ -1,0 +1,61 @@
+== 114/TBkndTask/FixedData ctl 856 set 1058
+   size change; only the common prefix is compared
+   +452 len 1  02 -> 03   uid 2 rel 0  <- 1529c6:823 key 0b400017 off 0x0 fld 0 v 3
+   +654 len 1  03 -> 04   uid 3 rel 0  <- 1529e7:24c6 key 0b400017 off 0x0 fld 0 v 4
+   new row uid 4: bytes 856..1058; setter calls whose first dword equals the saved bytes (non-zero): 21
+      +860  152a0a:394 key 0b400056 off 0x4 v 4
+      +856  152a0a:f04 key 0b400017 off 0x0 v 2
+      +922  152a0d:10b key 0b400012 off 0x42 v ffffffff
+      +930  152a0d:16a9 key 0b400015 off 0x4a v 5460
+      +934  152a0d:24fb key 0b400019 off 0x4e v 1f4
+      +952  152a0f:993 key 0b400023 off 0x60 v 3bf11e78
+      +956  152a0f:10db key 0b400024 off 0x64 v 3bf11e78
+      +960  152a0f:1823 key 0b400025 off 0x68 v 3bf11e78
+      +964  152a0f:1f6b key 0b400026 off 0x6c v 3bf11e78
+      +968  152a0f:26b3 key 0b400027 off 0x70 v 3bf61c20
+      +972  152a10:6eb key 0b400028 off 0x74 v 3bf61c20
+      +976  152a10:e33 key 0b400029 off 0x78 v ffffffff
+      +980  152a10:157b key 0b40002a off 0x7c v ffffffff
+      +988  152a11:1225 key 0b400063 off 0x84 v ffffffff
+      +992  152a11:196d key 0b400064 off 0x88 v ffffffff
+      +1024  152a14:1701 key 0b4000c9 off 0xa8 v 80
+      +1030  152a19:f4d key 0b400183 off 0xae v 3bf11e78
+      +1034  152a19:24b1 key 0b400191 off 0xb2 v ffffffff
+      +1038  152a1a:bf7 key 0b4001b5 off 0xb6 v ffffffff
+      +1042  152a1a:133f key 0b4001b6 off 0xba v 5460
+      +1046  152a1a:1a87 key 0b4001b7 off 0xbe v 5460
+== 114/TBkndTask/Fixed2Data ctl 448 set 512
+   size change; only the common prefix is compared
+   +195 len 1  4c -> 61   uid 0 rel 3
+   +259 len 1  4d -> 62   uid 1 rel 3
+   +283 len 1  4c -> 61   uid 1 rel 27
+   +323 len 1  4e -> 63   uid 2 rel 3
+   +347 len 1  4c -> 61   uid 2 rel 27
+   +387 len 1  4f -> 64   uid 3 rel 3
+   +411 len 1  4c -> 61   uid 3 rel 27
+   new row uid 4: bytes 448..512; setter calls whose first dword equals the saved bytes (non-zero): 4
+      +490  152a1c:58b key 0b4004e2 off 0x2a v 10
+      +494  152a1c:cb9 key 0b4004e7 off 0x2e v 3bf11e78
+      +498  152a1c:21c5 key 0b400503 off 0x32 v 3bf11e78
+      +502  152a1d:1e3 key 0b400504 off 0x36 v 3bf11e78
+== 114/TBkndAssn/Fixed2Data ctl 144 set 192
+   size change; only the common prefix is compared
+   +3 len 1  52 -> 68   uid 0 rel 3
+   +19 len 1  4d -> 62   uid 0 rel 19
+   +51 len 1  53 -> 69   uid 1 rel 3
+   +67 len 1  4e -> 63   uid 1 rel 19
+   +99 len 1  54 -> 6a   uid 2 rel 3
+   +115 len 1  4f -> 64   uid 2 rel 19
+   new row uid 3: bytes 144..192; setter calls whose first dword equals the saved bytes (non-zero): 1
+      +176  152b79:878 key 0f40027e off 0x20 v a0cb8b78
+== 114/TBkndAssn/FixedData ctl 330 set 440
+   size change; only the common prefix is compared
+   new row uid 3: bytes 330..440; setter calls whose first dword equals the saved bytes (non-zero): 8
+      +330  152b70:2674 key 0f400000 off 0x0 v 4
+      +334  152b72:1c4 key 0f400001 off 0x4 v 4
+      +338  152b72:90c key 0f400002 off 0x8 v ffff0001
+      +382  152b73:df2 key 0f400014 off 0x34 v 3bf11e78
+      +386  152b73:153a key 0f400015 off 0x38 v 3bf11e78
+      +390  152b73:1c82 key 0f400018 off 0x3c v 3bf11e78
+      +422  152b75:81e key 0f400037 off 0x5c v 7
+      +434  152b77:1d9e key 0f400108 off 0x68 v 3bf11e78
