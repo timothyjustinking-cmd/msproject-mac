@@ -457,6 +457,15 @@ class MainWindow final : public QMainWindow {
     // task-form edit): it also refuses while a Calculate Project is queued.
     std::string data_change_refusal(const std::string& change) const;
     bool refuse_data_change(const std::string& change);
+    // W35f-1.8 (R35eW-1): the two directions of the exclusive-kind rule against a document edit
+    // (a table / date format or a custom-field formula).  document_edit_refusal() is the
+    // reason a document edit must not be queued now ("" when it may), for every exclusive
+    // structural kind; pending_document_edit_refusal() is the reason an exclusive structural
+    // edit must not be queued while one is pending.
+    std::string document_edit_refusal(const std::string& change) const;
+    bool refuse_document_edit(const std::string& change);
+    std::string pending_document_edit_refusal(const std::string& command) const;
+    bool refuse_beside_document_edit(const std::string& command);
     void handle_action(app::MenuAction action);
     // Wave 26: the ribbon controls that are not menu actions (Link/Unlink in
     // W26-1.2; the view/format toggles arrive with W26-1.3/1.4).  Wave 28

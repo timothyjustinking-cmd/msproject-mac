@@ -4725,6 +4725,15 @@ bool StructuralEdits::has_automatic_outline_edit() const noexcept {
     return false;
 }
 
+bool StructuralEdits::has_exclusive_edit() const noexcept {
+    for (const StructuralEdit& edit : applied_) {
+        if (is_exclusive_kind(edit.kind)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<StructuralEdit> StructuralEdits::detach_edits_naming(std::uint32_t uid) {
     // W27-3.2: the set push(delete_task) has always dropped, collected in
     // their original order instead of erased.  The delete keeps the result in

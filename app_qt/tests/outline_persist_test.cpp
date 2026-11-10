@@ -21,8 +21,11 @@
 
 #include <QAbstractButton>
 #include <QApplication>
+#include <QComboBox>
 #include <QString>
 #include <QStringList>
+#include <QTimer>
+#include <QVariant>
 
 #include <array>
 #include <cstddef>
@@ -69,6 +72,32 @@ const app::StructuralEdit* queued_level(const msqt::MainWindow& window) {
 
 bool status_contains(const msqt::MainWindow& window, const char* needle) {
     return window.status_left_text().contains(QString::fromUtf8(needle));
+}
+
+// W35f-1.8 (R35eW-1): drives Table > Date Format through its action; true when the dialog
+// opened (and was accepted).  False when the shell refused before the dialog.
+bool queue_date_format(msqt::MainWindow& window, int format) {
+    bool seen = false;
+    QTimer::singleShot(0, [&seen, format]() {
+        auto* dialog =
+            dynamic_cast<msqt::TableDateFormatDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        seen = true;
+        const int index = dialog->date_format_combo()->findData(QVariant(format));
+        if (index >= 0) {
+            dialog->date_format_combo()->setCurrentIndex(index);
+        }
+        dialog->accept();
+    });
+    QAction* action = gate::find_action(window, app::MenuAction::table_date_format);
+    if (action == nullptr || !action->isEnabled()) {
+        return false;
+    }
+    action->trigger();
+    QApplication::processEvents();
+    return seen;
 }
 
 // True when some displayed row of the Name column reads `text`.
@@ -159,6 +188,44 @@ int main(int argc, char** argv) {
     gate::check(window.sheet_row_count() == full_rows, "All Subtasks shows every row again");
     gate::check(status_contains(window, "the queued level was withdrawn"),
                 "the status line says the queued level was withdrawn");
+
+    // W35f-1.8 (R35eW-1): Show Level is exclusive in the save, which refuses it beside a table /
+    // date format edit.  The shell refuses at the change, in both orders.
+    {
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(queued_level(window) != nullptr, "Level 1 is queued for the format case");
+        gate::check(!queue_date_format(window, 5),
+                    "Table / Date Format does not open beside a queued level");
+        gate::check(queued_level(window) != nullptr, "the queued level stays queued");
+        gate::check(status_contains(window,
+                                    "a Show Level is queued and File > Save would write it, not "
+                                    "a table / date format edit"),
+                    "Table / Date Format beside a queued level: the status line names it");
+        window.apply_outline_level(0);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "the format case: the level is withdrawn");
+
+        // The other order, in a window of its own (a pending format edit cannot be discarded).
+        msqt::MainWindow other;
+        other.resize(msqt::kWindowWidth, msqt::kWindowHeight);
+        QString other_error;
+        gate::check(other.open_file(five, &other_error),
+                    "the fixture loads for the format-first case");
+        other.show();
+        QApplication::processEvents();
+        gate::check(queue_date_format(other, 5), "the date format is queued first");
+        other.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(other.pending_edits().empty(),
+                    "a level beside a pending date format queues nothing");
+        gate::check(status_contains(other,
+                                    "session only; the file keeps its outline (a table / date "
+                                    "format or custom-field formula edit is pending"),
+                    "a level beside a pending date format: the status line names it");
+        gate::check(other.sheet_row_count() == full_rows - 2,
+                    "the level still collapses the session");
+    }
 
     // W35b-3.2 (R35G2-6): expanding or collapsing a row by hand while a level is
     // queued would leave the file describing rows the user is no longer looking at;

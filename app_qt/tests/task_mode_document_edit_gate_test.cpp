@@ -1,19 +1,20 @@
-// app_qt/tests/task_mode_document_edit_gate_test.cpp -- wave 35 (W35-0.2, RW34b-3).
+// app_qt/tests/task_mode_document_edit_gate_test.cpp -- wave 35 (W35-0.2, RW34b-3), reworked in
+// wave 35f (W35f-1.8, R35eW-1).
 //
 // THE RULE THIS GATES
 //   A Manually Schedule edit and a pending table / date-format edit are two
 //   different writers over one file; no Project pair measures them together, so
-//   the shared save cascade refuses the combination before the document-edit
-//   hook or any write (R34b-6, app::save_structural_edits).  The shell must show
-//   that refusal, keep both edits queued, and write no file.
+//   the shared save cascade refuses the combination (R34b-6,
+//   app::save_structural_edits; covered at the app level for every exclusive kind).
+//   W35f-1.8: the shell refuses the SECOND edit at the change, in both orders, with the
+//   reason in the status line; the first stays queued and the second queues nothing.
 //
 // WHAT IT DRIVES (all through the shell's own controls)
 //   * wave30-task-mode-auto-control.mpp: Project's own save of an automatically
 //     scheduled task;
 //   * Task > Tasks > Manually Schedule on task 1 (queues one edit);
 //   * Table > Date Format on the first table (queues the document edit), in
-//     both orders;
-//   * File > Save to a path under the build tree.
+//     both orders.
 //
 // Usage: qt_task_mode_document_edit_gate <wave30-task-mode-auto-control.mpp> <out-dir>
 
@@ -153,7 +154,9 @@ int main(int argc, char** argv) {
         return gate::finish();
     }
 
-    // Both orders: the cascade sees the same two pending edits either way.
+    // Both orders.  W35f-1.8 (R35eW-1): the shell refuses the second edit at the change (the
+    // save cascade's own refusal of the pair, R34b-6, stays covered by app_edits_task_mode and
+    // the other exclusive kinds' app-level tests, which hand-build the queue).
     for (const bool format_first : {false, true}) {
         const char* const order = format_first ? " (date format first)" : " (Manually Schedule first)";
         msqt::MainWindow window;
@@ -166,26 +169,30 @@ int main(int argc, char** argv) {
 
         if (format_first) {
             gate::check(queue_date_format(window, 5), "the Table / Date Format dialog queues");
+            gate::check(click_manual(window, 1), "Manually Schedule clicks on task 1");
+            gate::check(window.pending_edits().empty(),
+                        "Manually Schedule beside a pending date format queues nothing");
+            gate::check(window.status_left_text().contains(QStringLiteral(
+                            "manually schedule: a table / date format or custom-field formula "
+                            "edit is pending")),
+                        "Manually Schedule beside a pending date format: the status line "
+                        "names it");
+        } else {
+            gate::check(click_manual(window, 1), "Manually Schedule clicks on task 1");
+            gate::check(window.pending_edits().size() == 1,
+                        "the Manually Schedule edit is queued once");
+            gate::check(!queue_date_format(window, 5),
+                        "the Table / Date Format dialog does not open beside a queued mode edit");
+            gate::check(window.pending_edits().size() == 1,
+                        "the Manually Schedule edit stays queued once");
+            gate::check(window.status_left_text().contains(QStringLiteral(
+                            "File > Save writes on its own, so it would refuse a table / date "
+                            "format edit beside it")),
+                        "a table / date format edit beside a queued mode edit: the status line "
+                        "names it");
         }
-        gate::check(click_manual(window, 1), "Manually Schedule clicks on task 1");
-        if (!format_first) {
-            gate::check(queue_date_format(window, 5), "the Table / Date Format dialog queues");
-        }
-        gate::check(window.pending_edits().size() == 1,
-                    "the Manually Schedule edit is queued once");
-        gate::check(window.document_dirty(), (std::string("both edits are pending") + order).c_str());
-
-        QString save_error;
-        const bool saved = window.save_document_path(target, &save_error);
-        gate::check(!saved, (std::string("the combined save is refused") + order).c_str());
-        gate::check(save_error.contains(QStringLiteral(
-                        "a task-mode edit cannot be combined with a table format or "
-                        "custom-field formula edit")),
-                    (std::string("the refusal names the combination") + order).c_str());
-        gate::check(!std::filesystem::exists(target.toStdString()),
-                    (std::string("the refused save writes no file") + order).c_str());
         gate::check(window.document_dirty(),
-                    (std::string("the refused save keeps both edits pending") + order).c_str());
+                    (std::string("the one accepted edit is pending") + order).c_str());
     }
     return gate::finish();
 }
