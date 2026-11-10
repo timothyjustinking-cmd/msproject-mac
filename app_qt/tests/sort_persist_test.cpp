@@ -241,6 +241,55 @@ int main(int argc, char** argv) {
                                         "order for this session and File > Save will keep the "
                                         "file's order"),
                 "Undo of a queued sort: the status line says the display keeps the sort");
+
+    // W35f-0.3 (R35eG1-3): the five-task route of bypass (a).  Undo of a queued Sort leaves the
+    // session sort shown with nothing queued and the Sort on the redo list; Level 1 is a measured
+    // shape here, so before W35e-1.1(a) it queued under the sorted rows (and its push cleared the
+    // redo list).  The queue is refused while the sort is shown (the Level is shown for the
+    // session), and Ctrl+Y then re-queues the Sort the display shows.  The needles are the queue,
+    // the status text and the displayed rows.
+    {
+        const int name_column = msqt::entry_column_index(msqt::EntryCellKind::name);
+        msqt::SheetTableModel* model = window.sheet_table_model();
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(redo != nullptr && redo->isEnabled() && name_column >= 0,
+                    "Undo then Level: Redo holds the withdrawn Sort");
+        if (redo != nullptr && name_column >= 0) {
+            const std::vector<QString> sorted_rows = displayed_names(model, name_column);
+            window.apply_outline_level(1);
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Undo then Level: Level 1 under the shown Sort queues nothing");
+            gate::check(status_contains(window,
+                                        "session only; a session Sort is shown and File > Save "
+                                        "would write the file's own order, so the level is not "
+                                        "queued"),
+                        "Undo then Level: the status line names the shown Sort and the refused "
+                        "queue");
+            // The displayed rows are the sorted rows, in the sorted order (a Level only hides).
+            const std::vector<QString> level_rows = displayed_names(model, name_column);
+            std::size_t next = 0;
+            bool in_sorted_order = true;
+            for (const QString& name : level_rows) {
+                while (next < sorted_rows.size() && sorted_rows[next] != name) {
+                    ++next;
+                }
+                if (next == sorted_rows.size()) {
+                    in_sorted_order = false;
+                    break;
+                }
+                ++next;
+            }
+            gate::check(in_sorted_order,
+                        "Undo then Level: the displayed rows keep the sorted order");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(queued_sort(window) != nullptr,
+                        "Undo then Level: Ctrl+Y re-queues the Sort the display shows");
+            gate::check(displayed_names(model, name_column) == sorted_rows,
+                        "Undo then Level: after Ctrl+Y every row is shown in the sorted order");
+        }
+    }
     window.apply_sort_choice(core::view::SortDefinition{}, "", true);
     QApplication::processEvents();
     gate::check(!window.sort_active(), "the Undo case leaves no session sort");
