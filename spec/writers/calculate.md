@@ -416,7 +416,8 @@ Paste clear the structural redo list; qt_calculate_gate guards the cell edits.  
 the Qt shell's.* W35e-2.7 (R35dW-5) gives the AppKit shell the same refusal at its two cell
 writers, `commit_open_edit` and `paste_from_pasteboard` (`calculate_queued_refusal` in
 `app/main.mm`); its Cut is a disabled stub and it has no Fill or task form. `app/main.mm` cannot be compiled or run here,
-so CI on macos-qt is the gate for it and nothing tests it.
+so CI on `macos-appkit` (`app-macos.yml`, `-Werror`, runs on push) and on `macos-qt`, which
+builds `app/` too, is the gate for it and nothing tests it (W35f-1.14, R35eG2-5).
 
 *The document-edit surfaces (W35e-2.6, R35dG2-2; the third surface W35f-0.2, R35eG2-1).* Table /
 Date Format and Custom Field Formula were still accepted beside a queued Calculate ("edit

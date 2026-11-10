@@ -116,7 +116,9 @@ The measured pairs still write and match with effects on.
 
 **Found, not fixed:**
 - Fill Down's Calculate guard has no test and no route to one (2.5).
-- The AppKit refusal (2.7) has no test; CI on `macos-qt` is its only gate.
+- The AppKit refusal (2.7) has no test; CI on `macos-appkit` (`app-macos.yml`, `-Werror`, runs on
+  push), and on `macos-qt`, which builds `app/` too, is its only gate (corrected by W35f-1.14,
+  R35eG2-5).
 - `apply_session_sort` has no queued-view guard (2.3). The shell's menu does not reach it, so
   nothing is wrong today.
 
@@ -187,12 +189,15 @@ Props digest), both refused at the writer or the save.
 - ~~A session-only Level chosen while a Sort sits on the redo list leaves that Sort there (G1).~~
   Withdrawn by W35f-0.3 (R35eG1-3), see the G1 row.
 - Fill Down's Calculate guard has no test and no route to one (2.5).
-- The AppKit refusal (2.7) has no test; CI on `macos-qt` is its only gate.
+- The AppKit refusal (2.7) has no test; CI on `macos-appkit` (`app-macos.yml`, `-Werror`, runs on
+  push), and on `macos-qt`, which builds `app/` too, is its only gate (corrected by W35f-1.14,
+  R35eG2-5).
 - `apply_session_sort` has no queued-view guard (2.3); the shell's menu does not reach it.
 - The plan half of R35cG0-2 and the plan-side Props digest of R35cG0-4.
 
 **For the coordinator, after CLOSE:** push `wave35e` and dispatch `qt.yml` and `ci.yml` (the two CI
-ids and W35e-2.7 are gated there); mutations at each new guard; an independent review of
+ids are gated there; W35e-2.7 is gated by `app-macos.yml`'s `macos-appkit` job, which runs on push,
+so the merge check "CI green on three OSs" must include that run too; W35f-1.14, R35eW-4); mutations at each new guard; an independent review of
 `wave35d..wave35e`. The 4(e) reopen check is a rerun only if a writer's output changed; this wave
 adds no writer. Merging waves 34 to 35e waits on CI green on all three OSs and no open Critical
 or High.

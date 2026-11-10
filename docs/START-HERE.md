@@ -26,6 +26,9 @@ Keep this file current at every wave close; it is the only file a new session mu
     * R35cW-4: remainders R35dW-1 (fixed by W35e-0.1 `b8ee455`, closed by the coordinator's
       review) and R35dW-5 (the AppKit shell's 2.11 refusal, W35e-2.7 `e03da3e`: fixed in source;
       CI's `macos-appkit` job, green at `c0c81e5`, is its gate; to be closed by the coordinator).
+      `app-macos.yml` (`macos-appkit`) runs on push, not on dispatch, so the merge check "CI green
+      on three OSs" must include that job's run for `wave35f`; the same job gates the AppKit
+      mirror of the 2.6 refusals (W35f-1.10, R35eG2-3).
     * The four wave 35b ids that wave 35c recorded partly fixed: **R35bW-1** (remainders R35cG1-2,
       through R35dG0-1 closed by W35e-0.1, and R35cG1-3, closed by W35d-1.1), **R35bW-2** (R35cG1-1,
       closed by W35d-0.4), **R35bG2-2** (R35cG2-1, closed by W35d-1.3) and **R35bG3-1** (R35cG1-4,
