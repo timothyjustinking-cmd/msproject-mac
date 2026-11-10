@@ -417,13 +417,16 @@ writers, `commit_open_edit` and `paste_from_pasteboard` (`calculate_queued_refus
 `app/main.mm`); its Cut is a disabled stub and it has no Fill or task form. `app/main.mm` cannot be compiled or run here,
 so CI on macos-qt is the gate for it and nothing tests it.
 
-*The two document-edit surfaces (W35e-2.6, R35dG2-2).* Table / Date Format and Custom Field
-Formula were still accepted beside a queued Calculate ("edit pending; File > Save writes it")
-and a Calculate was queued beside them; the save refused the pair. `show_table_date_format` and
-`show_custom_formula` now refuse before their dialog opens while a Calculate is queued, with the
-Calculate named, and `calculate_project` refuses while a document edit is pending, naming it;
-both orders are tested in qt_calculate_gate. No wrong file was ever reachable; this is the
-message at the moment of the change.
+*The document-edit surfaces (W35e-2.6, R35dG2-2; the third surface W35f-0.2, R35eG2-1).* Table /
+Date Format and Custom Field Formula were still accepted beside a queued Calculate ("edit
+pending; File > Save writes it") and a Calculate was queued beside them; the save refused the
+pair. `show_table_date_format` and `show_custom_formula` now refuse before their dialog opens
+while a Calculate is queued, with the Calculate named, and `calculate_project` refuses while a
+document edit is pending, naming it; both orders are tested in qt_calculate_gate. Project >
+Custom Fields... is a third formula surface (its Formula... button feeds the same
+`apply_custom_formula`), and `show_custom_fields` refuses the same way before its dialog opens
+(W35f-0.2; the `custom_fields` case of the same test). No wrong file was ever reachable; this is
+the message at the moment of the change.
 
 Not measured, so not separable here: no pair varies Effort-driven or Task Type, so their
 FixedMeta bits (byte 16, `07` in the control) are pinned as one value rather than decoded

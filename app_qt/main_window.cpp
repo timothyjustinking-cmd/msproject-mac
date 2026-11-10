@@ -4177,6 +4177,13 @@ void MainWindow::show_custom_fields() {
         update_status();
         return;
     }
+    // W35f-0.2 (R35eG2-1): the third custom-field formula surface.  The dialog's Formula...
+    // button feeds apply_custom_formula, which File > Save refuses beside a queued Calculate
+    // Project, so say so before the dialog opens, as show_custom_formula does (W35e-2.6).
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project) &&
+        refuse_data_change("a custom-field formula edit")) {
+        return;
+    }
     // The Task fields whose storage the port knows, with the file's stored
     // formulas attached; Project's Resource/Project scopes are laid out and
     // disabled in the dialog.
