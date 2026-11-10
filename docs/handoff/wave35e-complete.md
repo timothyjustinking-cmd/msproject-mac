@@ -131,8 +131,9 @@ WAVE-35e-G2-COMPLETE
 
 ### CLOSE gates
 
-Fresh trees `build/w35e-close-fresh`, `-app` and `-qt` at `2dbb5d9` (the last code change is
-`aa06507`, 2.9, with `d697a05` and `6fa4c19` tests only; every later commit is a record),
+Fresh trees `build/w35e-close-fresh`, `-app` and `-qt` at `2dbb5d9` (the last code changes are
+`aa06507` (2.9) and `6fa4c19` (2.11), test seams in `core/mppwrite`; `d697a05` is tests only;
+every later commit is a record; corrected by W35f-1.15, R35eW-2),
 configured from scratch with `CORE_WARNINGS_AS_ERRORS=ON`; script
 `build/w35e/W35e-CLOSE-fresh-gates.ps1`, log `build/w35e/W35e-CLOSE-fresh-gates.log` (summary:
 `build/w35e/close_log_summary.py`). The START-HERE, `memory/coordinator.md` and
