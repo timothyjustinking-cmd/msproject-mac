@@ -9,7 +9,10 @@ Keep this file current at every wave close; it is the only file a new session mu
 
 ## The 30-second state
 
-* **Wave 35f (fix-only) is in progress on branch `wave35f`** (cut from `main` at `47665e1`;
+* **Wave 35f (fix-only) is CLOSED on branch `wave35f`** (`WAVE-35f-COMPLETE`, fresh-tree gates at
+  `135d253` all green in `build/w35f/W35f-CLOSE-fresh-gates.log`; the coordinator's push, CI,
+  mutations and review are next, and no id below is closed until that review; the list below is
+  the queue as the wave opened).  Originally: **in progress on branch `wave35f`** (cut from `main` at `47665e1`;
   `docs/handoff/wave35f-brief.md`, `docs/handoff/wave35f-complete.md`, builder Claude Sonnet 5.5;
   nothing is pushed).  It works the open queue wave 35e left, which is
   `wave35e-verification/coord-gates-close.md` (the coordinator's list; this file does not
