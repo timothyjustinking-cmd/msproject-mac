@@ -386,7 +386,7 @@ int main(int argc, char** argv) {
         }
     }
 
-    // --- 2c. W35e-2.6 (R35dG2-2): the two document-edit dialogs and Calculate Project --------
+    // --- 2c. W35e-2.6 (R35dG2-2): the document-edit dialogs and Calculate Project ------------
     // The save refuses a Calculate Project beside a table / date format or a custom-field
     // formula edit.  The shell now says so at the moment of the change, in either order, before
     // the dialog opens.  A timer closes any modal dialog that does open (a missing refusal would
@@ -417,6 +417,12 @@ int main(int argc, char** argv) {
              "a Calculate Project is queued and File > Save would write it, not a custom-field "
              "formula edit",
              "Custom Field Formula"},
+            // W35f-0.2 (R35eG2-1): Project > Custom Fields... reaches the same formula edit
+            // through its Formula... button.
+            {app::MenuAction::custom_fields,
+             "a Calculate Project is queued and File > Save would write it, not a custom-field "
+             "formula edit",
+             "Custom Fields"},
         };
         for (const Surface& surface : surfaces) {
             const std::string label = surface.label;
