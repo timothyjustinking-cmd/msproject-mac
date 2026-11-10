@@ -112,6 +112,40 @@ int main(int argc, char** argv) {
         return gate::finish();
     }
 
+    // --- W35f-1.1 (R35eG0-1): an untouched Duration is not re-committed -------
+    // Under the days preference the values carry the Duration as "0.38 days" for a 3 hrs task,
+    // while the sheet's own rendering is "3 hrs".  The untouched-field skip compared the two
+    // renderings, so a Name-only apply re-committed 0.38 days and moved the Duration.
+    {
+        select_uid(window, 3);
+        core::sheet::SheetModel* sheet = window.sheet();
+        const std::size_t row = row_of_uid(*sheet, 3);
+        const std::size_t duration_column = sheet->column_of_field(app::task_field_id("Duration"));
+        gate::check(duration_column != core::sheet::kNoIndex,
+                    "R35eG0-1: the Duration column is shown");
+        if (duration_column != core::sheet::kNoIndex && row != core::sheet::kNoIndex) {
+            gate::check(sheet->begin_edit(row, duration_column), "R35eG0-1: Duration is editable");
+            sheet->set_edit_text("3 hrs");
+            gate::check(sheet->commit_edit(false).ok, "R35eG0-1: a 3 hrs Duration is set");
+            const std::string seeded = sheet->cell_text(row, duration_column);
+            app::Preferences days = window.preferences();
+            days.duration_style = app::DurationStyle::days;
+            gate::check(window.apply_preferences(days, false), "R35eG0-1: the days style applies");
+            msqt::TaskInformationValues untouched;
+            gate::check(window.task_information_values(&untouched),
+                        "R35eG0-1: the values are readable under the days style");
+            gate::check(untouched.duration_text != seeded,
+                        "R35eG0-1: the days rendering differs from the sheet's own rendering");
+            untouched.name += "x";
+            gate::check(window.apply_task_information(untouched),
+                        "R35eG0-1: a Name-only Task Information apply is accepted");
+            gate::check(sheet->cell_text(row, duration_column) == seeded,
+                        "R35eG0-1: the untouched Duration keeps the sheet's value");
+            days.duration_style = app::DurationStyle::auto_units;
+            window.apply_preferences(days, false);
+        }
+    }
+
     // --- queue the automatic indent exactly as the menu does -----------------
     QAction* indent = gate::find_action(window, app::MenuAction::indent);
     gate::check(indent != nullptr, "the Indent Task command exists");
