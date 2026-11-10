@@ -56,7 +56,7 @@ script.
 
 | Item | Finding | Status |
 |---|---|---|
-| 1.1 | R35bG3-1 | **partly fixed** `c408a07`: the shared guard was not applied to a session Level under a queued Sort or a session Sort under a queued Level, and the Sort branch's refusals had no test (R35cG1-4; partly fixed by W35d-1.2 `e2eca38`: remainder R35dG1-1, closed by W35e-1.1 `39c8e37`) |
+| 1.1 | R35bG3-1 | **partly fixed** `c408a07`: the shared guard was not applied to a session Level under a queued Sort or a session Sort under a queued Level, and the Sort branch's refusals had no test (R35cG1-4; partly fixed by W35d-1.2 `e2eca38`: remainder R35dG1-1, fixed in source by W35e-1.1 `39c8e37`, not yet closed by the coordinator) |
 | 1.2 | R35bG4-1 | fixed `aa1cef8` |
 | 1.3 | R35bW-1 | **partly fixed** `e439dd2`: Cut and Paste did not clear the structural redo list, so Redo re-queued a Sort or Level over an unsaved edit (R35cG1-2; partly fixed by W35d-0.5 `6458203`: remainder R35dG0-1 with R35dW-1, a partly applied Task Information edit, closed by W35e-0.1 `b8ee455`), and Paste's guard had no test (R35cG1-3; closed by W35d-1.1 `e967858`) |
 | 1.4 | R35bW-2 | **partly fixed** `37e0e1f`: the redo clear ran only while a Sort was queued, so after an Undo a refused or cleared Sort left the redo entry (R35cG1-1; closed by W35d-0.4 `61a451b`) |
@@ -226,7 +226,7 @@ Fresh trees `build/w35c-close-fresh`, `-app` and `-qt` at `319d187` (the last co
 | G0 | R35bW-CI1 | fixed `9a2c079`; the GCC 13 compile is CI's |
 | G0 | R35bG0-1 (High), R35bG0-2 (High) | fixed `7d923dc` (both layers) and `743ad8b` (writer; the plan layer is writer-only by a stated design, `calculate.md` section 8) |
 | G1 | R35bG4-1 | fixed `aa1cef8` |
-| G1 | R35bG3-1 | **partly fixed** `c408a07`: remainder R35cG1-4 (partly fixed by W35d-1.2 `e2eca38`: remainder R35dG1-1, closed by W35e-1.1 `39c8e37`) |
+| G1 | R35bG3-1 | **partly fixed** `c408a07`: remainder R35cG1-4 (partly fixed by W35d-1.2 `e2eca38`: remainder R35dG1-1, fixed in source by W35e-1.1 `39c8e37`, not yet closed by the coordinator) |
 | G1 | R35bW-1 | **partly fixed** `e439dd2`: remainders R35cG1-2 (partly fixed by W35d-0.5 `6458203`: remainder R35dG0-1 with R35dW-1, closed by W35e-0.1 `b8ee455`) and R35cG1-3 (closed by W35d-1.1 `e967858`) |
 | G1 | R35bW-2 | **partly fixed** `37e0e1f`: remainder R35cG1-1 (closed by W35d-0.4 `61a451b`) |
 | G1 | R35bG0-3 | fixed `cfe2e8a` with residual limits (two cancelling edits pass; a never-calculated file is refused; a critical bit outside the slack words is unmeasured) |
