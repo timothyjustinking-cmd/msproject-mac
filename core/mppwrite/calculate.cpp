@@ -1103,9 +1103,9 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
         pending.payload = {0, 0};
         props_edit.records = {finish, pending};
         save_props_edit(work, props_edit, scratch);
-        /* W35e-2.9 (R35dG1-4): one past the last append is the Props edit, the step after which
-         * the scratch file holds the whole result and only the re-read and the target write
-         * remain. */
+        /* W35e-2.9 (R35dG1-4): one past the last append is the Props edit.  Three steps remain
+         * after it: the scratch save, the re-read compare and the target write (W35f-1.11,
+         * R35eG2-7, corrected the wording; the next seam point is after the first two). */
         if (g_fault_after_appends == std::size(kAppends) + 1) {
             throw Error("calculate: injected fault after the Props edit (test seam)");
         }
@@ -1115,6 +1115,11 @@ CalculateWrite save_calculate(CfbDocument& doc, CalculateRequest const& request,
         if (reread.to_bytes() != work.to_bytes()) {
             throw Error("calculate: the written file does not re-read to the "
                         "bytes built");
+        }
+        /* W35f-1.11 (R35eG2-7): two past the last append is the step after the scratch save and
+         * the re-read compare, the last step before the target is written. */
+        if (g_fault_after_appends == std::size(kAppends) + 2) {
+            throw Error("calculate: injected fault after the re-read (test seam)");
         }
         reread.save(path);
         doc = reread;

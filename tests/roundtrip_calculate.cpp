@@ -1401,20 +1401,25 @@ void refused_requests() {
          * throws after the first append, and after the last, once each has been written to the
          * scratch file.  With the five appends and the Props edit writing `path` instead, the
          * target would hold a partly calculated file; it must be byte-identical, with no scratch
-         * file left.  W35e-2.9 (R35dG1-4): 6 is the step after the five appends, the Props edit,
-         * when the scratch file holds the whole result.  The seam is reset by a scope guard, so a
-         * failure of the save or the checks cannot leave it on for a later test. */
+         * file left.  W35e-2.9 (R35dG1-4): 6 is the step after the five appends, the Props edit.
+         * W35f-1.11 (R35eG2-7): 7 is the step after the scratch save and the re-read compare, the
+         * last before the target is written; a save that wrote `path` in place of the scratch
+         * file would pass 1 to 6 and change the target before 7.  The seam is reset by a scope
+         * guard, so a failure of the save or the checks cannot leave it on for a later test. */
         struct FaultSeamReset {
             ~FaultSeamReset() { mppwrite::set_calculate_fault_after_appends(0); }
         };
         for (std::size_t const appends :
-             {std::size_t{1}, std::size_t{3}, std::size_t{5}, std::size_t{6}}) {
+             {std::size_t{1}, std::size_t{3}, std::size_t{5}, std::size_t{6}, std::size_t{7}}) {
             FaultSeamReset const reset;
             std::string const seam_text =
-                appends == 6 ? std::string("injected fault after the Props edit")
-                             : "injected fault after append " + std::to_string(appends);
-            std::string const label = appends == 6 ? std::string("fault after the Props edit")
-                                                   : "fault after append " + std::to_string(appends);
+                appends == 6   ? std::string("injected fault after the Props edit")
+                : appends == 7 ? std::string("injected fault after the re-read")
+                               : "injected fault after append " + std::to_string(appends);
+            std::string const label = appends == 6   ? std::string("fault after the Props edit")
+                                      : appends == 7 ? std::string("fault after the re-read")
+                                                     : "fault after append " +
+                                                           std::to_string(appends);
             CfbDocument doc = control;
             std::string const target = out_path("w35-calculate-fault-target.mpp");
             std::filesystem::copy_file(fixture_path("wave35-calculate-unlinked-control.mpp"),
