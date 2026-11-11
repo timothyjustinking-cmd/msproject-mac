@@ -73,17 +73,21 @@
  *                               pair and is refused.
  *   selection        cell       refused (whole row)
  *   view             uid 2      refused (the other views are unmeasured)
- *   row              any row    refused (the project summary row, uid 0, and the
- *                               all-ones sentinel); W36-1.2: Bold ON takes the
+ *   row, field       3 cells    refused (every other cell).  W36-1b.1: Bold ON is
+ *                               written for the THREE cells a pair measures,
+ *                               (row 1, Task Name) wave30-textstyle, (row 2, Task
+ *                               Name) wave35-g3-font-bold-row2 and -range, and
+ *                               (row 1, Start) wave35-g3-font-bold-start; the
  *                               caller's row (payload +0, 0xe389d0) and field key
- *                               (payload +4, 0xe389db), measured on rows 1 and 2
- *                               (wave30-textstyle, wave35-g3-font-bold-row2 and
- *                               -range) and on Task Name and Start
- *                               (wave35-g3-font-bold-start).  No pair separates
- *                               the row number from the UniqueID (they are equal
- *                               in every committed pair), so the caller must pass
- *                               a row where both agree.
- *   field            Name, Start  refused (every other column)
+ *                               (payload +4, 0xe389db) are those pairs' words.
+ *                               trace-font-item-r6.md derives the row and field
+ *                               rule from these same runs, so none is a held-out
+ *                               prediction and no pair predicts a later row or the
+ *                               joint cell (row 2, Start): those are refused
+ *                               (`bold_on_cell_is_measured`).  The project summary
+ *                               row (uid 0) and the all-ones sentinel are refused
+ *                               too, and no pair separates the row number from
+ *                               the UniqueID (equal in every committed pair).
  *   block state      no 0x2240000c item in the target block
  *   edits per save   exactly one
  *
@@ -176,14 +180,27 @@ inline constexpr std::uint32_t kMeasuredItalicFontWord = 0x90000004u;
 /* The pair's applied view: the CV_iew row whose main block Project grew. */
 inline constexpr std::uint32_t kMeasuredViewUid = 2u;
 /* The pair's formatted cell: the Task Name cell (field id 0x0b40000e) of the
- * row with UniqueID 1.  Bold OFF is measured on this cell only (no held-out Bold
- * off pair); Bold ON is measured on more (below). */
+ * row with UniqueID 1.  Bold OFF and Italic ON are measured on this cell only
+ * (no held-out pair); Bold ON is measured on three cells (below). */
 inline constexpr std::uint32_t kMeasuredCellUid = 1u;
 inline constexpr std::uint32_t kMeasuredCellFieldId = 0x0B40000Eu;
 /* W36-1.2: the Start column's field key (StartText), measured by
- * wave35-g3-font-bold-start.  Bold ON is accepted for a row and one of these two
- * fields; every other field is unmeasured and refused. */
+ * wave35-g3-font-bold-start (row 1 only).  Every other field is unmeasured and
+ * refused. */
 inline constexpr std::uint32_t kMeasuredStartFieldId = 0x0B400505u;
+/* The second measured row: wave35-g3-font-bold-row2 (Task Name only). */
+inline constexpr std::uint32_t kMeasuredSecondCellUid = 2u;
+
+/* W36-1b.1 (R36G1-1): the cells Bold ON is measured on, each by its own pair:
+ * (row 1, Task Name), (row 2, Task Name) and (row 1, Start).  Every other cell,
+ * the joint cell (row 2, Start) included, has no pair and is refused.  The app
+ * calls this too, so the plan-side refusal and the writer cannot drift. */
+inline constexpr bool bold_on_cell_is_measured(std::uint32_t uid,
+                                               std::uint32_t field_id) noexcept {
+    return (field_id == kMeasuredCellFieldId &&
+            (uid == kMeasuredCellUid || uid == kMeasuredSecondCellUid)) ||
+           (field_id == kMeasuredStartFieldId && uid == kMeasuredCellUid);
+}
 
 /* The Font group's attributes.  Bold and (W36-1.3) Italic are measured; the rest
  * are refused. */
@@ -203,9 +220,9 @@ enum class ViewCellSelection : std::uint8_t {
 };
 
 /* One measured cell-format append.  The row and field id are the caller's (Bold
- * ON: any row, Task Name or Start; Bold OFF: the pair's Task Name cell of row 1,
- * kMeasuredCellUid / kMeasuredCellFieldId); every other word is fixed by the
- * pairs. */
+ * ON: one of the three measured cells, `bold_on_cell_is_measured`; Bold OFF: the
+ * pair's Task Name cell of row 1, kMeasuredCellUid / kMeasuredCellFieldId); every
+ * other word is fixed by the pairs. */
 struct ViewCellStyleEdit {
     std::uint32_t view_uid = 0;  /* the CV_iew row; measured 2 */
     std::uint32_t uid = 0;       /* the formatted row; not 0 */

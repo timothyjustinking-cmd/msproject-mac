@@ -622,6 +622,17 @@ void validate_edit(ViewCellStyleEdit const& edit, std::string const& function) {
                     "strikethrough and the two colours are unmeasured and "
                     "refused");
     }
+    /* W36-1b.1 (R36G1-1): Bold ON is written for the three cells a pair measures and
+     * no other; the row and field key of the item are those pairs' words, and no pair
+     * predicts a later row or the joint cell (row 2, Start). */
+    if (edit.attribute == ViewCellAttribute::bold && edit.enabled &&
+        !bold_on_cell_is_measured(edit.uid, edit.field_id)) {
+        throw Error(function + ": Bold on row uid " + std::to_string(edit.uid) +
+                    ", field " + hex_u32(edit.field_id) + " is not a measured cell; "
+                    "the measured cells are the Task Name cell of rows 1 and 2 and "
+                    "the Start cell of row 1, and no held-out pair covers any "
+                    "other row or column");
+    }
     /* W36-1.3: Italic has one pair (wave35-g3-font-italic: row 1, Task Name, on),
      * so there is no held-out Italic pair; it is written for that cell only and
      * there is no Italic off pair at all. */

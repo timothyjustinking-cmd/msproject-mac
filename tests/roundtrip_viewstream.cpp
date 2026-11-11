@@ -573,18 +573,26 @@ void test_bold_off_pair(TestContext& t) {
     }
 }
 
-/* ---- Bold on another row and on the Start column (W36-1.2) ---------------- */
+/* ---- Bold on the measured cells (W36-1.2, held to the lift rule by W36-1b.1) ---- */
 
-/* Three committed Bold pairs from the wave35-g3 session.  The writer's item is
- * the textstyle pair's with the row (payload +0) and the field key (payload +4)
- * taken from the caller, the two words trace-font-item-r6.md section 2 traces to
- * the caller's arguments (0xe389d0 `mov [rbx], r14d`, 0xe389db `mov [rbx+4],
- * r12d`); no byte of these pairs was used to build it, so each is a held-out
- * check of the rule: row2 and range change the row, start changes the field.
+/* Bold ON is written for three cells only: (row 1, Task Name), (row 2, Task Name)
+ * and (row 1, Start).  Each is its own pair, so each is a measured shape and no
+ * more: wave30-textstyle, wave35-g3-font-bold-row2 and wave35-g3-font-bold-start.
+ * wave35-g3-font-bold-range is a one-row Bold on (row 2, Name), the same shape as
+ * the row2 pair.  trace-font-item-r6.md derives the row (payload +0, 0xe389d0) and
+ * the field key (payload +4, 0xe389db) from these same runs, so none of the four is
+ * a held-out prediction of a row or a field, and no pair predicts any other cell
+ * (a row 3 or later, the joint cell (row 2, Start)): those are refused.
+ *
+ * The one held-out check is wave36-r7-font-bold-session2: the same edit as
+ * wave30-textstyle (row 1, Task Name) made in a second Project session, a file the
+ * writer's constants were not taken from.  It tests that the item's bytes outside
+ * the font word's top byte do not depend on the session; it says nothing about
+ * another row or column.
  *
  * The one byte the trace names as written by no instruction is the font word's
- * top byte (payload +43, Var2Data 85,327): Project's saves hold 0x6b, 0x00 and
- * 0x00 there, the writer pins 0x90.  The comparison masks that byte by its exact
+ * top byte (payload +43, Var2Data 85,327): Project's saves hold 0x6b, 0x00, 0x00
+ * and 0xc0 there, the writer pins 0x90.  The comparison masks that byte by its exact
  * field, the 0x2240000c item at Var2Data 85,272 and its payload offset 43, in
  * Project's save only; the port's byte is asserted to be the pinned 0x90 first. */
 struct BoldCellPair {
@@ -595,6 +603,8 @@ struct BoldCellPair {
     ViewCellAttribute attribute;
     std::uint32_t flags;      /* payload +8: the attribute's mask in its byte 3 */
     std::uint32_t font_word;  /* payload +40 without the top byte */
+    char const* role;         /* "measured" (the shape's own pair) or "held out" */
+    bool reopened = false;    /* made in a second session, on a reopened control */
 };
 
 constexpr std::size_t kItemFontTopAt = kInsertAt + 12 + 43;
@@ -606,18 +616,20 @@ constexpr std::uint32_t kStartFieldId = 0x0B400505u;
  * limited to this shape (the refusals below); the same comparison as the Bold
  * pairs, the same exact-field mask of the top byte. */
 void test_bold_cell_pairs(TestContext& t) {
-    std::array<BoldCellPair, 4> const pairs{{
+    std::array<BoldCellPair, 5> const pairs{{
         {"wave35-g3-font-bold-row2", 2, kMeasuredFieldId, 0x6b, ViewCellAttribute::bold,
-         0x01000003u, 0x00000001u},
+         0x01000003u, 0x00000001u, "measured"},
         {"wave35-g3-font-bold-start", 1, kStartFieldId, 0x00, ViewCellAttribute::bold,
-         0x01000003u, 0x00000001u},
+         0x01000003u, 0x00000001u, "measured"},
         {"wave35-g3-font-bold-range", 2, kMeasuredFieldId, 0x00, ViewCellAttribute::bold,
-         0x01000003u, 0x00000001u},
+         0x01000003u, 0x00000001u, "measured"},
+        {"wave36-r7-font-bold-session2", 1, kMeasuredFieldId, 0xc0, ViewCellAttribute::bold,
+         0x01000003u, 0x00000001u, "held out", true},
         {"wave35-g3-font-italic", 1, kMeasuredFieldId, 0x6b, ViewCellAttribute::italic,
-         0x02000003u, 0x00000004u}}};
+         0x02000003u, 0x00000004u, "measured"}}};
     for (BoldCellPair const& pair : pairs) {
         std::string const stem = pair.stem;
-        std::string const label = "bold cell " + stem;
+        std::string const label = "bold cell " + stem + " (" + pair.role + ")";
         std::string const control_name = stem + "-control.mpp";
         std::string const null_name = stem + "-control-null.mpp";
         std::string const edit_name = stem + ".mpp";
@@ -665,9 +677,31 @@ void test_bold_cell_pairs(TestContext& t) {
 
         std::array<char const*, 4> const declared{{
             kViewMeta, kViewVar2, kViewProps, "Props14"}};
+        if (!pair.reopened) {
+            save_pair::compare_all(t, "view-bold-" + stem, doc_from_data(control_name),
+                                   doc_from_data(null_name), project, port, nullptr, 0,
+                                   declared.data(), declared.size());
+            continue;
+        }
+        /* W36-1b.1: the held-out pair.  Project made the edit in a SECOND session, on
+         * a control it had reopened from disk.  The item, the VarMeta offsets and
+         * 214/Props (6,606 effect bytes) are predicted exactly.  Two streams are not:
+         *  - Props14: Project's save leaves the edit marker 0 (the port writes 1, the
+         *    value every single-session pair holds);
+         *  - 214/CEdl/Var2Data: Project's save of a reopened file is 38 bytes longer
+         *    than the control after the save-path record, in the null save too
+         *    (null and edit are equal there), so it is a reopen effect, not the
+         *    edit's; the port copies the control's 392 bytes.
+         * Neither is decoded, so neither is masked: each is a NAMED expected failure
+         * with its exact signature, and Props14 is not declared as an effect. */
+        std::array<char const*, 3> const declared_reopened{{kViewMeta, kViewVar2, kViewProps}};
+        std::array<save_pair::KnownGap, 2> const gaps{{
+            {"214/CEdl/Var2Data", 38, 392, 0x00, 0x1a},
+            {"Props14", 1, 402, 0x01, 0x00}}};
         save_pair::compare_all(t, "view-bold-" + stem, doc_from_data(control_name),
-                               doc_from_data(null_name), project, port, nullptr, 0,
-                               declared.data(), declared.size());
+                               doc_from_data(null_name), project, port, gaps.data(),
+                               gaps.size(), declared_reopened.data(),
+                               declared_reopened.size());
     }
 }
 
@@ -744,6 +778,47 @@ void test_edit_refusals(TestContext& t) {
                     " is not a measured field id (0x0b40000e, the Task Name cell, "
                     "or 0x0b400505, the Start cell)",
                 "field id " + std::to_string(field_id) + " refused");
+    }
+    /* W36-1b.1 (R36G1-1): Bold ON is written for the three measured cells only,
+     * (row 1, Task Name), (row 2, Task Name) and (row 1, Start).  A later row and
+     * the joint cell (row 2, Start) have no pair, so each is refused with the cell
+     * named, on every field the writer knows. */
+    for (std::pair<std::uint32_t, std::uint32_t> const cell :
+         {std::pair<std::uint32_t, std::uint32_t>{3u, kMeasuredFieldId},
+          std::pair<std::uint32_t, std::uint32_t>{3u, kStartFieldId},
+          std::pair<std::uint32_t, std::uint32_t>{2u, kStartFieldId},
+          std::pair<std::uint32_t, std::uint32_t>{1000u, kMeasuredFieldId}}) {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.uid = cell.first;
+        edit.field_id = cell.second;
+        refuses(control, {edit}, "is not a measured cell",
+                "Bold on row " + std::to_string(cell.first) + ", field " +
+                    std::to_string(cell.second) + " refused");
+    }
+    /* Round 7 pairs the writer does not reproduce, each "not lifted: needs <fact>":
+     *  - font-second-cell: Bold on (row 2, Name) in a view that already holds the
+     *    row 1 item.  Project stores ONE 88-byte item for both cells; the writer
+     *    knows only the append of one item to a view with none;
+     *  - font-second-change: Italic on (row 1, Name) over an existing Bold item.
+     *    Project rewrites it in place to flags 0x03000003; no writer shape;
+     *  - font-bold-italic: two attributes in one save (one edit per save). */
+    for (char const* const stem : {"wave36-r7-font-second-cell-control.mpp",
+                                   "wave36-r7-font-second-change-control.mpp"}) {
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, stem));
+    }
+    {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.uid = 2;
+        refuses(doc_from_data("wave36-r7-font-second-cell-control.mpp"), {edit},
+                "already carries a cell format item",
+                "Bold on (row 2, Name) beside an existing item refused (r7 second-cell)");
+    }
+    {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.attribute = ViewCellAttribute::italic;
+        refuses(doc_from_data("wave36-r7-font-second-change-control.mpp"), {edit},
+                "already carries a cell format item",
+                "Italic over an existing Bold item refused (r7 second-change)");
     }
     /* Bold OFF has one measured shape, the Task Name cell of row 1 (the pair's
      * own cell, no held-out Bold off pair): every other cell is refused. */

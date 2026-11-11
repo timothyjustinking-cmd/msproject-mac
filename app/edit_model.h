@@ -603,13 +603,13 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
                           bool assign, StructuralEdit& out, std::string& error);
 
 // Builds a ready-to-push bold_cell edit for ONE cell (W34-4.5).  The plan-side
-// rule (W36-1.2) is the measured pairs' cells: Project's wave30-textstyle and
-// wave35-g3-font-bold-row2 format the Task Name cell of rows 1 and 2 and
-// wave35-g3-font-bold-start the Start cell of row 1, and the item stores the
-// caller's row and field key, so any saved row of the Task Name and Start columns
-// is built (a task whose ID differs from its UniqueID is refused: no pair says
-// which one the view stores).  Every other column is refused here with the
-// decision-9 "is not implemented in this port" text.  The FILE is the
+// rule (W36-1.2, held to the lift rule by W36-1b.1) is the measured pairs' cells:
+// Project's wave30-textstyle and wave35-g3-font-bold-row2 format the Task Name cell
+// of rows 1 and 2 and wave35-g3-font-bold-start the Start cell of row 1.  Those
+// three cells are built; no held-out pair covers any other, so every other row or
+// column (the joint cell (row 2, Start) included) is refused here with the
+// decision-9 "is not implemented in this port" text, and so is a task whose ID
+// differs from its UniqueID (no pair says which one the view stores).  The FILE is the
 // authority for the view shape: the writer's dry run validates the three view
 // streams (the applied view, its main block, the absence of an existing cell
 // format item, the Props size tag) and its refusal text is returned as the
@@ -754,9 +754,9 @@ bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, i
 
 // The cell Font Bold OFF is measured for: Task Name of the task with UniqueID 1
 // (core/mppwrite/viewstream_edit.h, wave30-textstyle).  Bold ON (W36-1.2) is
-// measured on a Task Name cell of rows 1 and 2 and on the Start cell of row 1,
-// and the writer takes any row of the two columns; the Start column's stored
-// field key is StartText.
+// measured on the Task Name cell of rows 1 and 2 and on the Start cell of row 1,
+// and the writer takes those three cells only (W36-1b.1); the Start column's
+// stored field key is StartText.
 inline constexpr std::uint32_t kBoldMeasuredTaskUid = 1;
 inline constexpr std::uint32_t kBoldMeasuredFieldId = 0x0B40000Eu;
 inline constexpr std::uint32_t kBoldMeasuredStartFieldId = 0x0B400505u;

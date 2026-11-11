@@ -14,8 +14,10 @@
 //   wave35-g3-font-bold-off-control.mpp    -> wave35-g3-font-bold-off.mpp
 //       the same cell with Bold turned off; Project rewrites the item in place
 //
-// and (W36-1.2, Bold on another row and on the Start column; held-out pairs,
-// none used to build the item):
+// and (W36-1.2, held to the lift rule by W36-1b.1: Bold on the three measured cells
+// (row 1 Name, row 2 Name, row 1 Start) and no other; each is a measured shape, not
+// a held-out prediction, because trace-font-item-r6.md derives the row and field
+// rule from these same runs):
 //
 //   wave35-g3-font-bold-row2-control.mpp   -> wave35-g3-font-bold-row2.mpp
 //       the Task Name cell of row 2
@@ -23,6 +25,12 @@
 //       the Start cell of row 1
 //   wave35-g3-font-bold-range-control.mpp  -> wave35-g3-font-bold-range.mpp
 //       the Task Name cell of row 2 again (a one-row Bold, mislabelled "range")
+//
+// The held-out pair, wave36-r7-font-bold-session2 (wave30-textstyle's edit made in a
+// second Project session on a reopened control), is checked in
+// tests/roundtrip_viewstream.cpp (test_bold_cell_pairs), where its two unmatched
+// streams, Props14 and 214/CEdl/Var2Data, are named expected failures.  It is not a
+// pair here: this table has no named gaps.
 //
 // The font word's top byte (item payload +43) is written by no instruction in the
 // trace and differs by session (0x90, 0x6b, 0x00); the port pins 0x90.  Each
@@ -623,15 +631,33 @@ void check_refusals() {
     /* The pair's Italic, Underline, strikethrough and colours are not even a
      * parameter of the builder: Font Bold is the only attribute it builds. */
     std::uint32_t other_task = 0;
+    std::uint32_t third_task = 0;
     for (const app::TaskRow& row : plan.tasks) {
         if (row.uid != kTaskUid && row.uid != 0 && row.file_row != 0 && other_task == 0) {
             other_task = row.uid;
+        } else if (row.uid != kTaskUid && row.uid != other_task && row.uid != 0 &&
+                   row.file_row != 0 && third_task == 0) {
+            third_task = row.uid;
         }
     }
     check(other_task != 0, "the control has a second saved task for the row refusal");
-    /* W36-1.2: any saved row is a Bold target, but no pair separates a row's
-     * ID from its UniqueID (equal in every committed pair), so a task whose two
-     * differ is refused rather than guessed. */
+    check(third_task != 0, "the control has a third saved task for the row refusal");
+    /* W36-1b.1 (R36G1-1): Bold ON is built for (row 1, Name), (row 2, Name) and
+     * (row 1, Start) only.  A later row, and the joint cell (row 2, Start), have no
+     * pair and are refused with the three cells named. */
+    check(other_task == 2, "the second saved task of the control is row uid 2");
+    expect_refused(plan, source, third_task, kNameField,
+                   "the Task Name cell of rows 1 and 2 and the Start cell of row 1",
+                   "Bold on a row beyond the measured ones (Task Name)");
+    expect_refused(plan, source, third_task, kStartField,
+                   "the Task Name cell of rows 1 and 2 and the Start cell of row 1",
+                   "Bold on a row beyond the measured ones (Start)");
+    expect_refused(plan, source, other_task, kStartField,
+                   "the Task Name cell of rows 1 and 2 and the Start cell of row 1",
+                   "Bold on the joint cell (row 2, Start)");
+    /* W36-1.2: no pair separates a row's ID from its UniqueID (equal in every
+     * committed pair), so a task whose two differ is refused rather than guessed.
+     * W36-1b.1: and a cell that no pair measured is refused before that. */
     {
         app::PlanInput renumbered = plan;
         for (app::TaskRow& row : renumbered.tasks) {
@@ -725,9 +751,13 @@ void check_refusals() {
             check(!edits.push(hand_edit(other_task, kNameField), &renumbered),
                   "push() refuses a task whose ID differs from its UniqueID");
         }
+        check(!edits.push(hand_edit(other_task, kStartField), &plan),
+              "push() refuses the joint cell (row 2, Start), which no pair measured");
+        check(!edits.push(hand_edit(third_task, kNameField), &plan),
+              "push() refuses a row beyond the measured ones");
         check(edits.empty(), "no refused bold left anything in the queue");
-        check(edits.push(hand_edit(other_task, kStartField), &plan),
-              "push() accepts the Start cell of a saved row (W36-1.2)");
+        check(edits.push(hand_edit(kTaskUid, kStartField), &plan),
+              "push() accepts the Start cell of row 1 (W36-1.2)");
         check_size(edits.size(), 1, "the accepted Start bold is queued");
     }
 

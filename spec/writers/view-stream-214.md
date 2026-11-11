@@ -226,29 +226,57 @@ What this settles:
   Var2Data, one in `Props14`, no mismatch).  No pair holds another Bold-off
   shape, so (b) of the lift rule has no held-out pair and the writer stays
   limited to this one measured shape.
-- **Bold on any task row and on the Start column (W36-1.2).**  The append
-  shape above is enabled for the Task Name cell and the Start cell
-  (`0x0b40000e`, `0x0b400505`) of any stored row uid (not 0, not the all-ones
-  sentinel), for Bold on only.  The rule is the structure the wave-30 pair
-  measured with the row uid and the field id substituted: (a) the entry's
+- **Bold on three measured cells (W36-1.2, narrowed by W36-1b.1).**  The append
+  shape above is enabled for exactly three cells, for Bold on only: the Task Name
+  cell (`0x0b40000e`) of rows uid 1 and uid 2, and the Start cell (`0x0b400505`)
+  of row uid 1.  Each has its own single-session Project pair
+  (`wave30-textstyle` for row 1 Name, `wave35-g3-font-bold-row2` for row 2 Name,
+  `wave35-g3-font-bold-start` for row 1 Start; `wave35-g3-font-bold-range` is a
+  one-row Bold on row 2 and is not a range, see D-2).  The structure is the
+  wave-30 pair's with the row uid and field id substituted: (a) the entry's
   builder and layout are in `trace-font-item-r6.md` (row +0, field +4, mask +10,
-  font word +40); (b) the held-out pairs are `wave35-g3-font-bold-row2` and
-  `wave35-g3-font-bold-start`, neither of which the structure was fitted to
-  (it came from the wave-30 pair), and the third Bold save, `wave35-g3-font-bold-range`,
-  which is a one-row Bold on row 2 and is not a range (see D-2); (c)
-  `roundtrip_viewstream` (`test_bold_cell_pairs`) and `app_edits_cell_bold`
-  save each control through the real writer and compare every stream with
-  Project's save under its null save: 6607 effect bytes for row 2, 6608 for
-  Start and 6607 for the one-row range, with no mismatch outside the one masked
-  byte.  **The mask is the font word's top byte (entry offset +43), by exact
-  field** (Var2Data block at 42576, item at 85272): Project stores `0x6b` (row 2)
-  and `0x00` (Start, range) there and the port pins `0x90`; the tests assert
-  both values and the port's `0x90`, then set Project's byte to the port's
-  before the stream comparison, so no other byte of the item is masked.  4(e)
-  (the COM read-back of the cell's `Font.Bold`) is the coordinator's and is not
-  claimed by these tests.  Not measured and still refused: Bold off anywhere
-  but (row 1, Name), the joint cell (row 2, Start) as a direct pair, and any
-  other column.  The app also refuses a task whose ID differs from its UniqueID:
+  font word +40).  **(b) There is no held-out pair for the row or field
+  substitution.**  Each of the three pairs was used to fix the structure at its
+  own cell, so none predicts another cell, and the earlier claim that two of them
+  were held out was wrong and is withdrawn.  Under the lift rule the writer
+  therefore refuses every other row and column: the joint cell (row 2, Start),
+  rows 3 and later, and the other columns ("is not a measured cell"; the app
+  disables B there with the same reason).  The spec and the code now agree on
+  this (R36G1-2: the joint cell was named as unmeasured here while the code
+  accepted it).  (c) `roundtrip_viewstream` (`test_bold_cell_pairs`) and
+  `app_edits_cell_bold` save each control through the real writer and compare
+  every stream with Project's save under its null save: 6607 effect bytes for
+  row 2, 6608 for Start and 6607 for the one-row range, with no mismatch outside
+  the one masked byte.  **The mask is the font word's top byte (entry offset
+  +43), by exact field** (Var2Data block at 42576, item at 85272): Project stores
+  `0x6b` (row 2) and `0x00` (Start, range) there and the port pins `0x90`; the
+  tests assert both values and the port's `0x90`, then set Project's byte to the
+  port's before the stream comparison, so no other byte of the item is masked.
+  4(e) (the COM read-back of the cell's `Font.Bold`) is the coordinator's and is
+  not claimed by these tests.
+  **The one accepted-shape round-7 pair is a held-out check of the session, not
+  of the cell.**  `wave36-r7-font-bold-session2` is the same Bold on (row 1, Name) in
+  a file saved and reopened first.  The port's save does not match it, and the
+  two named gaps are recorded as expected failures, not masked: `214/CEdl/Var2Data`
+  (38 bytes differ from the first mismatch at 392, port `0x00`, Project `0x1a`;
+  the same growth is in Project's null save of the reopened file, so it is a
+  reopen effect the port does not model) and `Props14` (the edit marker at 402:
+  Project keeps `0x00` in the reopened save where the port writes `0x01`, so the
+  marker depends on the session).  The font item itself matches except for the
+  top byte (`0xc0` in this session, masked by exact field).  Not lifted: needs
+  the rule for the reopened-file marker and CEdl growth (see "Found, not fixed"
+  in `wave36-complete.md`).
+  **Round-7 pairs refused, "not lifted: needs <fact>":** second cell
+  (`wave36-r7-font-second-cell`, a two-entry 88-byte item: needs the layout of
+  a second entry and the rule that orders it); second change to the same cell
+  (`wave36-r7-font-second-change`: needs the in-place rewrite rule for a cell
+  that already carries an item); Bold with Italic (`wave36-r7-font-bold-italic`: needs the combined mask and
+  flags); a range of cells (`wave36-r7-font-range2`: needs the range's item count and order);
+  Underline from the toolbar (`wave36-r7-font-underline-toolbar`: needs the attribute mask and flags).  The writer
+  refuses the second-cell and second-change controls with "already carries a
+  cell format item" (`test_bold_cell_pairs` asserts it); the other three are
+  requests the port cannot make (no Bold-with-Italic, range or toolbar-Underline
+  edit exists).  The app also refuses a task whose ID differs from its UniqueID:
   every pair has the two equal, so none says which one the view stores, and a
   collapsed, sorted or filtered view could separate them.
 - **Italic on the Task Name cell of row 1 (W36-1.3).**  The same append with

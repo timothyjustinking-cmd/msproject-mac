@@ -244,9 +244,9 @@ const std::vector<TabSpec>& tab_specs() {
         combo(font, "font size", "11", 34, 0, 1);
         // W26-2.1: B/I/U are icon-only, like the letters Project shows: the
         // glyph is the letter, so the label is the accessible name only.
-        // W34-4.5, W36-1.2: B is enabled for the measured cells (a Task Name or
-        // Start cell of a saved row); the handler refuses every other cell with
-        // the reason.  W36-1.3: I is enabled for the one measured Italic cell (the
+        // W34-4.5, W36-1.2, W36-1b.1: B is enabled for the measured cells (the Task
+        // Name cell of rows 1 and 2 and the Start cell of row 1); the handler
+        // refuses every other cell with the reason.  W36-1.3: I is enabled for the one measured Italic cell (the
         // Task Name cell of task uid 1); U stays disabled.
         small_cmd(font, "B", RibbonCommand::font_bold, 20, 0, 2, true, true, "font.bold");
         small_cmd(font, "I", RibbonCommand::font_italic, 20, 0, 3, true, true, "font.italic");

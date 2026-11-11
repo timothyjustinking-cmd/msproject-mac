@@ -3156,12 +3156,14 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
 namespace {
 
 // The plan-side half of the Font Bold rule, shared by the builder and push()
-// (W34-4.5, widened by W36-1.2).  The measured pairs bold the Task Name cell of
-// rows 1 and 2 and the Start cell of row 1; the item stores the caller's row and
-// field key, so any saved row of those two columns is built.  No committed pair
-// separates a row's ID from its UniqueID (equal in every one), so a task whose
-// two differ is refused rather than guessed.  Returns the reason, or an empty
-// string.
+// (W34-4.5, widened by W36-1.2, narrowed by W36-1b.1).  The measured pairs bold the
+// Task Name cell of rows 1 and 2 and the Start cell of row 1; each is its own
+// pair, and none is a held-out prediction of another cell (the trace derives the
+// row and field rule from the same runs), so those three cells are built and every
+// other cell, the joint cell (row 2, Start) included, is refused.  No committed
+// pair separates a row's ID from its UniqueID (equal in every one), so a task
+// whose two differ is refused rather than guessed.  Returns the reason, or an
+// empty string.
 std::string cell_bold_plan_refusal(const PlanInput& plan, std::uint32_t task_uid,
                                    std::uint32_t field_id) {
     const TaskRow* task = task_row_for_uid(plan.tasks, task_uid);
@@ -3172,6 +3174,12 @@ std::string cell_bold_plan_refusal(const PlanInput& plan, std::uint32_t task_uid
         return "Font Bold on a cell outside the Task Name and Start columns is not "
                "implemented in this port: the measured Project pairs bold a Task "
                "Name cell and a Start cell";
+    }
+    if (!mppwrite::bold_on_cell_is_measured(task_uid, field_id)) {
+        return "Font Bold on this cell is not implemented in this port: the "
+               "measured Project pairs bold the Task Name cell of rows 1 and 2 and "
+               "the Start cell of row 1, and no held-out pair covers any other row "
+               "or column";
     }
     if (task->id != task->uid) {
         return "Font Bold on this row is not implemented in this port: the task's "
