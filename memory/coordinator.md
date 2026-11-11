@@ -5,7 +5,7 @@
 `docs/handoff/wave35-verification/`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
 
-## Wave 35f state (closed on `wave35f`, cut from `main` at `47665e1`, NOT pushed) — 10 November 2026
+## Wave 35f state (closed on `wave35f`, from `main` at `47665e1`, NOT pushed) — 10 November 2026
 
 Fix-only wave; brief `docs/handoff/wave35f-brief.md`, record `docs/handoff/wave35f-complete.md`.
 Waves 34 to 35e are merged into `main` (`5e1c8ea`, CI green on all seven jobs at `c0c81e5`, 4(e)
@@ -27,8 +27,9 @@ R35bG2-9 stay open and unassigned.  Only the coordinator's review closes an id.
 Fix-only wave cut from `wave35d` at `2ea87e5`; brief `docs/handoff/wave35e-brief.md`, record
 `docs/handoff/wave35e-complete.md`.  The coordinator's reviews closed **R35dG0-1** (the last High,
 with R35dW-1) and left the wave 35f queue above (four Mediums and the Lows).  G1's items 1.1
-(R35dG1-1 `39c8e37`), 1.2 (R35dG1-2 with R35dW-4 `1da3997`), 1.3 (the records `02f1900`) and 1.4 (R35dG0-2 `f244d02`) are fixed in
-source, with the follow-ons R35eG1-1, R35eG1-3 and R35eG1-2; G2's Lows are fixed in the builder's
+(R35dG1-1 `39c8e37`), 1.2 (R35dG1-2 with R35dW-4 `1da3997`), 1.3 (the records `02f1900`) and 1.4
+(R35dG0-2 `f244d02`) are fixed in source, with the follow-ons R35eG1-1, R35eG1-3 and R35eG1-2;
+G2's Lows are fixed in the builder's
 tree except R35dG2-1 (partly fixed) and R35dW-5 (fixed in source, CI `macos-appkit` its gate).
 R35cW-CI1 and R35cW-CI2 were proved by the green wave 35d CI run (`3d22c39`).
 
@@ -55,9 +56,10 @@ R35cG1-3 (`e967858`), R35cG2-1 (`41f7a2c`), R35cW-2 (`454521d`), R35cG2-8; **par
 R35cG1-4 (`e2eca38`, remainder R35dG1-1), R35cG0-3 (`6552f11`, remainder R35dG1-2), R35cW-1
 (`4410935`, remainder R35dG1-3 and R35dW-2).
 **G2 done** (`WAVE-35d-G2-COMPLETE`): the Lows R35cG0-5, -6, R35cG1-5 to -7, R35cG2-2 to -7 and
-R35cW-3 and -5 are fixed or recorded, R35cW-4 (`4dcfcd7`) is **partly fixed** (remainders R35dW-1 and R35dW-5); **partly fixed, still open:** R35cG0-2 (plan reads Start word
-+104 only) and R35cG0-4 (no plan-side Props digest).  Every 35d fix awaits an independent review; the coordinator still owes the
-push, both CI dispatches and the mutation runs.
+R35cW-3 and -5 are fixed or recorded, R35cW-4 (`4dcfcd7`) is **partly fixed** (remainders R35dW-1
+and R35dW-5); **partly fixed, still open:** R35cG0-2 (plan reads Start word +104 only) and
+R35cG0-4 (no plan-side Props digest).  Every 35d fix awaits an independent review; the
+coordinator still owes the push, both CI dispatches and the mutation runs.
 
 ## Wave 35 state (closed on `wave35`, NOT merged, NOT pushed) — 9 November 2026
 
