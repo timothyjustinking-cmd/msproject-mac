@@ -137,6 +137,17 @@ try:
         check("W36-0b.1 %s: control-null vs the edit fails on the view bag" % stem,
               rc == 1 and "bytes-differ ???214/CV_iew/Var2Data" in out, out[:300])
 
+    # --- W36-0b.3 (R36G0-3): stream names match whole; DocumentSummaryInformation in full -------
+    # The old gate matched by suffix, so "SummaryInformation" also took the document summary
+    # (a separate stream) and gave it a size tolerance.  One flipped byte in it must now fail.
+    dsi = "?DocumentSummaryInformation"
+    for offset in (0, 60):
+        bad = os.path.join(tmp, "flip-dsi.mpp")
+        flipped_copy(ref, bad, dsi, offset)
+        rc, out = run_cli(bad, ref, ctl, nul)
+        check("W36-0b.3 one flipped byte at +%d of %s fails and names it" % (offset, dsi),
+              rc == 1 and ("bytes-differ " + dsi) in out, out[:300])
+
     # --- W36-0.2: the control/null difference is not applied to a reference of another length ----
     ref2, ctl2, nul2 = pair("wave34-assign-add-second")
     bad = os.path.join(tmp, "flip2.mpp")
@@ -190,6 +201,16 @@ try:
             check("W36-0b.1 font item payload +%d flipped -> %d problem(s)" % (43 + delta, want),
                   problems == want and (want == 0 or any(view in ln for ln in lines)),
                   "%r" % (lines,))
+
+        # W36-0b.3: a name that merely ends like a rule's key gets no rule, no stride, no parser
+        for key in list(g.NOISE) + list(g.STRIDE) + list(g.CANON) + list(g.VAR_META):
+            for look in ("x" + key, "zzz/" + key, key[1:]):
+                check("W36-0b.3 %r is not matched as %r" % (look, key),
+                      g._noise_rule(look) is None and g._stride(look) is None and
+                      look not in g.CANON and look not in g.VAR_META)
+        check("W36-0b.3 the document summary is not a canonical stream",
+              "?DocumentSummaryInformation" not in g.CANON and
+              "?DocumentSummaryInformation" in R)
 
         # --- the acceptance sweep over every committed pair (W36-0b.2) --------------------------
         # Positive: the control's own null save, traced against the control, is a PASS.  Negative:

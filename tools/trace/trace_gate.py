@@ -53,16 +53,16 @@ def streams(path):
 
 
 # ---------------------------------------------------------------------------------------------
-# Fixed-stride streams: (stream-name suffix) -> (first record offset, stride).  Masks and noise
+# Fixed-stride streams: (exact stream name) -> (first record offset, stride).  Masks and noise
 # windows are per record, so a stream that grew by a row keeps every older row's mask.
 STRIDE = {
-    "TBkndTask/FixedData": (48, 202),
-    "TBkndTask/Fixed2Data": (0, 64),
-    "TBkndAssn/FixedData": (0, 110),
-    "TBkndAssn/Fixed2Data": (0, 48),
-    "TBkndRsc/Fixed2Data": (0, 40),
-    "TBkndCal/Fixed2Data": (0, 16),
-    "TBkndCons/Fixed2Data": (0, 16),
+    "???114/TBkndTask/FixedData": (48, 202),
+    "???114/TBkndTask/Fixed2Data": (0, 64),
+    "???114/TBkndAssn/FixedData": (0, 110),
+    "???114/TBkndAssn/Fixed2Data": (0, 48),
+    "???114/TBkndRsc/Fixed2Data": (0, 40),
+    "???114/TBkndCal/Fixed2Data": (0, 16),
+    "???114/TBkndCons/Fixed2Data": (0, 16),
 }
 
 # Noise windows.  Every rule is {"windows": [...], "ceiling": N} where the ceiling is the most
@@ -74,29 +74,29 @@ STRIDE = {
 #   tail windows    (lo, hi) offsets from the first byte after the Props record area
 NOISE = {
     # UuidCreateSequential GUIDs (trace-insert-milestone-r4.md 1b-1) and the per-record stamps.
-    "TBkndAssn/Fixed2Data": {"record": [(0, 32), (32, 42)], "ceiling": 40, "rows": 2},
-    "TBkndTask/Fixed2Data": {"record": [(0, 10), (24, 34), (42, 50)], "ceiling": 50, "rows": 6},
-    "TBkndRsc/Fixed2Data": {"record": [(0, 10), (24, 34)], "ceiling": 20, "rows": 1},
-    "TBkndCal/Fixed2Data": {"record": [(0, 10)], "ceiling": 10, "rows": 18},
-    "TBkndCons/Fixed2Data": {"record": [(0, 16)], "ceiling": 30, "rows": 3},
+    "???114/TBkndAssn/Fixed2Data": {"record": [(0, 32), (32, 42)], "ceiling": 40, "rows": 2},
+    "???114/TBkndTask/Fixed2Data": {"record": [(0, 10), (24, 34), (42, 50)], "ceiling": 50, "rows": 6},
+    "???114/TBkndRsc/Fixed2Data": {"record": [(0, 10), (24, 34)], "ceiling": 20, "rows": 1},
+    "???114/TBkndCal/Fixed2Data": {"record": [(0, 10)], "ceiling": 10, "rows": 18},
+    "???114/TBkndCons/Fixed2Data": {"record": [(0, 16)], "ceiling": 30, "rows": 3},
     # Creation date-time stamp of a new row (trace-insert-milestone-r4.md 1b-2; insert-summary
     # "+984" = record +128 of the 202-byte rows that start at 48).
-    "TBkndTask/FixedData": {"record": [(128, 132)], "ceiling": 3, "rows": 1},
+    "???114/TBkndTask/FixedData": {"record": [(128, 132)], "ceiling": 3, "rows": 1},
     # Per-save and per-file Props records (trace-props-framing.md section 1).
-    "114/Props": {"props": {0x02400007: (0, 4), 0x024013b1: (0, 4), 0x02400029: (0, 16),
+    "???114/Props": {"props": {0x02400007: (0, 4), 0x024013b1: (0, 4), 0x02400029: (0, 16),
                             0x024013c2: (0, 16), 0x02401394: (0, 16)}, "ceiling": 24},
     # The view GUID string record, as seen in the null saves.  (The typed record 0x00010007, the
     # length of 214/CEdl/Var2Data, is canonicalised with that stream's other size words.)
-    "214/Props": {"props": {0x03400001: (0, 80)}, "ceiling": 17},
+    "???214/Props": {"props": {0x03400001: (0, 80)}, "ceiling": 17},
     # View-stream save stamps (null run: CEdl 10 + 1, CFilter 20, CGrouping 20, CTable 10,
     # CV_iew 30 + 4, all at the offsets the committed control/null pairs show).
-    "214/CEdl/FixedData": {"byte": [(144, 154)], "ceiling": 10},
-    "214/CFilter/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
-    "214/CGrouping/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
-    "214/CTable/FixedData": {"byte": [(214, 224)], "ceiling": 10},
-    "214/CV_iew/FixedData": {"byte": [(122, 132), (260, 270), (398, 408)], "ceiling": 30},
+    "???214/CEdl/FixedData": {"byte": [(144, 154)], "ceiling": 10},
+    "???214/CFilter/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
+    "???214/CGrouping/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
+    "???214/CTable/FixedData": {"byte": [(214, 224)], "ceiling": 10},
+    "???214/CV_iew/FixedData": {"byte": [(122, 132), (260, 270), (398, 408)], "ceiling": 30},
     # The assignment creation stamp is a var block located through VarMeta.
-    "TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}, "ceiling": 3},
+    "???114/TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}, "ceiling": 3},
 }
 
 # Streams that carry a file path or a user name, whose length the machine moves (null run:
@@ -111,6 +111,14 @@ CEDL_META = "???214/CEdl/VarMeta"
 VIEW_PROPS = "???214/Props"
 PROPS14 = "Props14"
 SUMMARY = "?SummaryInformation"
+CVIEW_VAR2 = "???214/CV_iew/Var2Data"
+# Var2Data streams whose noise is located through their VarMeta: name -> VarMeta name.  Every
+# stream name in this file is matched whole, never by a suffix: "?DocumentSummaryInformation" is
+# not "?SummaryInformation" and is compared in full.
+VAR_META = {
+    CVIEW_VAR2: "???214/CV_iew/VarMeta",
+    "???114/TBkndAssn/Var2Data": "???114/TBkndAssn/VarMeta",
+}
 
 CEDL_PATH_ID = 0x26400031        # UTF-16 file path ending "!" and NUL (the last CEdl record)
 PROPS14_PATH_ID = 0x35400008     # UTF-16 file path
@@ -131,14 +139,14 @@ BAG_KEY = 0x20400006
 
 def _stride(name):
     for key, (base, stride) in STRIDE.items():
-        if name.endswith(key):
+        if name == key:
             return base, stride
     return None
 
 
 def _noise_rule(name):
     for key, rule in NOISE.items():
-        if name.endswith(key):
+        if name == key:
             return rule
     return None
 
@@ -409,7 +417,7 @@ def noise_windows(name, data, meta=None):
     rule = _noise_rule(name)
     offs = set()
     nrec = 0
-    if name.endswith("214/CV_iew/Var2Data"):
+    if name == CVIEW_VAR2:
         offs.update(font_item_garbage(data, meta))
     if rule is None:
         return offs, nrec
@@ -515,9 +523,8 @@ def compare(traced, ref, ctl, nul):
             lines.append("mask-refused %s control %d reference %d" % (name, len(c), len(a)))
         mask = mask or set()
         meta_a = meta_b = None
-        if name.endswith("Var2Data"):
-            meta_name = name[:-len("Var2Data")] + "VarMeta"
-            meta_a, meta_b = ref.get(meta_name), traced.get(meta_name)
+        if name in VAR_META:
+            meta_a, meta_b = ref.get(VAR_META[name]), traced.get(VAR_META[name])
         win, nrec = noise_windows(name, a, meta_a)
         wb, nrb = noise_windows(name, b, meta_b)
         win |= wb
@@ -526,7 +533,7 @@ def compare(traced, ref, ctl, nul):
         outside = [i for i in diff if i not in win]
         counted = [i for i in diff if i in win]
         ceiling = ceiling_for(name, nrec)
-        if name.endswith("214/CV_iew/Var2Data"):
+        if name == CVIEW_VAR2:
             ceiling += len(font_item_garbage(a, meta_a))
         if outside:
             lines.append("bytes-differ %s %d" % (name, len(outside)))
