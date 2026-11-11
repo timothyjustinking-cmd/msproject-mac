@@ -152,7 +152,7 @@ in words after the row uid and field id:
 | Bold, Name, row 1 (wave 30) | 1 | `0x0b40000e` | `0x01000003` | `ff000000 0 0 ff000000 0 0`, pattern 1 | `0x90000001` |
 | Bold, Name, row 2 | 2 | `0x0b40000e` | `0x01000003` | same | `0x6b000001` |
 | Bold, Start, row 1 | 1 | `0x0b400505` | `0x01000003` | same | `0x00000001` |
-| Bold over a two-row selection | 2 | `0x0b40000e` | `0x01000003` | same | `0x00000001` |
+| Bold, Name, row 2, second save (`wave35-g3-font-bold-range`, a one-row Bold, not a range; D-2) | 2 | `0x0b40000e` | `0x01000003` | same | `0x00000001` |
 | Italic (toolbar call) | 1 | `0x0b40000e` | `0x02000003` | same | `0x6b000004` |
 | Underline (`Font32Ex`) | 1 | `0x0b40000e` | `0x04000003` | all zero, pattern 0 | `0x000000ca` |
 | size 14 (`Font32Ex`) | 1 | `0x0b40000e` | `0x00000006` | all zero, pattern 0 | `0x6b0000d8` |
