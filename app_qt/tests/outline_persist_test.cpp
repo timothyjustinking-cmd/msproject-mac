@@ -795,6 +795,19 @@ int main(int argc, char** argv) {
                         is_subsequence(level_names, sorted_names),
                     "sort first: the session Level is shown, over the sorted rows in the sorted "
                     "order");
+        // W35g-1.4 (R35fG0-4): clearing the sort leaves the Level shown over the file's own
+        // order, and the status says it is still not queued.  The sort is then set again so the
+        // block goes on as before.
+        window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty() &&
+                        status_contains(window, "sort cleared; the level shown stays session only, "
+                                                "choose it again to queue it"),
+                    "sort first: clearing the sort says the Level shown stays session only");
+        gate::check(shown_names(model).size() == level_names.size(),
+                    "sort first: the Level is still shown after the sort is cleared");
+        window.apply_sort_choice(by_name, "Name descending", false);
+        QApplication::processEvents();
         window.apply_outline_level(0);
         QApplication::processEvents();
         gate::check(window.pending_edits().empty() &&
@@ -817,6 +830,9 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         window.apply_sort_choice(core::view::SortDefinition{}, "", true);
         QApplication::processEvents();
+        gate::check(status_contains(window, "sort cleared") &&
+                        !status_contains(window, "stays session only"),
+                    "sort first: clearing the sort with every row shown adds no Level note");
         window.apply_outline_level(1);
         QApplication::processEvents();
         gate::check(queued_level(window) != nullptr && queued_level(window)->show_level == 1,

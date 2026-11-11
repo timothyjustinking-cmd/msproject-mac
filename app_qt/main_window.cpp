@@ -6267,9 +6267,16 @@ void MainWindow::apply_sort_choice(core::view::SortDefinition definition,
     }
     if (cleared) {
         doc_.clear_sort();
-        set_message(had_queued_sort ? "sort cleared; the queued sort was withdrawn"
-                                    : "sort cleared",
-                    false);
+        std::string cleared_note = had_queued_sort ? "sort cleared; the queued sort was withdrawn"
+                                                   : "sort cleared";
+        // W35g-1.4 (R35fG0-4): a Level shown under a session Sort was never queued, and the
+        // cleared sort now shows it over the file's own order, the state a queued Level would
+        // write.  Nothing is queued, so say that Save writes the file's own outline.
+        if (read_only_reason_.empty() && structural_.applied().empty() &&
+            doc_.has_collapsed_rows()) {
+            cleared_note += "; the level shown stays session only, choose it again to queue it";
+        }
+        set_message(cleared_note, false);
         after_model_change();
         return;
     }

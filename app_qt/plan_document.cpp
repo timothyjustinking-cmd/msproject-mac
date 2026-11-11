@@ -1040,6 +1040,18 @@ void PlanDocument::show_all_subtasks() {
     }
 }
 
+bool PlanDocument::has_collapsed_rows() const {
+    if (sheet_ == nullptr) {
+        return false;
+    }
+    for (std::size_t row = 0; row < sheet_->row_count(); ++row) {
+        if (sheet_->is_collapsed(row)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 std::vector<std::size_t> PlanDocument::ordered_display_rows() const {
     if (sheet_ == nullptr) {
         return {};
