@@ -121,6 +121,15 @@ try:
         check("W36-0.1 %s: 200 flipped bytes fail (the old gate skipped the stream whole)" % name,
               rc == 1 and name in out, out[:300])
 
+    # --- W36-0b.1 (R36G0-1): the view stream is not under a whole-stream window -----------------
+    # TRACED = the control's own null save, REFERENCE = the edit: a view-state edit must FAIL, and
+    # the failing stream is the view bag, not a skipped one.
+    for stem in ("wave35-viewstate-sort-name-desc", "wave35-g3-font-bold-off"):
+        e_ref, e_ctl, e_nul = pair(stem)
+        rc, out = run_cli(e_nul, e_ref, e_ctl, e_nul)
+        check("W36-0b.1 %s: control-null vs the edit fails on the view bag" % stem,
+              rc == 1 and "bytes-differ ???214/CV_iew/Var2Data" in out, out[:300])
+
     # --- W36-0.2: the control/null difference is not applied to a reference of another length ----
     ref2, ctl2, nul2 = pair("wave34-assign-add-second")
     bad = os.path.join(tmp, "flip2.mpp")
@@ -157,6 +166,23 @@ try:
               problems == 0 and checked > 0, "%r" % (lines,))
         check("W36-0.4 compare: equal stream set (no only-in line)",
               not any(ln.startswith("only-in") for ln in lines))
+
+        # W36-0b.1: only the font word's top byte (payload +43) of the font item is noise
+        f_ref, f_ctl, f_nul = pair("wave35-g3-font-bold-off")
+        FR, FC, FN = load(f_ref), load(f_ctl), load(f_nul)
+        view, view_meta = "???214/CV_iew/Var2Data", "???214/CV_iew/VarMeta"
+        found = g.font_item_garbage(FR[view], FR[view_meta])
+        check("W36-0b.1 the bold-off edit has one font item row, found by parsing the bag",
+              len(found) == 1, "%r" % (found,))
+        for delta, want in ((0, 0), (-3, 1)):   # +43 passes, +40 fails
+            mutated = dict(FR)
+            b = bytearray(FR[view])
+            b[found[0] + delta] ^= 0xFF
+            mutated[view] = bytes(b)
+            lines, problems, checked, unchecked = g.compare(mutated, FR, FC, FN)
+            check("W36-0b.1 font item payload +%d flipped -> %d problem(s)" % (43 + delta, want),
+                  problems == want and (want == 0 or any(view in ln for ln in lines)),
+                  "%r" % (lines,))
 
         def _nrec(mod, stream, blob):
             return mod.noise_windows(stream, blob)[1]

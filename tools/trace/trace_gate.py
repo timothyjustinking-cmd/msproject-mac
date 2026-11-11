@@ -95,8 +95,6 @@ NOISE = {
     "214/CGrouping/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
     "214/CTable/FixedData": {"byte": [(214, 224)], "ceiling": 10},
     "214/CV_iew/FixedData": {"byte": [(122, 132), (260, 270), (398, 408)], "ceiling": 30},
-    # A saved date word whose offset moves with the view; the null run showed 4 bytes.
-    "214/CV_iew/Var2Data": {"byte": [(0, 1 << 30)], "ceiling": 4},
     # The assignment creation stamp is a var block located through VarMeta.
     "TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}, "ceiling": 3},
 }
@@ -111,9 +109,15 @@ PATHSTREAM = {
     "SummaryInformation": {"delta": 16, "same": 40},
 }
 
-# The payload +43 byte of every 0x2240000c font item in 214/Props is allocator garbage
-# (trace-font-item-r6.md); items are 12 header bytes + 44 per row.
+# The font word of a view's font item (id 0x2240000c, kind 1, 44 bytes a row) is a bag record in a
+# CV_iew/Var2Data bag block; its top byte, payload +43 of each row, is allocator garbage
+# (trace-font-item-r6.md).  The blocks are the VarMeta entries of key BAG_KEY; each is a 4-byte
+# length, then a Props-format blob: a 16-byte header, then records [len u32][id u32][kind u32]
+# [payload], each padded to an even length.
 FONT_ITEM_ID = 0x2240000C
+FONT_ROW = 44
+FONT_GARBAGE = 43
+BAG_KEY = 0x20400006
 
 
 def _stride(name):
@@ -151,20 +155,31 @@ def props_records(data):
     return out, pos
 
 
-def font_item_garbage(data):
-    """Offsets of payload +43 in every 44-byte font item payload of a view-bag stream."""
+def font_item_garbage(data, meta):
+    """Offsets of payload +43 of every row of every font item in the bag blocks of a
+    CV_iew/Var2Data stream, found by parsing the blocks its VarMeta locates, never by a byte
+    search."""
     out = []
-    pos = 0
-    while True:
-        at = data.find(struct.pack("<I", FONT_ITEM_ID), pos)
-        if at < 0 or at < 4:
+    if meta is None or len(meta) < 24:
+        return out
+    count = struct.unpack_from("<I", meta, 8)[0]
+    for k in range(count):
+        at = 24 + 12 * k
+        if at + 12 > len(meta):
             break
-        length = struct.unpack_from("<I", data, at - 4)[0]
-        if length and length % 44 == 0 and at + 8 + length <= len(data) and \
-                struct.unpack_from("<H", data, at + 4)[0] == 1:
-            for row in range(length // 44):
-                out.append(at + 8 + row * 44 + 43)
-        pos = at + 4
+        _, off, key = struct.unpack_from("<III", meta, at)
+        if key != BAG_KEY or off == 0xFFFFFFFF or off + 4 > len(data):
+            continue
+        end = min(off + 4 + struct.unpack_from("<I", data, off)[0], len(data))
+        pos = off + 4 + 16
+        while pos + 12 <= end:
+            length, rid, kind = struct.unpack_from("<III", data, pos)
+            if pos + 12 + length > end:
+                break
+            if rid == FONT_ITEM_ID and kind == 1 and length % FONT_ROW == 0:
+                out.extend(pos + 12 + row * FONT_ROW + FONT_GARBAGE
+                           for row in range(length // FONT_ROW))
+            pos += 12 + length + (length & 1)
     return out
 
 
@@ -174,8 +189,8 @@ def noise_windows(name, data, meta=None):
     rule = _noise_rule(name)
     offs = set()
     nrec = 0
-    if name.endswith("214/Props"):
-        offs.update(font_item_garbage(data))
+    if name.endswith("214/CV_iew/Var2Data"):
+        offs.update(font_item_garbage(data, meta))
     if rule is None:
         return offs, nrec
     stride = _stride(name)
@@ -287,21 +302,14 @@ def compare(traced, ref, ctl, nul):
         if mask is None and c is not None and n is not None and len(c) == len(n) and len(c) != len(a):
             lines.append("mask-refused %s control %d reference %d" % (name, len(c), len(a)))
         mask = mask or set()
-        meta = None
+        meta_a = meta_b = None
         if name.endswith("Var2Data"):
             meta_name = name[:-len("Var2Data")] + "VarMeta"
-            meta = (traced.get(meta_name), ref.get(meta_name))
-        win = set()
-        nrec = 0
-        if meta is None:
-            win, nrec = noise_windows(name, a)
-            wb, _ = noise_windows(name, b)
-            win |= wb
-        else:
-            for m in meta:
-                w, nr = noise_windows(name, a, m)
-                win |= w
-                nrec = max(nrec, nr)
+            meta_a, meta_b = ref.get(meta_name), traced.get(meta_name)
+        win, nrec = noise_windows(name, a, meta_a)
+        wb, nrb = noise_windows(name, b, meta_b)
+        win |= wb
+        nrec = max(nrec, nrb)
         diff = [i for i in range(len(a)) if a[i] != b[i] and i not in mask]
         if path is not None:
             ceiling = path["same"]
@@ -311,8 +319,8 @@ def compare(traced, ref, ctl, nul):
             outside = [i for i in diff if i not in win]
             counted = [i for i in diff if i in win]
             ceiling = ceiling_for(name, nrec)
-            if name.endswith("214/Props"):
-                ceiling += len(font_item_garbage(a))
+            if name.endswith("214/CV_iew/Var2Data"):
+                ceiling += len(font_item_garbage(a, meta_a))
         if outside:
             lines.append("bytes-differ %s %d" % (name, len(outside)))
             problems += 1
