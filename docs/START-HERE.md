@@ -3,7 +3,8 @@
 _Updated 11 November 2026, wave 36 in progress on branch `wave36` (cut from `main` at `b2c0b19`).
 Keep this file under 8 KB and current at every wave close; it is the only file a new session must
 read first.  Wave history is in `docs/handoff/history-waves34-35.md`: read it only to investigate
-a decision._
+a decision.  The writer inventory (which edits save, which are refused), the local Qt path and the
+house rules of wave 35g are the last section of that file, "Standing rules and standing facts"._
 
 ## State
 
@@ -16,8 +17,9 @@ a decision._
   5.5, nothing pushed.  Groups: G0 the trace gate and the records (marker `WAVE-36-G0-COMPLETE`),
   G1 the font item, G2 Props (closes R35cG0-4), CLOSE.  G3 (Insert Task, Milestone, Summary) is
   not started: no held-out insert pair (`spec/writers/evidence/trace-insert-rules-r6.md`).
-* **G0 is done**: `tools/trace/trace_gate.py` has exact noise windows, no wrong-length mask and a
-  FAIL "no null"; `tools/trace/test_trace_gate.py` (ctest `trace_gate_guards`) and
+* **G0 is done, G0b follows**: `tools/trace/trace_gate.py` has per-stream noise windows, no wrong-length
+  mask and a FAIL "no null" (the review's R36G0-1 to -9 found by-name waivers and regions in the
+  windows; G0b, `wave36-brief.md` section 2, replaces them with named fields); `tools/trace/test_trace_gate.py` (ctest `trace_gate_guards`) and
   `tools/trace/test_host_skip.ps1` (ctest `trace_host_scripts`, needs `pwsh`) guard them.  CI has
   no `olefile`, so `trace_gate_guards` SKIPs there until the workflows `pip install olefile`.
 * **Open, no Critical or High:** the Lows R35gG0-1 to -4, R35gG1-1 to -5 and R35gW-1 to -5;

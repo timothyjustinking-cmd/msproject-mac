@@ -14,10 +14,10 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
   started** (no held-out insert pair in `trace-insert-rules-r6.md`; the coordinator re-checks
   before CLOSE).  Wave 37: Notes, Set Baseline, linked, lag and constraint Calculate.
 * **G0 (the trace gate and the records), 11 November 2026:** W36-0.1 the noise allow-list is in
-  `tools/trace/trace_gate.py` as exact windows and per-stream ceilings, no by-name waiver, exit 0
+  `tools/trace/trace_gate.py` as per-stream windows and ceilings (the review's R36G0-1 to -5 found by-name waivers and regions in them; G0b fixes that), exit 0
   is PASS and `runone6.ps1` records it; 0.2 no wrong-length mask, fixed-stride streams masked per
   record; 0.3 an absent null is a FAIL "no null"; 0.4 ctest `trace_gate_guards`
-  (`tools/trace/test_trace_gate.py`, flips one byte in every stream of a committed pair); 0.5
+  (`tools/trace/test_trace_gate.py`, flips one byte per stream of a committed pair; G0b flips every offset outside the named fields); 0.5
   `r5b-skip.ps1` invokes only in a "Sign in" dialog and `kvp/host.ps1` `vmx` throws on a MISMATCH or
   a wrong reply length (ctest `trace_host_scripts`, needs `pwsh`); 0.6 the records.
 * **Watch:** the gate's windows are tuned to the null run and the 99 committed control pairs, so

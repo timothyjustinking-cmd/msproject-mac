@@ -469,3 +469,108 @@ block-comment and unused-helper sweeps 0; 0 CRLF; `git diff --check` clean
 
 Wave 33b adds no writer and no Project pair: every change is a refusal, a
 test, a CI fix or a record.  Engine stays **7/8**.
+
+## Standing rules and standing facts (restored, W36-0b.9 / R36G0-11)
+
+The three sections below are the text of `docs/START-HERE.md` at `2ecf42b^` (the last version before the history move), lines 284
+to 381, verbatim: the archive pointers, the standing rules from wave 27, and the house rules with the writer inventory ("Saveable
+structural edits", "Split Task is measured but NOT enabled"), the local Qt path and the `check_command_backlog` ctest.  They are as of
+wave 35g; the current rules are `docs/handoff/standing-rules.md`.
+
+## On demand (and what it is for)
+
+| file | use it when |
+|---|---|
+| `docs/engine-parity.md` | engine scores; `constraint-mso` is deliberately left failing |
+| `docs/parity.md` | UI measurement contract and the parity harness numbers |
+| `docs/ui-qt-port.md` | the three-platform fidelity contract |
+| `docs/build.md` | build commands, the Qt ctest PATH (now automatic), the golden opt-in |
+| `docs/import-corpus.md` | the real-.mpp corpus, mutations, robustness |
+| `docs/coordination.md` | oracle rules (COM is coordinator-only, the lock, FileClose) |
+| `docs/history-note.md` | why old commit hashes in old handoffs are dangling |
+| `memory/README.md` | which per-stream memory to read for an area |
+| `analysis/project_property_names.tsv` | derived Project property-name table (QNEWTASKSAREMANUAL = index 64) |
+| `docs/analysis/newtasks-scan-summary.md` | the committed E7 scan counts |
+
+Archives (only for history): `docs/archive/coordinator-handoff-through-wave20.md`,
+`docs/archive/WAVES-coordination-board-wave7.md`,
+`memory/archive/coordinator-through-wave20-full.md`.
+
+## Standing rules (from wave 27)
+
+`docs/handoff/standing-rules.md` binds every wave: save paths measured against
+Project before they are enabled, small working context, per-commit incremental
+gates with full fresh-tree gates per group, CI every wave, one independent review
+per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
+
+## House rules that are easy to get wrong
+
+* **Project screenshots stay local** (operator ruling 2026-10-23; a pre-push
+  guard enforces it).  Commit only the numbers measured from them:
+  `tests/data/reference/*.measures.json`.
+* **Never write a client task/resource/project/person name** into any file,
+  comment, test or commit message.  Refer to rows by ID and strings by opaque
+  label (`client-name-NN`) or structural relation — never by an unsalted hash,
+  which a guess inverts.  Run
+  `python -I build/audit-w22/scan_client_names.py HEAD` and
+  `python -I build/audit-w22/guard_names.py <range>` before every commit and
+  expect 0 hits; also `python scripts/check_markers.py <range>` (wave 33 G4)
+  and `git grep -nE "client-string-[0-9a-f]{8}"`, expect none.
+* **Fixtures:** never open a committed fixture in place (Project rewrites files
+  it opens); oracle scripts use `oracle_lock.working_copy()`.  Run
+  `python scripts/check_fixtures.py` before every commit (it checks the
+  documented hashes, the property sets of every tracked `.mpp`, the scenario
+  oracle provenance and an embedded drive/user-profile path).  Nothing under
+  `tests/data` is written by a lane.  New fixtures are built through Project
+  on a NEUTRAL path (`C:/wNN`) with neutral Author/Manager/Company/UserName/
+  Title.
+* **Displayed rows resolve through their uid** (wave 25): `app::print_row_list`
+  takes RecordSet rows; never index `plan.tasks` with a RecordSet row; uid 0 is
+  the project row and refuses task edits.
+* **Saveable structural edits** (waves 26-30): Priority, PercentComplete, Mark
+  on Track, Update Project, the Task Form percent field, outline Indent/
+  Outdent, the new-task mode and Manually Schedule/Mode are measured against
+  Project and enabled.  A percent edit and a date update need the loaded plan
+  at `push()`.  The file-side shape harness refuses the shapes no Project pair
+  measured (W30-C5).  Every enabled new edit path needs a save-and-reopen test
+  AND the standing-rule-1 Project measurement.  Split Task is measured but NOT
+  enabled.  The wave-29 dialogs are session-only over the open view; no Style
+  dialog writes stored style records.  Waves 31-33 added NO writer: Sort,
+  Outline, Tables and Zoom are session state; wave 32 refuses or disables; wave
+  33 is fix-only (atomic save, refusals, bounds, tests, CI, records).  **Wave
+  33b fix-only erratum (W33b-0.1 / R33-1):** wave 33's W33-1.6 gave the
+  date-format save the shown table index, so it could write a non-zero table's
+  unmeasured byte; wave 33b refuses any table but the first at the request and
+  in the save hook, and adds no writer.  **Wave 34** added writers and enabled
+  five commands for their measured shapes only (Resource Information rename, Add
+  Resources, Assign Resources, Font Bold on one cell, WBS Define Code) and
+  refused up front the five paths whose port save differs from Project's
+  (Insert Task, Delete Task, link ADD, custom-field SET and CLEAR); see
+  `spec/README.md`.  Assign Resources is measured at 40 hours only and its
+  refusal of every other amount is a `wave34b` item.
+* **`plan_recalc`** never rewrites the golden by default; refreshing needs the
+  exact value `PLAN_RECALC_UPDATE_GOLDEN=1`, and the local/CI gate runs
+  `ctest -E plan_recalc` plus the corpus-free binary/step.
+* **Oracle/COM** is coordinator-only, under `scripts/oracle_lock.py`, with
+  `FileClose(0)` and the post-close file as the only evidence.
+* **`corpus/`** and `decompiled/` are git-ignored: nothing from them is
+  committed, and the operator's captures are never quoted for client data.
+* **Builds:** serial only; local Qt 6.5.3 in
+  `build/Qt/6.5.3/6.5.3/msvc2019_64`.  Qt ctest prepends its own DLL directory.
+  Transient Dropbox/MSBuild file locks are common; retry the build rather than
+  changing CMake.  Text files are UTF-8 with LF line endings; from wave 33 G4
+  `.gitattributes` pins `*.md`, `*.py`, `*.yml`, `*.cpp` and `*.h` to LF and
+  CI fails on a CR in those types.  The older CRLF `.tsv`/`.json`/`.txt`
+  fixtures stay as committed.
+* **CI:** one dispatch per milestone; red runs are triaged, fixed and dispatched
+  again with the reason recorded.  Wave 33's post-replay run was red (CI-1,
+  CI-2 and, after those, CI-3); wave 33b fixed all three and left its own
+  dispatch to the coordinator after CLOSE.  The record carries the run ids and
+  the final status once they exist.
+* **Commits:** one finding id per commit; honest numbers; a gate number must
+  belong to the tree it is written in and name its log under `build/w33b/` for
+  wave 33b (older waves: their own `build/wNN/`); no test claimed unless run.
+  A known gap is an expected failure **by name**, never an assertion of the
+  wrong output.  The committed `scripts/check_command_backlog.py` (ctest
+  `qt_command_backlog`) keeps the generated backlog and the ribbon pin in step
+  both ways.
