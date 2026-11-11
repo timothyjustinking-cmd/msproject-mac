@@ -1229,4 +1229,12 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
                                            bool allow_source_overwrite,
                                            const StructuralDocumentEdits& document_edits = {});
 
+// W36-1b.5 (R36G1-7): the reason a Font Bold or Font Italic click is refused when
+// the queue already holds a font edit, or empty when it holds none.  The builder
+// reads the unchanged file, so without this a second click builds the same edit
+// again and push() refuses it by exclusivity with no reason.  A second change to
+// a cell is not measured (the pairs hold one change per save), and Project's
+// button would toggle; the text says what to do.  Both shells show it as is.
+std::string queued_font_edit_refusal(const StructuralEdits& edits);
+
 }  // namespace app

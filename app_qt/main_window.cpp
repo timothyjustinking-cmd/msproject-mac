@@ -3452,6 +3452,13 @@ void MainWindow::font_selected_cell(bool italic) {
     if (refuse_beside_document_edit(font_name)) {
         return;
     }
+    // W36-1b.5 (R36G1-7): a font edit is already queued, so a second click would
+    // build the same edit from the unchanged file and be refused without a reason.
+    if (const std::string queued = app::queued_font_edit_refusal(structural_); !queued.empty()) {
+        set_message(queued, true);
+        update_status();
+        return;
+    }
     // W34-4.5: one cell only.  The measured pairs format a single cell, so a range
     // is refused with the reason before anything is built.
     if (!(sheet.anchor() == sheet.focus())) {

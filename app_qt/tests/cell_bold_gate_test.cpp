@@ -301,6 +301,17 @@ int main(int argc, char** argv) {
         // A second click while it is pending: the edit is exclusive.
         gate::check(click_bold(window), "a second Bold clicks");
         gate::check(window.pending_edits().size() == 1, "a second click keeps the queue at one");
+        // W36-1b.5 (R36G1-7): the refusal says why, not only "the edit was refused".
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "Undo the queued Font Bold first; a second change to the cell is not "
+                        "measured")),
+                    "a second Bold click says to Undo the queued Bold first");
+        gate::check(click_font(window, QStringLiteral("I")), "Italic clicks over a queued Bold");
+        gate::check(window.pending_edits().size() == 1, "Italic over a queued Bold keeps the queue at one");
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "Undo the queued Font Bold first; a second change to the cell is not "
+                        "measured")),
+                    "Italic over a queued Bold says to Undo the queued Bold first");
 
         QString save_error;
         const bool ok = window.save_document_path(bolded, &save_error);
@@ -404,6 +415,18 @@ int main(int argc, char** argv) {
         gate::check(window.status_left_text().contains(QStringLiteral(
                         "queued Font Italic on the Task Name cell of task uid 1")),
                     "the status line reports the queued Italic");
+        gate::check(click_font(window, italic_label), "a second Italic clicks");
+        gate::check(window.pending_edits().size() == 1, "a second Italic keeps the queue at one");
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "Undo the queued Font Italic first; a second change to the cell is not "
+                        "measured")),
+                    "a second Italic click says to Undo the queued Italic first");
+        gate::check(click_bold(window), "Bold clicks over a queued Italic");
+        gate::check(window.pending_edits().size() == 1, "Bold over a queued Italic keeps the queue at one");
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "Undo the queued Font Italic first; a second change to the cell is not "
+                        "measured")),
+                    "Bold over a queued Italic says to Undo the queued Italic first");
         QString save_error;
         const bool ok = window.save_document_path(italicised, &save_error);
         gate::check(ok, "the Italic saves");

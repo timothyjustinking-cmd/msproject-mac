@@ -3596,6 +3596,13 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         [g_view setNeedsDisplay:YES];
         return;
     }
+    // W36-1b.5 (R36G1-7): the Qt shell's reason for a second click while a font
+    // edit is queued (a second change to the cell is not measured).
+    if (const std::string queued = app::queued_font_edit_refusal(plan.edits); !queued.empty()) {
+        note(plan, queued, true);
+        [g_view setNeedsDisplay:YES];
+        return;
+    }
     if (!(plan.sheet->anchor() == plan.sheet->focus())) {
         note(plan, font_name + ": " +
                        std::string(italic ? app::italic_range_refusal()

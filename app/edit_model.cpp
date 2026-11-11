@@ -6982,4 +6982,19 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
     return result;
 }
 
+std::string queued_font_edit_refusal(const StructuralEdits& edits) {
+    for (const StructuralEdit& queued : edits.applied()) {
+        if (queued.kind != StructuralKind::bold_cell &&
+            queued.kind != StructuralKind::italic_cell) {
+            continue;
+        }
+        const char* name = queued.kind == StructuralKind::italic_cell ? "Font Italic"
+                           : queued.cell_bold_on                      ? "Font Bold"
+                                                                      : "Font Bold off";
+        return std::string("Undo the queued ") + name +
+               " first; a second change to the cell is not measured";
+    }
+    return std::string();
+}
+
 }  // namespace app

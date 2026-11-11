@@ -787,6 +787,45 @@ void check_refusals() {
         check_size(edits.size(), 1, "only the bold stays queued");
     }
 
+    /* W36-1b.5 (R36G1-7): a second font click names the queued edit and says what to
+     * do; nothing is said when no font edit is queued. */
+    {
+        app::StructuralEdits edits;
+        check(app::queued_font_edit_refusal(edits).empty(),
+              "no font refusal text with an empty queue");
+        app::StructuralEdit priority;
+        priority.kind = app::StructuralKind::set_project_priority;
+        priority.priority = 500;
+        check(edits.push(std::move(priority), &plan), "a priority edit queues for the refusal text");
+        check(app::queued_font_edit_refusal(edits).empty(),
+              "no font refusal text beside a queued edit that is not a font edit");
+    }
+    {
+        app::StructuralEdits edits;
+        check(edits.push(hand_edit(kTaskUid, kNameField), &plan), "a bold queues for the refusal text");
+        check(app::queued_font_edit_refusal(edits) ==
+                  "Undo the queued Font Bold first; a second change to the cell is not measured",
+              "a queued Bold gives the Undo-first reason");
+        app::StructuralEdit off = hand_edit(kTaskUid, kNameField);
+        off.cell_bold_on = false;
+        app::StructuralEdits off_edits;
+        check(off_edits.push(std::move(off), &plan), "a Bold off queues for the refusal text");
+        check(app::queued_font_edit_refusal(off_edits) ==
+                  "Undo the queued Font Bold off first; a second change to the cell is not measured",
+              "a queued Bold off is named as Bold off");
+    }
+    {
+        app::StructuralEdit italic;
+        italic.kind = app::StructuralKind::italic_cell;
+        italic.uid = kTaskUid;
+        italic.field_id = kNameField;
+        app::StructuralEdits edits;
+        check(edits.push(std::move(italic), &plan), "an italic queues for the refusal text");
+        check(app::queued_font_edit_refusal(edits) ==
+                  "Undo the queued Font Italic first; a second change to the cell is not measured",
+              "a queued Italic gives the Undo-first reason");
+    }
+
     /* The cascade refuses a start-date edit beside a bold before it writes. */
     {
         app::StructuralEdit edit;
