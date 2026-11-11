@@ -446,12 +446,15 @@ def edit_baseline_selected(rows):
 
 def edit_baseline_into(slot):
     def edit(app, project):
-        app.BaselineSave(True, 0, slot)
+        # Into 1..10 are the interim slots Start1..Start10 (the interim probe); Baseline1..10
+        # are Into 11..20 (pjIntoBaseline1 = 11).  Coordinator fix, Wed 11 Nov 2026.
+        into = 10 + slot
+        app.BaselineSave(True, 0, into)
         task = project.Tasks(1)
         if not baseline_slot_set(task, slot):
-            raise RuntimeError(f"BaselineSave(True, 0, {slot}) did not fill "
+            raise RuntimeError(f"BaselineSave(True, 0, {into}) did not fill "
                                f"Baseline{slot}Start on task 1")
-        return {"call": f"BaselineSave(All=True, Copy=0, Into={slot})",
+        return {"call": f"BaselineSave(All=True, Copy=0, Into={into})",
                 "baseline0_set": baseline_slot_set(task, 0)}
     return edit
 
