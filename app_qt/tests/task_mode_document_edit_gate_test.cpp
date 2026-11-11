@@ -22,6 +22,9 @@
 #include <QAction>
 #include <QApplication>
 #include <QComboBox>
+#include <QInputDialog>
+#include <QListWidget>
+#include <QPushButton>
 #include <QString>
 #include <QTimer>
 #include <QVariant>
@@ -38,6 +41,7 @@
 #include "gate_util.h"
 #include "main_window.h"
 #include "menu_model.h"
+#include "project_dialogs_qt.h"
 #include "ribbon_bar.h"
 #include "sheet.h"
 #include "sheet_table_model.h"
@@ -123,6 +127,57 @@ bool queue_date_format(msqt::MainWindow& window, int format) {
     return seen;
 }
 
+// W35g-0.1 (R35fG1-1): the nested input dialog Formula... opens.  It is accepted with a formula
+// when it shows (and `seen` set), so a missing refusal queues an edit and the gate fails on it.
+// It polls and gives up after `tries` rounds, so it cannot hang the gate.
+void accept_input_dialog(bool* seen, int tries) {
+    QTimer::singleShot(10, [seen, tries]() {
+        if (auto* input = dynamic_cast<QInputDialog*>(QApplication::activeModalWidget())) {
+            *seen = true;
+            input->setTextValue(QStringLiteral("[Duration]/240"));
+            input->accept();
+        } else if (tries > 0) {
+            accept_input_dialog(seen, tries - 1);
+        }
+    });
+}
+
+struct CustomFieldsRun {
+    bool dialog_seen = false;  // Project > Custom Fields... opened
+    bool input_seen = false;   // Formula... opened its input dialog
+};
+
+// Drives Project > Custom Fields...: the dialog is cancelled, or Formula... is used on Text1 and
+// the dialog accepted.
+CustomFieldsRun run_custom_fields(msqt::MainWindow& window, bool use_formula) {
+    CustomFieldsRun run;
+    QTimer::singleShot(0, [&run, use_formula]() {
+        auto* dialog = dynamic_cast<msqt::CustomFieldsDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        run.dialog_seen = true;
+        if (!use_formula) {
+            dialog->reject();
+            return;
+        }
+        for (int row = 0; row < dialog->field_list()->count(); ++row) {
+            if (dialog->field_list()->item(row)->text() == QStringLiteral("Text1")) {
+                dialog->field_list()->setCurrentRow(row);
+            }
+        }
+        accept_input_dialog(&run.input_seen, 5);
+        dialog->formula_button()->click();
+        dialog->accept();
+    });
+    QAction* action = gate::find_action(window, app::MenuAction::custom_fields);
+    if (action != nullptr && action->isEnabled()) {
+        action->trigger();
+        QApplication::processEvents();
+    }
+    return run;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -193,6 +248,38 @@ int main(int argc, char** argv) {
         }
         gate::check(window.document_dirty(),
                     (std::string("the one accepted edit is pending") + order).c_str());
+    }
+
+    // W35g-0.1 (R35fG1-1): beside a queued Manually Schedule (a second exclusive kind) Project >
+    // Custom Fields... opens and cancels cleanly; an accepted Formula... is refused with the
+    // queue unchanged.
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control opens for the Custom Fields case");
+        window.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+        gate::check(click_manual(window, 1) && window.pending_edits().size() == 1,
+                    "Manually Schedule is queued for the Custom Fields case");
+
+        const CustomFieldsRun looked = run_custom_fields(window, false);
+        gate::check(looked.dialog_seen, "Custom Fields opens beside a queued mode edit");
+        gate::check(window.pending_edits().size() == 1,
+                    "cancelling Custom Fields leaves the mode edit queued once");
+        gate::check(window.status_left_text().contains(QStringLiteral("custom fields cancelled")),
+                    "cancelling Custom Fields beside a queued mode edit: the status line says so");
+
+        const CustomFieldsRun edited = run_custom_fields(window, true);
+        gate::check(edited.dialog_seen, "Custom Fields opens again beside a queued mode edit");
+        gate::check(!edited.input_seen, "Formula... beside a queued mode edit opens no input dialog");
+        gate::check(window.pending_edits().size() == 1,
+                    "a refused formula leaves the mode edit queued once");
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "File > Save writes on its own, so it would refuse a custom-field "
+                        "formula edit beside it")),
+                    "Formula... beside a queued mode edit: the status line names the refusal");
     }
     return gate::finish();
 }
