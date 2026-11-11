@@ -54,8 +54,13 @@ Level would still leave a sorted display that Redo could re-queue under.
 now ends a Show Level on the redo list and Ctrl+Y queues nothing.
 
 Where the routes are reachable (corrected by W35f-0.3, R35eG1-3, which found the first version of
-this paragraph wrong): (b) only where the Sort stays session only, since on the five-task file the
-Sort queues and `push()` clears the redo list itself. (a) was ALSO reachable on the five-task file:
+this paragraph wrong, and again by W35g-0.2, R35fG0-1, which found the correction wrong for (b)):
+(b) wherever the chosen Sort stays session only, including a non-Name sort on the five-task file.
+Only a single Name key queues there, so a Start, Finish or ID sort, or a multi-key sort, is session
+only: Level 1 (a measured shape), Ctrl+Z, Start descending, Ctrl+Y re-queued the Level under the
+Start-sorted rows at `5d733ae`. Only a Name sort queues, and then `push()` clears the redo list
+itself. W35g-0.2 adds that case to `qt_sort_persist` (it goes red if `redo_top_is_view_edit`
+matches a Sort only), so (b) is tested on both files. (a) was ALSO reachable on the five-task file:
 queue Sort Name descending, press Ctrl+Z (the Undo leaves the session sort shown with nothing
 queued and the Sort on the redo list), then Level 1, a measured shape there, passed the
 queued-Sort check, was pushed (the push cleared the redo list) and was queued under the sorted
