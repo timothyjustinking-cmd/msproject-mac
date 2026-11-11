@@ -135,6 +135,18 @@ jobs:
             python scripts/check_markers.py
           fi
 
+      # Wave 36 (W36-0b.9 / G0b): trace_gate_guards (tools/trace/test_trace_gate.py) needs
+      # olefile and exits 77, which ctest reports as SKIPPED, without it.  setup-python puts one
+      # interpreter first on PATH, so the Configure step below finds the one olefile went into.
+      - name: Python with olefile (for trace_gate_guards)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install olefile
+        shell: bash
+        run: python -m pip install --quiet olefile
+
       # bash exists on all three images (Git Bash on Windows) so the commands
       # below are identical everywhere and are exactly what docs/build.md
       # documents.  Quoted generator names survive the space in a generator name.
@@ -293,6 +305,16 @@ jobs:
           else
             python scripts/check_markers.py
           fi
+
+      # Wave 36 (W36-0b.9 / G0b): olefile for trace_gate_guards, as in the matrix job.
+      - name: Python with olefile (for trace_gate_guards)
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install olefile
+        shell: bash
+        run: python -m pip install --quiet olefile
 
       # The tree is build/asan, not build-asan: engine_diff refuses any work
       # directory outside build/ (CI-4, the job's first test run).

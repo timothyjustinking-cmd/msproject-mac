@@ -186,9 +186,12 @@ if(CORE_BUILD_TESTS)
             COMMAND "${Python3_EXECUTABLE}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_trace_gate.py"
         )
+        # W36-0b.9: the test reads every committed pair (about 15 s here, more on a slow runner),
+        # so it carries its own limit instead of ctest's 60 s default.
         set_tests_properties(trace_gate_guards PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             SKIP_RETURN_CODE 77
+            TIMEOUT 300
         )
     endif()
 
