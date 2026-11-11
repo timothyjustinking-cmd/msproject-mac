@@ -469,3 +469,21 @@ coordinator's review closes an id.
   closed, and R35dW-5, fixed in source with `macos-appkit` as its gate), and the four 35b ids
   above (R35bW-1, R35bW-2, R35bG2-2, R35bG3-1).  Still open and unassigned: R35bG0-9, R35bG1-10
   and R35bG2-9.
+
+## Queued from wave 35f (CLOSE): the fix-only `wave35g` (11 November 2026)
+
+Waves 34 to 35f are merged into `main`.  The queue was `wave35f-verification/coord-gates-close.md`
+("Open after the merge"; no Critical or High); `wave35g` (branch `wave35g`, brief
+`wave35g-brief.md`, record `wave35g-complete.md`, `WAVE-35g-COMPLETE`) works it.  Only the
+coordinator's review closes an id.
+
+- **Mediums:** R35fG1-1 (W35g-0.1 `284c3cb`: Custom Fields... opens beside a queued exclusive edit,
+  only Formula... is refused) and R35fG0-1 (W35g-0.2 `24a5c1d`: the 1.1 record's bypass (b)
+  corrected and tested).  Fixed in the builder's tree; to be reviewed.
+- **Lows:** R35fG0-2 to -9, R35fG1-2 to -5, R35fW-1 to -3 (wave 35g G1: tests, status wording,
+  records, rewraps; `1663aaf` to `0c35d05`), fixed in the builder's tree; to be reviewed.
+- **Open gate:** `check_markers.py` reports one hit in `spec/writers/evidence/trace-captures-r5.md`
+  (arrived in `5863054`; a directory the wave may not touch).
+- **Still partly fixed or open, unchanged:** R35dG2-1, R35cG0-2, R35cG0-4, R35cW-4 (remainder
+  R35dW-5, fixed in source with `macos-appkit` as its gate), the four 35b ids (R35bW-1, R35bW-2,
+  R35bG2-2, R35bG3-1), R35bG0-9, R35bG1-10 and R35bG2-9.

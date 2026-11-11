@@ -88,3 +88,84 @@ touched, nothing pushed, no workflow dispatched. `app/main.mm` unchanged, so no 
 on CI. No id is called closed here; the coordinator's review closes them.
 
 WAVE-35g-G1-COMPLETE
+
+## CLOSE
+
+### CLOSE gates
+
+Fresh trees `build/w35g-close-fresh`, `-app` and `-qt` at `a0fb695` (the last code or test change is
+`0c35d05`; every later commit is a record), configured from scratch with
+`CORE_WARNINGS_AS_ERRORS=ON`; script `build/w35g/W35g-CLOSE-fresh-gates.ps1`, log
+`build/w35g/W35g-CLOSE-fresh-gates.log` (summary: `build/w35g/close_log_summary.py`). This record,
+written after that run, is a document and no gate reads it. No out-of-memory build error occurred.
+
+- core build exit 0 with warnings as errors; `ctest -E plan_recalc` 65/65;
+- `plan_recalc_tests` 512 checks with the corpus, 266 with `MPP_NO_CORPUS=1`;
+- engine self-test 265 checks, 0 failures; `engine_diff.py --selftest` 53 checks; engine suite 8
+  scenarios, 7 pass and the expected `constraint-mso` failure (1 of 247 fields);
+- reader tests 1469 checks with the corpus, 789 without; M2 `recalc --compare` exit 0;
+- app build exit 0 and ctest 34/34, with and without `MPP_NO_CORPUS=1`;
+- app_qt build exit 0 and ctest 52/52;
+- `check_fixtures.py`, `check_markers.py --self-test` (19 checks) and `check_command_backlog.py`
+  exit 0; `gen_calculate_props_pin.py --check` up to date; `scan_client_names.py` on the head and on
+  the `main..HEAD` messages 0 hits; `guard_names.py main..HEAD` exit 0; 0 CR in the LF-pinned types;
+  `git diff --check main..HEAD` exit 0.
+- **One gate is not green: `check_markers.py` (`--worktree` and `--range main..HEAD`) exits 1**
+  on one file, `spec/writers/evidence/trace-captures-r5.md` (9 markers scanned in total, 1 hit,
+  no commit message). The file arrived in `5863054`, which is the trace agent's, and the
+  directory is barred to this wave (brief section 0). No commit of this wave touches it. It
+  needs a decision from the coordinator or the trace agent before the merge check "marker
+  guard 0".
+- The gcc, clang and AppleClang jobs cannot run here. This wave changes no `app/main.mm`, so no
+  id is gated on `macos-appkit`; CI is still dispatched by the coordinator as the wave's own
+  gate.
+- Trailer `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 35g)`: present on every builder
+  commit of `main..HEAD` (20 of 21, checked by script at CLOSE). The one commit without it,
+  `1735250`, is the coordinator's wave 35g brief.
+- `main` has moved on since the branch was cut (`5863054` to `1678237`, trace commits under the
+  barred directories); `main..HEAD` still lists only this wave's 21 commits.
+
+### Ids, with the commit that closes each
+
+Nothing here is called closed: only the coordinator's review closes an id.
+
+| Group | Ids | Result |
+|---|---|---|
+| G0 | R35fG1-1 | fixed `284c3cb` |
+| G0 | R35fG0-1 | fixed `24a5c1d` |
+| G1 | R35fG0-5, R35fG0-6, R35fG0-7, R35fG0-4 | fixed `1663aaf`, `3518bc4`, `78804c8`, `33e15c0` |
+| G1 | R35fG1-2, R35fG1-4, R35fW-3, R35fG1-3 | fixed `17430f3`, `91627f3`, `26b5697`, `60d23a6` |
+| G1 | R35fG0-2, R35fG0-3, R35fG0-8, R35fW-1, R35fW-2 | fixed (records) `83ac22c`, `345cbd9`, `e43c1c0`, `f831008`, `0bf4c96` |
+| G1 | R35fG0-9, R35fG1-5 | fixed (style) `5a7c43a` and `1dade53`, `0c35d05` |
+
+Every id in the wave 35f open queue (`wave35f-verification/coord-gates-close.md`, "Open after the
+merge") appears in this file. The two rows that a later review reopened in part, R35eG1-3 (see
+R35fG0-1) and R35eW-1 (see R35fG1-1, R35fG1-3), are re-fixed by `24a5c1d`, `284c3cb` and `60d23a6`.
+Nothing in this wave is deferred. No id is gated on CI.
+
+Carried, not part of this wave's queue: R35dG2-1 (Fill Down's guard has no test route), R35cG0-2
+(the plan half) and R35cG0-4 (the plan-side Props digest), both refused at the writer or the save;
+R35cW-4's remainder R35dW-5 (fixed in source, `macos-appkit` its gate, from wave 35f); the open and
+unassigned R35bG0-9, R35bG1-10 and R35bG2-9.
+
+**Guards seen red:** per group in the G0 and G1 sections above; the logs are
+`build/w35g/*-red-*.log`. CLOSE adds no guard.
+
+**Found, not fixed** (carried from the group sections; nothing new at CLOSE except the marker hit's
+effect on the merge check):
+- `check_markers.py` hit in `spec/writers/evidence/trace-captures-r5.md` (barred directory).
+- A queued Calculate Project still stops Custom Fields... opening (W35f-0.2's guard, kept).
+- R35fG0-9: no line over 100 columns at `docs/handoff/status-2026-11-10.md:54`; lines the finding
+  did not name are untouched.
+- The commit message of `0c35d05` misattributes two `qt_sort_persist` lines to "W35g-1.2"; they
+  are W35g-1.8's. Not amended (no history rewrite).
+
+**For the coordinator, after CLOSE:** push `wave35g` and dispatch `qt.yml` and `ci.yml`; mutations
+at each new guard; an independent review of `main..wave35g`. 4(e) is a rerun only if a writer's
+output changed; this wave adds no writer. Merging waits on CI green on all three OSs, no open
+Critical or High, and the marker-guard hit above resolved.
+
+No writer added, no refusal that guards a save lifted, no pair measured, no COM, no VM or trace
+touched, nothing pushed, no workflow dispatched, no history rewrite.
+
+WAVE-35g-COMPLETE

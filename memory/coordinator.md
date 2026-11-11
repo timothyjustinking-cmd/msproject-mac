@@ -1,9 +1,24 @@
-# memory — coordinator (2026-11-10, wave 35f closed, G0 and G1 reviewed; waves 34 to 35e merged)
+# memory — coordinator (2026-11-11, wave 35g closed; waves 34 to 35f merged)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
 `docs/handoff/wave35-complete.md` (G0-G4 and CLOSE appended; `WAVE-35-COMPLETE`); reviews in
 `docs/handoff/wave35-verification/`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
+
+## Wave 35g state (closed on `wave35g`, from `main` at `5863054`, NOT pushed) — 11 November 2026
+
+Fix-only wave; brief `docs/handoff/wave35g-brief.md`, record `docs/handoff/wave35g-complete.md`
+(`WAVE-35g-COMPLETE`), fresh-tree gates at `a0fb695` (`build/w35g/W35g-CLOSE-fresh-gates.log`), all
+green except `check_markers`.  It works wave 35f's open queue
+(`wave35f-verification/coord-gates-close.md`; no Critical or High): **Mediums** R35fG1-1
+(`284c3cb`, Custom Fields... opens beside a queued exclusive edit) and R35fG0-1 (`24a5c1d`, the
+1.1 record's bypass (b) corrected and tested); **Lows** R35fG0-2 to -9, R35fG1-2 to -5, R35fW-1 to
+-3 (G1, `1663aaf` to `0c35d05`, records and rewraps included).  Nothing deferred; `app/main.mm`
+unchanged, so nothing waits on CI beyond the wave's own run.  Only the coordinator's review closes
+an id.  **Open gate:** `check_markers.py` reports one hit in the barred
+`spec/writers/evidence/trace-captures-r5.md` (from `5863054`); resolve it before a merge.  Carried
+as in the wave 35f state below: R35dG2-1, R35cG0-2, R35cG0-4, R35dW-5 (fixed in source,
+`macos-appkit` its gate), R35bG0-9, R35bG1-10, R35bG2-9.
 
 ## Wave 35f state (closed on `wave35f`, from `main` at `47665e1`, NOT pushed) — 10 November 2026
 

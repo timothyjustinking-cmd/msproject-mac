@@ -1,15 +1,33 @@
 # START HERE — MS Project → native port
 
-_Updated 2026-11-10, wave 35f (fix-only) in progress on branch `wave35f` (cut from `main` at
-`47665e1`).  **Waves 34 to 35e are MERGED into `main`** (`5e1c8ea`, a fast-forward from
-`4fd9b90`: CI green on all seven jobs at `c0c81e5`, no Critical or High open, 4(e) passes; see
-`docs/handoff/status-2026-11-10.md`).  The "NOT merged" and "NOT pushed" sentences in the wave 34
-to 35d bullets below are history, written at each wave's close.  Nothing of wave 35f is pushed.
-Keep this file current at every wave close; it is the only file a new session must read first._
+_Updated 2026-11-11, wave 35g (fix-only) is CLOSED on branch `wave35g` (cut from `main` at
+`5863054`; `WAVE-35g-COMPLETE`).  **Waves 34 to 35f are MERGED into `main`** (waves 34 to 35e at
+`5e1c8ea`, a fast-forward from `4fd9b90`: CI green on all seven jobs at `c0c81e5`, no Critical or
+High open, 4(e) passes; see `docs/handoff/status-2026-11-10.md`); `main` has since gained trace
+commits.  The "NOT merged" and "NOT pushed" sentences in the wave 34 to 35d bullets below are
+history, written at each wave's close.  Nothing of wave 35g is pushed.  Keep this file current at
+every wave close; it is the only file a new session must read first._
 
 ## The 30-second state
 
-* **Wave 35f (fix-only) is CLOSED on branch `wave35f`** (`WAVE-35f-COMPLETE`, fresh-tree gates at
+* **Wave 35g (fix-only) is CLOSED on branch `wave35g`** (`WAVE-35g-COMPLETE`; brief
+  `docs/handoff/wave35g-brief.md`, record `docs/handoff/wave35g-complete.md`, builder Claude Sonnet
+  5.5; fresh-tree gates at `a0fb695` in `build/w35g/W35g-CLOSE-fresh-gates.log`, all green except
+  `check_markers`, below).  It works the wave 35f open queue
+  (`wave35f-verification/coord-gates-close.md`, "Open after the merge"; no Critical or High):
+  **Mediums** R35fG1-1 (`284c3cb`: Custom Fields... opens beside a queued exclusive edit, only
+  Formula... is refused) and R35fG0-1 (`24a5c1d`: the 1.1 record's bypass (b) corrected and
+  tested); **Lows** R35fG0-2 to -9, R35fG1-2 to -5 and R35fW-1 to -3, fixed in the builder's tree
+  (G1).  Nothing is deferred, no writer added, no refusal that guards a save lifted, `app/main.mm`
+  unchanged (no id is gated on CI).  **No id is closed until the coordinator's review.**  The
+  coordinator's part: push `wave35g`, dispatch `qt.yml` and `ci.yml`, mutations at each new guard,
+  an independent review of `main..wave35g`.  **One open gate:** `check_markers.py` reports 1 hit in
+  `spec/writers/evidence/trace-captures-r5.md` (from `5863054`, a barred directory); it needs the
+  coordinator's or the trace agent's decision before a merge.  Still partly fixed or open, as in the
+  wave 35f line below: R35dG2-1, R35cG0-2, R35cG0-4, R35dW-5 (fixed in source, `macos-appkit` its
+  gate, until the coordinator's run), R35bG0-9, R35bG1-10 and R35bG2-9.
+
+* **Wave 35f (fix-only) was CLOSED on branch `wave35f` and is merged into `main`** (`WAVE-35f-COMPLETE`, fresh-tree gates at
   `135d253` all green in `build/w35f/W35f-CLOSE-fresh-gates.log`; the coordinator's push, CI,
   mutations and review are next, and no id below is closed until that review; the list below is
   the queue as the wave opened).  Originally: **in progress on branch `wave35f`** (cut from `main` at `47665e1`;
@@ -364,12 +382,13 @@ per wave, one finding id per commit.  `build/` is excluded from Dropbox sync.
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, docs/handoff/standing-rules.md and docs/handoff/wave35f-brief.md.
+Read docs/START-HERE.md, docs/handoff/standing-rules.md and docs/handoff/wave35g-brief.md.
 Waves 23-32 are merged into main as 17f5782 (ids in the wave 23-32 records are pre-rewrite;
 map through docs/handoff/wave32-verification/rewrite-sha-map.txt); waves 33 and 33b, then waves
-34 to 35e, are merged (main = 5e1c8ea at the wave 35e merge; CI green on all seven jobs, no
-Critical or High open, 4(e) passes).  The next step is the fix-only wave35f on branch wave35f
-(its queue is docs/handoff/wave35e-verification/coord-gates-close.md: four Mediums and the Lows;
-see "The 30-second state" above and docs/handoff/plan-waves27-30.md, "Queued from wave 35e").
+34 to 35f, are merged (main = 5e1c8ea at the wave 35e merge; CI green on all seven jobs, no
+Critical or High open, 4(e) passes).  Wave 35g (fix-only, branch wave35g) is closed: the next step
+is the coordinator's push, both CI dispatches, mutations and an independent review of
+main..wave35g (see "The 30-second state" above and docs/handoff/plan-waves27-30.md, "Queued from
+wave 35f").
 Keep every gate green before each commit and run BOTH name scans and scripts/check_markers.py.
 ```
