@@ -392,8 +392,11 @@ int main(int argc, char** argv) {
                         "partial apply: the form edit fails on the Duration");
             // W35f-1.3 (R35eG0-3): the status says what stuck and that Undo takes it back.
             gate::check(window.status_left_text().contains(
-                            QStringLiteral("Name applied (Undo takes it back)")),
-                        "partial apply: the status names the field that stuck and Undo");
+                            QStringLiteral("Name applied (Undo takes it back)")) &&
+                            !window.status_left_text().contains(
+                                QStringLiteral("were not queued")),
+                        "partial apply: the status names the field that stuck and Undo, and "
+                        "claims no dropped change");
             gate::check(model->data(model->index(1, name_column)).toString() ==
                             QStringLiteral("Renamed by a partial apply"),
                         "partial apply: the Name field stays committed");
@@ -432,6 +435,12 @@ int main(int argc, char** argv) {
                                                                    Qt::CaseInsensitive),
                             "partial apply (trial): the status names the task form's Duration "
                             "failure");
+                // W35g-1.7 (R35fW-3): and says that the dropped percent was not queued.
+                gate::check(window.status_left_text().contains(QStringLiteral(
+                                "Name applied (Undo takes it back); the percent / custom-field "
+                                "changes were not queued")),
+                            "partial apply (trial): the status says the percent change was not "
+                            "queued");
                 gate::check(!redo->isEnabled(),
                             "partial apply (trial): the redo list stays cleared");
             }
