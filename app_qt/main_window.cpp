@@ -6093,9 +6093,14 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         // line the user sees; say what stuck and how Undo takes it back.  W35g-1.6
         // (R35fG1-4): each field is its own commit and its own undo step, so with more than one
         // applied a single Undo takes back the last field only.
+        // W35g-1.7 (R35fW-3): the trial is dropped, so a Percent or custom-field change of this
+        // apply is not queued; say so, since the dialog has closed.
         set_message(failure + "; " + applied_fields +
                         (applied_count > 1 ? " applied; Undo takes back one field per step"
-                                           : " applied (Undo takes it back)"),
+                                           : " applied (Undo takes it back)") +
+                        (structural_applied
+                             ? "; the percent / custom-field changes were not queued"
+                             : ""),
                     true);
     }
     if (ok) {
