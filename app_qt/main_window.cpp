@@ -4246,7 +4246,11 @@ void MainWindow::show_custom_fields() {
     // W35f-0.2 (R35eG2-1): the third custom-field formula surface.  The dialog's Formula...
     // button feeds apply_custom_formula, which File > Save refuses beside a queued Calculate
     // Project, so say so before the dialog opens, as show_custom_formula does (W35e-2.6).
-    if (refuse_document_edit("a custom-field formula edit")) {
+    // W35g-0.1 (R35fG1-1): only Calculate refuses here.  Beside any other exclusive edit the
+    // dialog opens (the field list and stored formulas are worth looking at, and it queues
+    // nothing unless a formula is accepted); the Formula... button is refused instead, below.
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::calculate_project) &&
+        refuse_document_edit("a custom-field formula edit")) {
         return;
     }
     // The Task fields whose storage the port knows, with the file's stored
@@ -4256,8 +4260,16 @@ void MainWindow::show_custom_fields() {
     app::attach_custom_field_formulas(fields, app::props_stream_from_file(doc_.path()));
 
     CustomFieldsDialog dialog(std::move(fields), this);
-    dialog.set_formula_editor([this](std::uint32_t field_id,
-                                     const QString& current) -> QString {
+    // W35g-0.1 (R35fG1-1): the refusal beside a queued exclusive edit (File > Save would refuse
+    // the formula beside it, W35f-1.8) is made when Formula... is used, before the input
+    // dialog, and shown on the status line once the dialog closes.
+    std::string formula_refusal;
+    dialog.set_formula_editor([this, &formula_refusal](std::uint32_t field_id,
+                                                       const QString& current) -> QString {
+        formula_refusal = document_edit_refusal("a custom-field formula edit");
+        if (!formula_refusal.empty()) {
+            return QString();  // null = nothing queued
+        }
         bool accepted = false;
         const QString text = QInputDialog::getText(
             this, QStringLiteral("Custom Field Formula"),
@@ -4270,7 +4282,13 @@ void MainWindow::show_custom_fields() {
         }
         return text;
     });
-    if (dialog.exec() != QDialog::Accepted) {
+    const bool dialog_accepted = dialog.exec() == QDialog::Accepted;
+    if (!formula_refusal.empty()) {
+        set_message(formula_refusal, true);
+        update_status();
+        return;
+    }
+    if (!dialog_accepted) {
         set_message("custom fields cancelled", false);
         update_status();
         return;

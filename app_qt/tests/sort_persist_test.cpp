@@ -20,6 +20,9 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QComboBox>
+#include <QInputDialog>
+#include <QListWidget>
+#include <QPushButton>
 #include <QString>
 #include <QStringList>
 #include <QTimer>
@@ -42,6 +45,7 @@
 #include "fixture_guard.h"
 #include "layout_model.h"
 #include "main_window.h"
+#include "project_dialogs_qt.h"
 #include "ribbon_bar.h"
 #include "sheet_table_model.h"
 #include "shell_style.h"
@@ -114,6 +118,57 @@ bool queue_date_format(msqt::MainWindow& window, int format) {
     action->trigger();
     QApplication::processEvents();
     return seen;
+}
+
+// W35g-0.1 (R35fG1-1): the nested input dialog Formula... opens.  It is accepted with a formula
+// when it shows (and `seen` set), so a missing refusal queues an edit and the gate fails on it.
+// It polls and gives up after `tries` rounds, so it cannot hang the gate.
+void accept_input_dialog(bool* seen, int tries) {
+    QTimer::singleShot(10, [seen, tries]() {
+        if (auto* input = dynamic_cast<QInputDialog*>(QApplication::activeModalWidget())) {
+            *seen = true;
+            input->setTextValue(QStringLiteral("[Duration]/240"));
+            input->accept();
+        } else if (tries > 0) {
+            accept_input_dialog(seen, tries - 1);
+        }
+    });
+}
+
+struct CustomFieldsRun {
+    bool dialog_seen = false;  // Project > Custom Fields... opened
+    bool input_seen = false;   // Formula... opened its input dialog
+};
+
+// Drives Project > Custom Fields...: the dialog is cancelled, or Formula... is used on Text1 and
+// the dialog accepted.
+CustomFieldsRun run_custom_fields(msqt::MainWindow& window, bool use_formula) {
+    CustomFieldsRun run;
+    QTimer::singleShot(0, [&run, use_formula]() {
+        auto* dialog = dynamic_cast<msqt::CustomFieldsDialog*>(QApplication::activeModalWidget());
+        if (dialog == nullptr) {
+            return;
+        }
+        run.dialog_seen = true;
+        if (!use_formula) {
+            dialog->reject();
+            return;
+        }
+        for (int row = 0; row < dialog->field_list()->count(); ++row) {
+            if (dialog->field_list()->item(row)->text() == QStringLiteral("Text1")) {
+                dialog->field_list()->setCurrentRow(row);
+            }
+        }
+        accept_input_dialog(&run.input_seen, 5);
+        dialog->formula_button()->click();
+        dialog->accept();
+    });
+    QAction* action = gate::find_action(window, app::MenuAction::custom_fields);
+    if (action != nullptr && action->isEnabled()) {
+        action->trigger();
+        QApplication::processEvents();
+    }
+    return run;
 }
 
 // True when some displayed row of the Name column reads `text`.
@@ -205,6 +260,38 @@ int main(int argc, char** argv) {
     QApplication::processEvents();
     gate::check(window.pending_edits().empty(), "clearing the sort withdraws the queued edit");
     gate::check(!window.sort_active(), "clearing the sort clears the session sort");
+
+    // W35g-0.1 (R35fG1-1): Project > Custom Fields... opens beside a queued Sort (looking at the
+    // stored formulas queues nothing); only an accepted Formula... is refused, with the Sort
+    // still queued and no formula queued.
+    {
+        window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                 "Name descending", false);
+        QApplication::processEvents();
+        gate::check(queued_sort(window) != nullptr, "Name descending is queued for Custom Fields");
+
+        const CustomFieldsRun looked = run_custom_fields(window, false);
+        gate::check(looked.dialog_seen, "Custom Fields opens beside a queued sort");
+        gate::check(queued_sort(window) != nullptr,
+                    "cancelling Custom Fields leaves the sort queued");
+        gate::check(status_contains(window, "custom fields cancelled"),
+                    "cancelling Custom Fields beside a queued sort: the status line says so");
+
+        const CustomFieldsRun edited = run_custom_fields(window, true);
+        gate::check(edited.dialog_seen, "Custom Fields opens again beside a queued sort");
+        gate::check(!edited.input_seen,
+                    "Formula... beside a queued sort opens no input dialog");
+        gate::check(queued_sort(window) != nullptr,
+                    "a refused formula leaves the sort queued, and queues nothing beside it");
+        gate::check(status_contains(window,
+                                    "a Sort is queued and File > Save would write it, not a "
+                                    "custom-field formula edit"),
+                    "Formula... beside a queued sort: the status line names the refusal");
+        window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty() && !window.document_dirty(),
+                    "no custom-field formula was queued beside the sort");
+    }
 
     // W35f-1.8 (R35eW-1): Sort is exclusive in the save, which refuses it beside a table / date
     // format edit.  The shell refuses at the change, in both orders.
