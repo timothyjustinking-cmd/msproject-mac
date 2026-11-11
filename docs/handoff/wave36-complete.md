@@ -188,3 +188,81 @@ six font pairs (`cell-bold`, `cell-bold-row2`, `cell-bold-start`, `cell-bold-ran
 * **Gate scripts** (`build/w36/*.sh`, git-ignored) are the builder's; they are named in each commit message by log path only.
 
 WAVE-36-G1-COMPLETE
+
+## G0b: the trace gate, fixed
+
+Brief `docs/handoff/wave36-brief.md` section 2 (G0b); findings R36G0-1 to -11 of `docs/handoff/wave36-verification/review-g0.md`.  Design rule: a mask
+names a field, never a region, and there are no single-run ceilings.  Items, one finding id per commit, in order:
+
+| item | id | commit | what |
+|---|---|---|---|
+| W36-0b.1 | R36G0-1, -6 | `916ac5b` | the whole-view-bag window of `214/CV_iew/Var2Data` is gone; the only noise left there is the font word's top byte (payload +43), found by parsing the bag blocks VarMeta locates; windows come from each side's own VarMeta |
+| W36-0b.2 | R36G0-2 | `6082441` | no size tolerance: `214/CEdl/Var2Data`, `Props14` and `SummaryInformation` are parsed and their decoded fields replaced by placeholders in a canonical form compared byte for byte; the acceptance sweep enters the ctest |
+| W36-0b.3 | R36G0-3 | `e2602fb` | stream names match whole (no `endswith`); `DocumentSummaryInformation` is compared in full |
+| W36-0b.4 | R36G0-4 | `1a7a4d8` | every mask is a named field, cited by row of `spec/writers/evidence/trace-gate-fields-g0b.md`: GUIDs only when both sides are version 1 or zero, the creation stamp only of a row the control lacks, the view GUID string at payload +0 |
+| W36-0b.5 | R36G0-5 | `0e96af7` | no single-run ceilings (`ceiling`, `rows`, `ceiling_for`) |
+| W36-0b.6 | R36G0-7 | `6b7f690` | `vmx`'s reply-length check accepts the Out-String reply shape (the announced length counts the trailing newline); the stub models it |
+| W36-0b.7 | R36G0-8 | `6279a9e` | the flip test covers every offset outside the named fields in three pairs, and six planted windows; this found the `_meta_blocks` hang (a flipped VarMeta count looped 2^32 times) |
+| W36-0b.8 | R36G0-9 | `c1a5cd5` | stride masks follow a row's identity (uid word, or the FixedData item a Fixed2Data row follows), not its position; a row either side lacks, or a uid twice, has no mask |
+| W36-0b.9 | R36G0-10, -11 | `285da21` | the three overstated sentences corrected; `gates-g0.md` committed; the standing facts restored verbatim into `history-waves34-35.md` |
+| W36-0b.10 | CI | `712b40d` | both ctest-running CI jobs install `olefile` so `trace_gate_guards` runs; the test carries a 300 s TIMEOUT |
+
+**Acceptance (the committed ctest `trace_gate_guards`).**  Negative: TRACED = the control's null save, REFERENCE = the edit, over every committed
+pair whose edit differs from its control-null outside `SummaryInformation`: **87 of 89 FAIL**; the two that PASS (`wave28-percent-auto100`,
+`wave28-percent-auto40`) are no-op edits equal to the control outside the noise.  Positive: TRACED = the control's null save, REFERENCE = the control:
+**97 of 99 PASS**; the two that FAIL (`wave30-inactivate`, `wave35-g3-assign-remove-port-saved`) have a control and null that are not one state
+(`214/CEdl/Var2Data` record structure differs), and no mask was widened.  Before G0b the negative sweep let 8 of 89 PASS.
+
+**Gate line.**  At `712b40d`, core tree `build/w35g-close-fresh`: build exit 0; `ctest -E plan_recalc -j4` 67/67 passed, including `trace_gate_guards`
+(219 checks, 15 s) and `trace_host_scripts` (`build/w36/285da21-W36-0b.10-core-ctest.log`).  Every commit: `check_fixtures` 0, `check_markers` 0,
+`guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each commit carries the one
+trailer.  Per-item logs are in `docs/handoff/wave36-verification/gates-g0b.md`.  G0b changes no C++ source.  The builder did not touch the VM
+and pushed nothing.
+
+### Guards seen red
+
+Each red ran on the previous commit's tool, then the green on the new one; logs are `build/w36/<parent>-W36-0b.N-red.log` and `-green.log`.
+
+| item | red (the old tool) | green |
+|---|---|---|
+| 0b.1 | TRACED = control-null, REFERENCE = the sort-by-name-descending edit and the Bold-off edit: `96 streams, 94 checked, 0 problems`, exit 0 | both `1 problems`, `bytes-differ ???214/CV_iew/Var2Data`, exit 1; a flip at payload +43 of the font row passes, +40 fails |
+| 0b.2 | the same sweep over 89 edits: 8 PASS (the two no-ops and six others) | 2 PASS (the two no-ops) |
+| 0b.3 | one byte flipped at +0 and at +60 of `?DocumentSummaryInformation`: `96 streams, 96 checked, 0 problems` | both `bytes-differ ?DocumentSummaryInformation` |
+| 0b.4 | a non-version-1 GUID, a flipped Assn Fixed2Data +40, Task Fixed2Data +46, a stamp of an existing Task row, a changed opening brace of the view GUID string: all PASS | all FAIL; one changed hex digit of the view GUID PASSes |
+| 0b.5 | a save with all 80 named fields of 12 streams changed: ten FAIL lines (`over-ceiling ???114/Props 30>24`, `...Assn/Fixed2Data 138>100`, ...) | PASS; the same save with one data byte changed FAILs |
+| 0b.6 | the new test against the previous `host.ps1`: 6 FAIL lines (the CRLF reply one character short, four pieces, two last-piece-newline replies, the sha MISMATCH case, no newline) | all pass |
+| 0b.7 | red1: a window over all of Task Var2Data but byte 0, the old test ends "all passed"; red2: the new test FAILs on all three pairs ("the windows are 665 bytes, the named fields 0"); red3: the new test on the old gate hangs in `_meta_blocks` | all passed, 200 checks, 13 s |
+| 0b.8 | the noise of one control row planted in a middle-insert pair: the same row of the edit FAILs and the control's position (another row) PASSes, both wrong; the new test file crashes on the old gate | the same row PASSes, the control position FAILs, the inserted row FAILs |
+| 0b.9 | records only; no red | scans clean; the restored section equals lines 284 to 381 of START-HERE at `2ecf42b^` by `diff` |
+| 0b.10 | the CI jobs could not run the guard: `olefile` absent, exit 77, SKIPPED | `ci.yml` parses with the steps in both jobs; ctest 67/67 with the guard run |
+
+### Deferred
+
+None.  Every G0b item is fixed.
+
+### Found, not fixed
+
+* **The CI steps of 0b.10 have not run.**  Nothing is pushed; the first CI run after the push shows whether `setup-python` and `pip install olefile` give
+  every runner the interpreter CMake finds.  The 300 s test limit is a guess from 15 s locally.
+* **The gate on the VM is still the frozen copy.**  The VM runs the old `trace_gate.py` and `host.ps1` until the coordinator copies the new ones in;
+  the new `host.ps1` reply check models the Out-String shape, and whether the real CIM XML keeps the CR is not settled here (the test models both).
+  The coordinator confirms it with one `vmx 'Get-Date'` before the re-gate.
+* **Undecoded 4-byte save-date words in `214/CV_iew/Var2Data`** (17 control/null pairs differ there, outside the font bytes).  Only the control mask covers
+  them; a traced save whose control is another pair's would show them as differences.  Direction: decode the word's record and name the field.
+* **Task Fixed2Data +42 and +46..49 are data**, not noise: they are equal in every committed control/null pair.  The old VM null run may have seen
+  noise there; the coordinator's re-gate would then FAIL on it, which is a finding by design (name the field with a measured offset, never a region).
+* **Props14 tail entry `0xffffffff`**: present in the controls and edits, absent in 98 of the 99 null saves.  It is replaced by a placeholder in the
+  canonical form; what it means is not known.
+* **Two control/null pairs are not one state** (`wave30-inactivate`, `wave35-g3-assign-remove-port-saved`): the positive sweep FAILs there by design.  The
+  pairs need re-recording, or the difference in `214/CEdl/Var2Data` needs decoding.
+* **Row identity (0b.8) is decoded from the committed files, not from a format spec.**  The uid word at row +0 is the identity for Task and Assn
+  FixedData; for Rsc, Cal and Cons the identity is the word the FixedData item carries at the offset noted in `trace-gate-fields-g0b.md`, found unique and
+  stable across all 332 files, not proven to be the resource or calendar uid.  The Assn FixedMeta and Fixed2Meta streams list only some rows, so they are
+  not used.  A uid carried by two rows (a deleted Task row that stays; two Rsc rows in two files) leaves those rows unmasked.
+* **The two G0 "Found, not fixed" bullets on ceilings and null-run windows** (path-bearing streams tolerate a ceiling; windows tuned to the null run)
+  **are superseded**: the tolerances are gone (0b.2, 0b.5) and every mask is a named field (0b.4).
+* **A real flaw the flip test found**: `_meta_blocks()` looped up to 2^32 times on a flipped VarMeta count and hung the gate.  Fixed in 0b.7 by limiting the
+  count to what the stream can hold.  No other meta reader was searched for the same fault.
+* **`python -I` still cannot import `olefile`** here (user site-packages), so the trace tests run without `-I`; they read only committed files.
+
+WAVE-36-G0b-COMPLETE
