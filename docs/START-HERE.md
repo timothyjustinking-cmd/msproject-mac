@@ -75,8 +75,8 @@ Keep this file current at every wave close; it is the only file a new session mu
   * **G2 (the Lows and the Calculate Medium):** fixed R35cG0-5 (`ec2429c`), R35cG0-6
     (`7d908c6`), R35cG1-5 to -7 (`c250aef`, `f9771b6`, `a85d8b3`), R35cG2-2 to -7 (`fc12254`,
     `f3c38d9`, `bb4a398`, `e415fe2`, `51c474b`, `6652ded`) and R35cW-3 and -5 (`6f5cc18`,
-    `492f10c`); R35cW-4 (`4dcfcd7`) is **partly fixed** (remainders R35dW-1 and R35dW-5).  **Partly fixed,
-    still open:** R35cG0-2 (the plan reads Start word
+    `492f10c`); R35cW-4 (`4dcfcd7`) is **partly fixed** (remainders R35dW-1 and R35dW-5).
+    **Partly fixed, still open:** R35cG0-2 (the plan reads Start word
     +104 only; the writer half is closed) and R35cG0-4 (the plan has no Props digest, a recorded
     gap); both are refused at the writer or the save.
   * Every 35d fix still awaits an independent review, so waves 34 to 35d stay NOT merged.
