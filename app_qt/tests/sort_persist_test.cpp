@@ -435,6 +435,10 @@ int main(int argc, char** argv) {
             }
             gate::check(in_sorted_order,
                         "Undo then Level: the displayed rows keep the sorted order");
+            // W35g-1.2 (R35fG0-6): and the Level is shown (Level 1 hides the subtasks), so a
+            // refused Level, which leaves every row, cannot pass.
+            gate::check(level_rows.size() < sorted_rows.size(),
+                        "Undo then Level: the session Level is shown (fewer rows than the sort)");
             redo->trigger();
             QApplication::processEvents();
             gate::check(queued_sort(window) != nullptr,
