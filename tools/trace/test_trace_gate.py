@@ -114,8 +114,7 @@ try:
     # --- W36-0.1: a flip in a stream the old gate skipped whole is caught ----------------------
     for name, offset in (("???214/CEdl/Var2Data", 20), ("Props14", 20)):
         bad = os.path.join(tmp, "flip.mpp")
-        # one byte beyond the equal-size ceiling would be needed for a path stream, so flip a
-        # block of bytes that is larger than the ceiling
+        # flip a block of 200 bytes: no field of a path stream is that wide
         shutil.copyfile(ref, bad)
         ole = olefile.OleFileIO(bad, write_mode=True)
         path = stream_path(ole, name)
@@ -266,7 +265,7 @@ try:
                 skipped.append(name + " (empty)")
                 continue
             mask = g.control_mask(name, len(data), C.get(name), N.get(name)) or set()
-            win, _ = g.noise_windows(name, data, R.get(name[:-len("Var2Data")] + "VarMeta")
+            win = g.noise_windows(name, data, R.get(name[:-len("Var2Data")] + "VarMeta")
                                      if name.endswith("Var2Data") else None, C)
             free = [i for i in range(len(data)) if i not in mask and i not in win]
             if name in g.CANON:
@@ -356,13 +355,8 @@ try:
             if not offsets:
                 continue
             guid_fields += len(offsets)
-            # the first and the last GUID of the stream, each with a fresh time_low byte and a
-            # fresh last byte (W36-0b.5 lifts the ceilings and changes every field of every row)
             for which in (offsets[0], offsets[-1]):
-                raw = AR[sname][which:which + 16]
-                fresh = put(AR, sname, [(which, bytes([raw[0] ^ 0x5A])),
-                                        (which + 15, bytes([raw[15] ^ 0x5A]))])
-                problems, lines = verdict(fresh, AR)
+                problems, lines = verdict(put(AR, sname, [(which, v1(40))]), AR)
                 check("W36-0b.4 %s: a fresh version-1 GUID at +%d is noise" % (sname, which),
                       problems == 0, "%r" % (lines,))
             bad = put(AR, sname, [(offsets[0], v4(7))])
@@ -441,12 +435,84 @@ try:
         old_s = [off + 4 for uid, off in stamps if uid in known]
         check("W36-0b.4 the Assn Var2Data case has a new block and an old one",
               fresh_s and old_s, "%r %r" % (fresh_s, old_s))
-        problems, lines = verdict(put(AR, var_n, [(fresh_s[0] + 1, b"\xbb\xcc\xdd")]), AR, AC)
+        problems, lines = verdict(put(AR, var_n, [(fresh_s[0], b"\xaa\xbb\xcc\xdd")]), AR, AC)
         check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control lacks is noise",
               problems == 0, "%r" % (lines,))
         problems, lines = verdict(put(AR, var_n, [(old_s[0], b"\xaa\xbb\xcc\xdd")]), AR, AC)
         check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control has fails",
               problems >= 1 and var_n in "".join(lines), "%r" % (lines,))
+
+        # --- W36-0b.5 (R36G0-5): there is no ceiling on how many noise fields change -------------
+        # A traced save in which EVERY named noise field of EVERY row has changed (every GUID is a
+        # fresh version-1 GUID, every save word, view string, creation stamp and font byte differs)
+        # is still a PASS; the old per-stream ceilings failed it as "over-ceiling".  One data byte
+        # added to that same save FAILs, so nothing else was waived.
+        W = {}                     # stream -> {offset: new bytes}
+
+        def want(sname, at, raw):
+            W.setdefault(sname, {})[at] = raw
+
+        serial = [100]
+
+        def fresh_guid():
+            serial[0] += 1
+            return v1(serial[0])
+
+        for sname, rule in sorted(g.NOISE.items()):
+            if sname not in AR:
+                continue
+            data = AR[sname]
+            if "guid_record" in rule:
+                base, size = g.STRIDE[sname]
+                for r in range((len(data) - base) // size):
+                    for lo in rule["guid_record"]:
+                        at = base + r * size + lo
+                        if g._is_v1_guid(data[at:at + 16]):
+                            want(sname, at, fresh_guid())
+            for at in rule.get("guid", ()):
+                if g._is_v1_guid(data[at:at + 16]):
+                    want(sname, at, fresh_guid())
+            for pos, length, rid, kind in (g.frame_records(data, 16) or []) if "props" in rule else []:
+                cls, at = rule["props"].get(rid), pos + 12
+                if cls == "word":
+                    want(sname, at, bytes([data[at] ^ 0x55]) + data[at + 1:at + 4])
+                elif cls == "guid" and g._is_v1_guid(data[at:at + 16]):
+                    want(sname, at, fresh_guid())
+                elif cls == "guidstr":
+                    for d in g._guidstr_digits(data[at:at + length]):
+                        want(sname, at + d, b"7" if data[at + d:at + d + 1] != b"7" else b"8")
+            if "new_row" in rule:
+                base, size = g.STRIDE[sname]
+                known_uids = g._task_uids(AC.get(sname))
+                lo, hi = rule["new_row"]
+                for r in range((len(data) - base) // size):
+                    row = base + r * size
+                    if g._u32(data, row) not in known_uids:
+                        want(sname, row + lo, bytes(b ^ 0x33 for b in data[row + lo:row + hi]))
+        for uid, off, key in g._meta_blocks(AR[meta_n2]):
+            if key == 0x0F40027A and off != 0xFFFFFFFF and uid not in known:
+                want(var_n, off + 4, bytes(b ^ 0x33 for b in AR[var_n][off + 4:off + 8]))
+        cview = "???214/CV_iew/Var2Data"
+        for at in g.font_item_garbage(AR[cview], AR["???214/CV_iew/VarMeta"]):
+            want(cview, at, bytes([AR[cview][at] ^ 0xFF]))
+        every = dict(AR)
+        n_fields = 0
+        for sname, edits in W.items():
+            blob = bytearray(every[sname])
+            for at, raw in edits.items():
+                blob[at:at + len(raw)] = raw
+            every[sname] = bytes(blob)
+            n_fields += len(edits)
+        problems, lines = verdict(every, AR, AC)
+        check("W36-0b.5 every noise field of every row changed (%d fields in %d streams) is a PASS"
+              % (n_fields, len(W)), problems == 0 and n_fields > 50,"%r" % (lines,))
+        data_byte = g.STRIDE[task_n][0] + 60              # a data byte of the first Task row
+        plus = put(every, task_n, [(data_byte, bytes([every[task_n][data_byte] ^ 1]))])
+        problems, lines = verdict(plus, AR, AC)
+        check("W36-0b.5 the same save with one data byte changed fails",
+              problems >= 1 and task_n in "".join(lines), "%r" % (lines,))
+        check("W36-0b.5 the gate has no ceiling left",
+              not hasattr(g, "ceiling_for") and not any("ceiling" in r for r in g.NOISE.values()))
 
 
         # a gate that checked nothing is not a pass

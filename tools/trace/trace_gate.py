@@ -16,17 +16,18 @@ CONTROL, CONTROL_NULL
 
 A byte of the traced save may differ from the reference only where
   1. the control mask covers it, or
-  2. NOISE below names it (an exact window), and the stream's ceiling on such bytes holds.
+  2. NOISE below names it: a decoded field, never a region, and no limit on how many rows carry
+     one; or the stream is parsed and the field is replaced in the canonical form (`canonical`).
 Any other differing byte, a size change, or a stream in one file only, is a problem.
 
-The noise allow-list is the whole of the waiver: there is no by-name whole-stream skip.  The
-four known sources, each with a narrow window taken from the committed control/null pairs
-(99 of them) and the trace's null run (trace-null.md):
-  * the UuidCreateSequential GUID counter bytes (Assn Fixed2Data +0 and +16);
-  * the creation date-time stamps (Assn Var2Data key 0x0f40027a, Task FixedData +128);
+The named fields are the whole of the waiver: there is no by-name whole-stream skip.  Each is
+decoded from the committed control/null pairs (99 of them) and the trace's null run, and cited by
+row of spec/writers/evidence/trace-gate-fields-g0b.md:
+  * version-1 GUIDs (the Fixed2Data rows, the view stamps, the Props save GUIDs);
+  * the creation date-times of a new Task row or assignment, and the Props save words;
   * the uninitialised top byte of the font word (payload +43 of the 0x2240000c items);
-  * the per-save and per-file Props identity records (114/Props ids below, the 214/Props
-    view GUID string).
+  * the path, user-name and size fields of the path-bearing streams, and the SummaryInformation
+    values, replaced by placeholders in the canonical form.
 
 Prints one summary line, then one line per problem stream (no names, no paths, only stream
 paths and byte counts), then the SHA-256 of everything printed before it, so a copy read off
@@ -76,37 +77,37 @@ STRIDE = {
 #                is not in the control's VarMeta
 # A GUID is masked only when both sides hold a version-1 GUID or all zero.  Every row cites its
 # line of spec/writers/evidence/trace-gate-fields-g0b.md (FIELDS) for the decoded field.
-# `ceiling` is the most bytes the null run showed outside the control mask (trace-null.md, the
-# 14 problem lines); a stride stream's ceiling is that number per `rows` records.
+# There is no ceiling on how many bytes of the named fields may differ: a field is noise or it
+# is not, and every row of every stream is judged by the same rule (W36-0b.5).
 FIELDS = "spec/writers/evidence/trace-gate-fields-g0b.md"
 NOISE = {
     # FIELDS:12  Assn Fixed2Data GUIDs at +0 and +16 (+32 is data)
-    "???114/TBkndAssn/Fixed2Data": {"guid_record": (0, 16), "ceiling": 40, "rows": 2},
+    "???114/TBkndAssn/Fixed2Data": {"guid_record": (0, 16)},
     # FIELDS:13  Task Fixed2Data GUIDs at +0 and +24
-    "???114/TBkndTask/Fixed2Data": {"guid_record": (0, 24), "ceiling": 50, "rows": 6},
+    "???114/TBkndTask/Fixed2Data": {"guid_record": (0, 24)},
     # FIELDS:14  Rsc Fixed2Data GUIDs at +0 and +24
-    "???114/TBkndRsc/Fixed2Data": {"guid_record": (0, 24), "ceiling": 20, "rows": 1},
+    "???114/TBkndRsc/Fixed2Data": {"guid_record": (0, 24)},
     # FIELDS:15  Cal Fixed2Data GUID at +0
-    "???114/TBkndCal/Fixed2Data": {"guid_record": (0,), "ceiling": 10, "rows": 18},
+    "???114/TBkndCal/Fixed2Data": {"guid_record": (0,)},
     # FIELDS:16  Cons Fixed2Data GUID at +0
-    "???114/TBkndCons/Fixed2Data": {"guid_record": (0,), "ceiling": 30, "rows": 3},
+    "???114/TBkndCons/Fixed2Data": {"guid_record": (0,)},
     # FIELDS:22  creation stamp of a new Task row (record +128, 4 bytes)
-    "???114/TBkndTask/FixedData": {"new_row": (128, 132), "ceiling": 3, "rows": 1},
+    "???114/TBkndTask/FixedData": {"new_row": (128, 132)},
     # FIELDS:18-19  the per-save words and GUIDs; 0x02401394 is per-file identity, not noise
     # (FIELDS:20), so it is not listed
     "???114/Props": {"props": {0x02400007: "word", 0x024013B1: "word", 0x02400029: "guid",
-                               0x024013C2: "guid"}, "ceiling": 24},
+                               0x024013C2: "guid"}},
     # FIELDS:21  the view GUID string.  (The typed record 0x00010007, the length of
     # 214/CEdl/Var2Data, is canonicalised with that stream's other size words.)
-    "???214/Props": {"props": {0x03400001: "guidstr"}, "ceiling": 17},
+    "???214/Props": {"props": {0x03400001: "guidstr"}},
     # FIELDS:17  view stamps: version-1 GUIDs saved with the view
-    "???214/CEdl/FixedData": {"guid": (144,), "ceiling": 10},
-    "???214/CFilter/FixedData": {"guid": (214, 444), "ceiling": 20},
-    "???214/CGrouping/FixedData": {"guid": (214, 444), "ceiling": 20},
-    "???214/CTable/FixedData": {"guid": (214,), "ceiling": 10},
-    "???214/CV_iew/FixedData": {"guid": (122, 260, 398), "ceiling": 30},
+    "???214/CEdl/FixedData": {"guid": (144,)},
+    "???214/CFilter/FixedData": {"guid": (214, 444)},
+    "???214/CGrouping/FixedData": {"guid": (214, 444)},
+    "???214/CTable/FixedData": {"guid": (214,)},
+    "???214/CV_iew/FixedData": {"guid": (122, 260, 398)},
     # FIELDS:23  the assignment creation stamp is a var block located through VarMeta
-    "???114/TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}, "ceiling": 3},
+    "???114/TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}},
 }
 
 # Streams that carry a file path or a user name, whose length the machine moves (null run:
@@ -453,18 +454,16 @@ def _meta_blocks(meta):
 
 
 def noise_windows(name, data, meta=None, ctl=None, other=None):
-    """The offsets of the named noise fields of one stream's bytes -> (set of offsets, record
-    count).  `meta` is the companion VarMeta of a Var2Data stream, `ctl` the control's streams
-    (a field that only a new row carries is masked only for a row the control lacks) and `other`
-    the other side's bytes of the same stream (a GUID is masked only when both sides hold a
-    version-1 GUID or zeros)."""
+    """The set of offsets of the named noise fields of one stream's bytes.  `meta` is the
+    companion VarMeta of a Var2Data stream, `ctl` the control's streams (a field that only a new
+    row carries is masked only for a row the control lacks) and `other` the other side's bytes
+    of the same stream (a GUID is masked only when both sides hold a version-1 GUID or zeros)."""
     rule = _noise_rule(name)
     offs = set()
-    nrec = 0
     if name == CVIEW_VAR2:
         offs.update(font_item_garbage(data, meta))
     if rule is None:
-        return offs, nrec
+        return offs
     ctl = ctl or {}
     other = data if other is None else other
     stride = _stride(name)
@@ -506,18 +505,7 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
             if key in rule["varkey"] and off != 0xFFFFFFFF and uid not in known:
                 lo, hi = rule["varkey"][key]
                 offs.update(range(off + 4 + lo, min(off + 4 + hi, len(data))))
-    return offs, nrec
-
-
-def ceiling_for(name, nrec):
-    rule = _noise_rule(name)
-    if rule is None:
-        return 0
-    base = rule["ceiling"]
-    rows = rule.get("rows")
-    if rows and nrec > rows:
-        return -(-base * nrec // rows)
-    return base
+    return offs
 
 
 def control_mask(name, ref_len, ctl, nul):
@@ -582,21 +570,11 @@ def compare(traced, ref, ctl, nul):
         meta_a = meta_b = None
         if name in VAR_META:
             meta_a, meta_b = ref.get(VAR_META[name]), traced.get(VAR_META[name])
-        win, nrec = noise_windows(name, a, meta_a, ctl, b)
-        wb, nrb = noise_windows(name, b, meta_b, ctl, a)
-        win |= wb
-        nrec = max(nrec, nrb)
+        win = noise_windows(name, a, meta_a, ctl, b) | noise_windows(name, b, meta_b, ctl, a)
         diff = [i for i in range(len(a)) if a[i] != b[i] and i not in mask]
         outside = [i for i in diff if i not in win]
-        counted = [i for i in diff if i in win]
-        ceiling = ceiling_for(name, nrec)
-        if name == CVIEW_VAR2:
-            ceiling += len(font_item_garbage(a, meta_a))
         if outside:
             lines.append("bytes-differ %s %d" % (name, len(outside)))
-            problems += 1
-        elif len(counted) > ceiling:
-            lines.append("over-ceiling %s %d>%d" % (name, len(counted), ceiling))
             problems += 1
     if checked == 0 and problems == 0:
         lines.append("nothing checked")   # a gate that compared no stream is not a pass (W36-0.4)
