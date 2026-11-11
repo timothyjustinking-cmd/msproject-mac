@@ -456,11 +456,13 @@ coordinator's review closes an id.
 
 - **Mediums:** R35eG1-1 (W35f-0.1 `fd457b4`: a session-only Level under a session Sort is shown
   again, only the queue is refused), R35eG2-1 (W35f-0.2 `08b83f9`: the Custom Fields dialog's
-  Formula... button guards a queued Calculate), R35eG1-3 (W35f-0.3 `1a2436e`: the five-task
-  Undo-Sort-then-Level test and the corrected 1.1 record) and R35eG1-2 (W35f-0.4: these records).
-  All four are fixed in the builder's tree and await the coordinator's mutations and review.
+  Formula... button guards a queued exclusive edit of any kind since W35f-1.8), R35eG1-3
+  (W35f-0.3 `1a2436e`: the five-task Undo-Sort-then-Level test and the corrected 1.1 record) and
+  R35eG1-2 (W35f-0.4: these records).  All four are fixed in the builder's tree and were reviewed
+  by `coord-gates-g0.md`.
 - **Lows:** R35eG0-1 to -3, R35eG1-4 to -6, R35eG2-2 to -10, R35eW-1 to -4 (wave 35f G1: shell,
-  AppKit, Calculate seams, records).
+  AppKit, Calculate seams, records), fixed and reviewed by `coord-gates-g1.md`.  Open from those
+  reviews: R35fG0-* and R35fG1-*.
 - **Still partly fixed:** R35dG2-1 (Fill Down's guard has no test route), R35cG0-2 (the plan
   reads Start word +104 only), R35cG0-4 (no plan-side Props digest), R35cW-4 (remainders R35dW-1,
   closed, and R35dW-5, fixed in source with `macos-appkit` as its gate), and the four 35b ids

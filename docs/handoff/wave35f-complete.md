@@ -117,8 +117,9 @@ reads it.
 - The gcc, clang and AppleClang jobs cannot run here. **CI is the only proof of W35f-1.10**
   (`app/main.mm`, the AppKit mirror): its gate is the `macos-appkit` job of `app-macos.yml`, which
   runs on push, so the merge check "CI green on three OSs" must include that run for `wave35f`.
-  R35cW-CI1, R35cW-CI2 and R35dW-5 stay "fixed in source; CI is its gate" until the coordinator's
-  run is green.
+  R35dW-5 stays "fixed in source; CI is its gate" until the coordinator's run is green.
+  (R35cW-CI1 and R35cW-CI2 were proved by the green wave 35d run, `3d22c39`, as START-HERE and
+  `memory/coordinator.md` record.)
 - Trailer `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 35f)`: present on all 23 builder
   commits in `47665e1..135d253` (checked by script at CLOSE). The one commit without it,
   `d884b57`, is the coordinator's wave 35f brief.
