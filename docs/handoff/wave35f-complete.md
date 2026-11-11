@@ -55,7 +55,7 @@ script. Nothing below is called closed: that is the coordinator's review.
 | 1.5 | R35eG2-2 | fixed `e303559`; a pending document edit ends the structural redo list, on the three surfaces |
 | 1.6 | R35eG2-4 | fixed `5506509`; Calculate's refusal beside a pending document edit gives advice that holds |
 | 1.7 | R35eG2-6 | fixed `4ffd8a7` (test): a pending formula, then Calculate Project |
-| 1.8 | R35eW-1 | fixed `a0bf0c2`, with a coverage limit: the refusals at Resource Information, Add Resources, Assign Resources, Font Bold and Define WBS Code share one helper and are exercised through the Manually Schedule case only |
+| 1.8 | R35eW-1 | fixed `a0bf0c2`, with a coverage limit: the refusals at Resource Information, Add Resources, Assign Resources, Font Bold and Define WBS Code share one helper and are exercised through the Manually Schedule case only (limit lifted by W35g-1.8, R35fG1-3: one case each) |
 | 1.9 | R35eW-3 | recorded `66c1555`: 2.1's Qt call site is defensive and unreached; the review's seam test would need a mutable queue accessor, not added |
 | 1.10 | R35eG2-3 | **fixed in source `26be753`; `macos-appkit` is its gate** (the AppKit mirror of 2.6, the redo clear and 1.8; not compiled, run or tested here) |
 | 1.11 | R35eG2-7 | fixed `76c8927`; the fault seam has the step after the re-read compare |
@@ -134,7 +134,7 @@ Nothing here is called closed: only the coordinator's review closes an id (R35eG
 | G1 | R35eG0-1, R35eG0-2, R35eG0-3 | fixed `9e37503`, `6d93f13`, `ae36884` |
 | G1 | R35eG1-4 | fixed `d880529`, record `b3c19d3` |
 | G1 | R35eG2-2, R35eG2-4, R35eG2-6 | fixed `e303559`, `5506509`, `4ffd8a7` |
-| G1 | R35eW-1 | fixed `a0bf0c2`, with a coverage limit (one helper, exercised through the Manually Schedule case) |
+| G1 | R35eW-1 | fixed `a0bf0c2`, with a coverage limit (one helper, exercised through the Manually Schedule case; limit lifted by W35g-1.8, R35fG1-3) |
 | G1 | R35eW-3 | recorded `66c1555`: the Qt call site is defensive and unreached |
 | G1 | R35eG2-3 | **fixed in source `26be753`; `macos-appkit` is its gate** |
 | G1 | R35eG2-7, R35eG2-8 | fixed `76c8927`, `5ce1c73` |

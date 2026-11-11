@@ -104,6 +104,15 @@ Level in both orders (`sort_persist_test.cpp`, `outline_persist_test.cpp`). The 
 information, add resources, assign resources, Font Bold and Define WBS Code call sites are
 covered only by the shared helper's test, not one case each. The commit message says so.
 
+*Erratum, W35g-1.8 (R35fG1-3):* that limit is lifted, and the one it understated is corrected.
+The wave 35g tests drive each of Add Resources, Assign Resources, Font Bold and Define WBS Code
+beside a pending date format (`qt_task_mode_document_edit_gate`), Resource Information the same
+way (`qt_resource_information_gate`), and Custom Field Formula beside a queued Manually Schedule
+(`qt_task_mode_document_edit_gate`) and beside a queued Sort (`qt_sort_persist`). The widened
+Custom Fields refusal at the Formula... button was tested by W35g-0.1. Before that the tests
+drove only Table / Date Format beside a non-Calculate kind, so reverting the Custom Field Formula
+or Custom Fields refusal to the Calculate-only check would have left every test green.
+
 **1.9 (R35eW-3), a branch left untested.** At the Qt call site the Sort dialog maps a Duration key
 to `SortKeyKind::other`, which `make_sort_edit` refuses; for Name the display and writer ids agree;
 and every route that changes the shown sort while a Sort is on the redo list clears that list, so

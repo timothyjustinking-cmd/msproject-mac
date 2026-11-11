@@ -297,6 +297,41 @@ int main(int argc, char** argv) {
                     "no custom-field formula was queued beside the sort");
     }
 
+    // W35g-1.8 (R35fG1-3): Project > Custom Field Formula (the menu action, not the Custom
+    // Fields dialog's button) beside a queued Sort opens no dialog and queues nothing.
+    {
+        window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
+                                 "Name descending", false);
+        QApplication::processEvents();
+        gate::check(queued_sort(window) != nullptr,
+                    "Name descending is queued for Custom Field Formula");
+        QAction* formula = gate::find_action(window, app::MenuAction::custom_field_formula);
+        gate::check(formula != nullptr && formula->isEnabled(),
+                    "Custom Field Formula is an enabled menu action");
+        if (formula != nullptr && formula->isEnabled()) {
+            bool dialog_seen = false;
+            QTimer::singleShot(0, [&dialog_seen]() {
+                if (QWidget* modal = QApplication::activeModalWidget()) {
+                    dialog_seen = true;
+                    modal->close();
+                }
+            });
+            formula->trigger();
+            QApplication::processEvents();
+            QApplication::processEvents();
+            gate::check(!dialog_seen, "Custom Field Formula beside a queued sort opens no dialog");
+            gate::check(queued_sort(window) != nullptr && window.pending_edits().size() == 1,
+                        "Custom Field Formula beside a queued sort leaves the sort queued once");
+            gate::check(status_contains(window,
+                                        "a Sort is queued and File > Save would refuse a "
+                                        "custom-field formula edit beside it"),
+                        "Custom Field Formula beside a queued sort: the status line names it");
+        }
+        window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "the Custom Field Formula case: sort withdrawn");
+    }
+
     // W35f-1.8 (R35eW-1): Sort is exclusive in the save, which refuses it beside a table / date
     // format edit.  The shell refuses at the change, in both orders.
     {
