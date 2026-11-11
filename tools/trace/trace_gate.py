@@ -319,6 +319,9 @@ def compare(traced, ref, ctl, nul):
         elif len(counted) > ceiling:
             lines.append("over-ceiling %s %d>%d" % (name, len(counted), ceiling))
             problems += 1
+    if checked == 0 and problems == 0:
+        lines.append("nothing checked")   # a gate that compared no stream is not a pass (W36-0.4)
+        problems += 1
     return lines, problems, checked, unchecked
 
 

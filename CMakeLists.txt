@@ -177,6 +177,21 @@ if(CORE_BUILD_TESTS)
         )
     endif()
 
+    # W36-0.4: the trace gate fails where it must (one flipped byte in every stream of a
+    # committed pair, no null, a mask of the wrong length).  It needs olefile; without it
+    # the script exits 77 and ctest reports SKIPPED, not a pass.
+    if(Python3_Interpreter_FOUND AND EXISTS "${Python3_EXECUTABLE}")
+        add_test(
+            NAME trace_gate_guards
+            COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_trace_gate.py"
+        )
+        set_tests_properties(trace_gate_guards PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            SKIP_RETURN_CODE 77
+        )
+    endif()
+
     # -----------------------------------------------------------------------
     # E1 (wave 17): the differential engine/backend harness.
     #
