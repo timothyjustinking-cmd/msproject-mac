@@ -10,7 +10,7 @@ Builder record: `wave35d-verification/gates-g0.md`. Commits: `23de6e2` (0.1), `1
 | 0.1 | R35cW-CI1 | fixed in source `23de6e2`; CI is its gate (the GCC compile is CI's: MSVC cannot report `-Wmissing-field-initializers`) |
 | 0.2 | R35cW-CI2 | fixed in source `171831b`; CI is its gate (macos-qt is CI's: macOS cannot be run here) |
 | 0.3 | R35cG0-1 (High) | fixed `abc8a60`; each of the three `check_props_pin` branches has a test with its own needle |
-| 0.4 | R35cG1-1 (High) | fixed `61a451b`, both halves; the Sort route is closed.  **Correction (W35e-1.3, R35dG1-1):** this row said the Show Level route was run and does not diverge, which is wrong: a queued Level, Ctrl+Z, a session-only Sort and Ctrl+Y re-queued the level under the sorted display (R35dG1-1(b), fixed in source by W35e-1.1 `39c8e37`, not yet closed by the coordinator) |
+| 0.4 | R35cG1-1 (High) | fixed `61a451b`, both halves; the Sort route is closed.  **Correction (W35e-1.3, R35dG1-1):** this row said the Show Level route was run and does not diverge, which is wrong: a queued Level, Ctrl+Z, a session-only Sort and Ctrl+Y re-queued the level under the sorted display (R35dG1-1(b), fixed by W35e-1.1 `39c8e37`; reviewed by the coordinator's 35e G1 verification, follow-ons R35eG1-1, R35eG1-3) |
 | 0.5 | R35cG1-2 (High) | **partly fixed** `6458203`: Cut and Paste end the structural redo list; remainder R35dG0-1 with R35dW-1, a partly applied Task Information or Task Form edit kept it (closed by W35e-0.1 `b8ee455`) |
 
 **Gate line** (Visual Studio 17 2022, Release, `CORE_WARNINGS_AS_ERRORS=ON`; last row
@@ -58,11 +58,11 @@ checked by script.
 | Item | Finding | Status |
 |---|---|---|
 | 1.1 | R35cG1-3 | fixed `e967858`; Paste's guard has a test in both persist tests, and mutation Q10 turns it red |
-| 1.2 | R35cG1-4 | **partly fixed** `e2eca38`: remainder R35dG1-1, a session Sort shown before a Level, and an Undo Level, Sort, Redo route bypassed the rule (fixed in source by W35e-1.1 `39c8e37`, not yet closed by the coordinator); one rule under both kinds, in `spec/writers/view-state.md`, every kept refusal tested (Expand All under a queued Sort is disabled, and tested as such) |
+| 1.2 | R35cG1-4 | **partly fixed** `e2eca38`: remainder R35dG1-1, a session Sort shown before a Level, and an Undo Level, Sort, Redo route bypassed the rule (fixed by W35e-1.1 `39c8e37`; reviewed by the coordinator's 35e G1 verification, follow-ons R35eG1-1, R35eG1-3); one rule under both kinds, in `spec/writers/view-state.md`, every kept refusal tested (Expand All under a queued Sort is disabled, and tested as such) |
 | 1.3 | R35cG2-1 | fixed `41f7a2c`; a test-only fault seam reaches the `save_calculate` scratch chain after appends 1, 3 and 5 and the target is byte-identical; R35bG2-2 corrected to "partly fixed" |
-| 1.4 | R35cG0-3 | **partly fixed** `6552f11` as a record and a refusal text; remainder R35dG1-2 and R35dW-4, the Scope paragraph's list of refused port saves and its "at the pin" claim were wrong (fixed in source by W35e-1.2 `1da3997`, not yet closed by the coordinator); Calculate Project is enabled for the measured control's values only, and the port saves now refused are named; no refusal lifted |
+| 1.4 | R35cG0-3 | **partly fixed** `6552f11` as a record and a refusal text; remainder R35dG1-2 and R35dW-4, the Scope paragraph's list of refused port saves and its "at the pin" claim were wrong (fixed by W35e-1.2 `1da3997`; reviewed by the coordinator's 35e G1 verification); Calculate Project is enabled for the measured control's values only, and the port saves now refused are named; no refusal lifted |
 | 1.5 | R35cW-2 | fixed `454521d`; R35bW-1, R35bW-2, R35bG2-2 and R35bG3-1 read "partly fixed", each with its remaining R35c id |
-| 1.6 | R35cW-1, R35cG2-8 | R35cW-1 **partly fixed** `4410935`: remainder R35dG1-3 and R35dW-2, the lists still carried ids 35c closed, R35bG0-1 and R35bG0-2 among them, and the reviews' open ids were not in them (fixed in source by W35e-1.3, not yet closed by the coordinator); R35cG2-8 fixed; the open queue is in START-HERE, `memory/coordinator.md` and `plan-waves27-30.md` |
+| 1.6 | R35cW-1, R35cG2-8 | R35cW-1 **partly fixed** `4410935`: remainder R35dG1-3 and R35dW-2, the lists still carried ids 35c closed, R35bG0-1 and R35bG0-2 among them, and the reviews' open ids were not in them (fixed by W35e-1.3; reviewed by the coordinator's 35e G1 verification, follow-on R35eG1-2); R35cG2-8 fixed; the open queue is in START-HERE, `memory/coordinator.md` and `plan-waves27-30.md` |
 
 **Gate line** (Visual Studio 17 2022, Release, `CORE_WARNINGS_AS_ERRORS=ON`; last source row
 `41f7a2c-W35d-1.4-*`): core build 0 with 0 warnings; `ctest -E plan_recalc` 65/65; app 34/34;
@@ -186,11 +186,11 @@ they are documents and no gate reads them.
 | G0 | R35cG1-1 (High) | fixed `61a451b`, both halves |
 | G0 | R35cG1-2 (High) | **partly fixed** `6458203`: remainder R35dG0-1 with R35dW-1 (closed by W35e-0.1 `b8ee455`) |
 | G1 | R35cG1-3 | fixed `e967858` |
-| G1 | R35cG1-4 | **partly fixed** `e2eca38`: remainder R35dG1-1 (fixed in source by W35e-1.1 `39c8e37`, not yet closed by the coordinator) |
+| G1 | R35cG1-4 | **partly fixed** `e2eca38`: remainder R35dG1-1 (fixed by W35e-1.1 `39c8e37`; reviewed by the coordinator's 35e G1 verification, follow-ons R35eG1-1, R35eG1-3) |
 | G1 | R35cG2-1 | fixed `41f7a2c` |
-| G1 | R35cG0-3 | **partly fixed** `6552f11` (a record and a refusal text; no refusal lifted): remainder R35dG1-2 and R35dW-4 (fixed in source by W35e-1.2 `1da3997`, not yet closed by the coordinator) |
+| G1 | R35cG0-3 | **partly fixed** `6552f11` (a record and a refusal text; no refusal lifted): remainder R35dG1-2 and R35dW-4 (fixed by W35e-1.2 `1da3997`; reviewed by the coordinator's 35e G1 verification) |
 | G1 | R35cW-2, R35cG2-8 | fixed `454521d`, `4410935` (records) |
-| G1 | R35cW-1 | **partly fixed** `4410935` (records): remainder R35dG1-3 and R35dW-2 (fixed in source by W35e-1.3, not yet closed by the coordinator) |
+| G1 | R35cW-1 | **partly fixed** `4410935` (records): remainder R35dG1-3 and R35dW-2 (fixed by W35e-1.3; reviewed by the coordinator's 35e G1 verification, follow-on R35eG1-2) |
 | G2 | R35cG0-2 | **partly fixed** `6f5cc18`: the plan half remains (the plan reads Start word +104 only; the writer half is closed and refused) |
 | G2 | R35cW-3 | fixed `6f5cc18` (record) |
 | G2 | R35cG0-4 | **partly fixed** `caa6cb1`: the plan has no Props digest, a recorded gap; the save is refused at the writer |

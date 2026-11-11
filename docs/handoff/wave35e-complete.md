@@ -163,7 +163,7 @@ them.
 
 | Group | Ids | Result |
 |---|---|---|
-| G0 | R35dG0-1 (High), R35dW-1 | fixed `b8ee455`; stays open in the coordinator's queue until the coordinator's mutations and independent review of G0 |
+| G0 | R35dG0-1 (High), R35dW-1 | fixed `b8ee455`; closed by the coordinator's G0 review |
 | G1 | R35dG1-1 | fixed `39c8e37`, both bypasses (bypass (a) was also reachable on the five-task file through an Undo of a queued Sort, which had no test until W35f-0.3; the "Found, not fixed" route is withdrawn; the refusal is narrowed to the queue by W35f-0.1) |
 | G1 | R35dG1-2, R35dW-4 | fixed `1da3997` |
 | G1 | R35dG1-3, R35dW-2, R35dW-3 | fixed `02f1900` (records) |
