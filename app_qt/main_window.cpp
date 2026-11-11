@@ -6036,6 +6036,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
     bool applied = false;
     std::string failure;          // the last failing field's message
     std::string applied_fields;   // the fields that committed, for the partial-apply status
+    int applied_count = 0;
     for (const FieldEdit& edit : edits) {
         const core::view::FieldId field = app::task_field_id(edit.name);
         std::size_t column = core::sheet::kNoIndex;
@@ -6076,6 +6077,7 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         if (outcome.changed) {
             applied = true;
             applied_fields += (applied_fields.empty() ? "" : ", ") + std::string(edit.name);
+            ++applied_count;
         }
     }
 
@@ -6088,8 +6090,13 @@ bool MainWindow::apply_task_information(const TaskInformationValues& values,
         structural_.clear_redo();
         after_cell_change();
         // R35eG0-3: after_cell_change leaves the status alone, so the failure is the only
-        // line the user sees; say what stuck and that Undo takes it back.
-        set_message(failure + "; " + applied_fields + " applied (Undo takes it back)", true);
+        // line the user sees; say what stuck and how Undo takes it back.  W35g-1.6
+        // (R35fG1-4): each field is its own commit and its own undo step, so with more than one
+        // applied a single Undo takes back the last field only.
+        set_message(failure + "; " + applied_fields +
+                        (applied_count > 1 ? " applied; Undo takes back one field per step"
+                                           : " applied (Undo takes it back)"),
+                    true);
     }
     if (ok) {
         if (structural_applied) {
