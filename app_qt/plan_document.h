@@ -164,6 +164,8 @@ class PlanDocument {
     // is expand_all().  The caller rebuilds the views afterwards.
     bool show_outline_level(int level);
     void show_all_subtasks();
+    // W35g-1.4 (R35fG0-4): true when a summary is collapsed, which is what a shown Level is.
+    bool has_collapsed_rows() const;
     // The displayed RecordSet rows: the sheet's visible rows in sorted order
     // (when a sort is active), restricted to the filter when one is active.
     // This is what the table and the Gantt draw.
