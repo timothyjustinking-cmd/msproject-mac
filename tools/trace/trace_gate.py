@@ -85,12 +85,12 @@ NOISE = {
     # Per-save and per-file Props records (trace-props-framing.md section 1).
     "114/Props": {"props": {0x02400007: (0, 4), 0x024013b1: (0, 4), 0x02400029: (0, 16),
                             0x024013c2: (0, 16), 0x02401394: (0, 16)}, "ceiling": 24},
-    # The view GUID string record and one tail byte pair, as seen in the null saves.
-    "214/Props": {"props": {0x03400001: (0, 80)}, "tail": [(1500, 1502)], "ceiling": 18},
+    # The view GUID string record, as seen in the null saves.  (The typed record 0x00010007, the
+    # length of 214/CEdl/Var2Data, is canonicalised with that stream's other size words.)
+    "214/Props": {"props": {0x03400001: (0, 80)}, "ceiling": 17},
     # View-stream save stamps (null run: CEdl 10 + 1, CFilter 20, CGrouping 20, CTable 10,
     # CV_iew 30 + 4, all at the offsets the committed control/null pairs show).
     "214/CEdl/FixedData": {"byte": [(144, 154)], "ceiling": 10},
-    "214/CEdl/VarMeta": {"byte": [(20, 22)], "ceiling": 1},
     "214/CFilter/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
     "214/CGrouping/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
     "214/CTable/FixedData": {"byte": [(214, 224)], "ceiling": 10},
@@ -100,14 +100,23 @@ NOISE = {
 }
 
 # Streams that carry a file path or a user name, whose length the machine moves (null run:
-# CEdl/Var2Data 602 -> 500, Props14 530 -> 464, SummaryInformation 292 -> 284).  The size may move
-# by at most `delta`; then the stream is not compared ("size-noise", not counted as checked).
-# At equal size at most `same` bytes may differ.
-PATHSTREAM = {
-    "214/CEdl/Var2Data": {"delta": 128, "same": 64},
-    "Props14": {"delta": 96, "same": 64},
-    "SummaryInformation": {"delta": 16, "same": 40},
-}
+# CEdl/Var2Data 602 -> 500, Props14 530 -> 464, SummaryInformation 292 -> 284).  They are not
+# skipped and not given a size tolerance: each is parsed, and the decoded noise fields (the path
+# and user-name strings, the size words derived from their length, the per-save SummaryInformation
+# values) are replaced by fixed placeholders in a canonical form that is compared byte for byte
+# (`canonical`, below).  A field is only replaced when it decodes exactly; one that does not stays
+# raw, so a difference in it shows.
+CEDL_VAR2 = "???214/CEdl/Var2Data"
+CEDL_META = "???214/CEdl/VarMeta"
+VIEW_PROPS = "???214/Props"
+PROPS14 = "Props14"
+SUMMARY = "?SummaryInformation"
+
+CEDL_PATH_ID = 0x26400031        # UTF-16 file path ending "!" and NUL (the last CEdl record)
+PROPS14_PATH_ID = 0x35400008     # UTF-16 file path
+PROPS14_NAME_ENTRIES = (0xFFFFFFFF, 0x3540000B)   # tail entries, each a UTF-16 user name
+VIEW_CEDL_SIZE_ID = 0x00010007   # 214/Props typed u32: the length of 214/CEdl/Var2Data
+SI_AUTHOR, SI_LASTAUTHOR, SI_REVNUMBER, SI_LASTSAVE = 4, 8, 9, 13
 
 # The font word of a view's font item (id 0x2240000c, kind 1, 44 bytes a row) is a bag record in a
 # CV_iew/Var2Data bag block; its top byte, payload +43 of each row, is allocator garbage
@@ -134,11 +143,222 @@ def _noise_rule(name):
     return None
 
 
-def _path_rule(name):
-    for key, rule in PATHSTREAM.items():
-        if name.endswith(key):
-            return rule
-    return None
+def _u32(data, at):
+    return struct.unpack_from("<I", data, at)[0]
+
+
+def _text_ok(payload):
+    """A decoded path or user name: UTF-16LE of printable characters, at most one trailing NUL."""
+    if len(payload) % 2 or len(payload) > 2048:
+        return False
+    try:
+        text = payload.decode("utf-16le")
+    except UnicodeDecodeError:
+        return False
+    if text.endswith("\0"):
+        text = text[:-1]
+    return all(ch >= " " and ch != "\x7f" for ch in text)
+
+
+def frame_records(data, base):
+    """[(offset, length, id, kind)] of the Props-format records ([len][id][kind][payload], padded
+    to an even length) that chain exactly from `base` to the end of `data`, else None."""
+    pos = base
+    out = []
+    while pos < len(data):
+        if pos + 12 > len(data):
+            return None
+        length, rid, kind = struct.unpack_from("<III", data, pos)
+        if pos + 12 + length > len(data):
+            return None
+        out.append((pos, length, rid, kind))
+        pos += 12 + length + (length & 1)
+    return out if pos == len(data) else None
+
+
+def _canon_cedl_var2(data, streams):
+    """214/CEdl/Var2Data: the path record (length word, payload, pad) and the three size words
+    derived from the stream length (+0 = len-4, +4 and +8 = len-8) are noise."""
+    recs = frame_records(data, 20) if len(data) >= 20 else None
+    if recs is None:
+        return data, set()
+    out = bytearray(data[:20])
+    noise = set()
+    for at, want in ((0, len(data) - 4), (4, len(data) - 8), (8, len(data) - 8)):
+        if _u32(data, at) == want:
+            out[at:at + 4] = bytes(4)
+            noise.update(range(at, at + 4))
+    for pos, length, rid, kind in recs:
+        end = pos + 12 + length + (length & 1)
+        payload = data[pos + 12:pos + 12 + length]
+        if rid == CEDL_PATH_ID and _text_ok(payload) and payload.endswith(b"!\0\0\0"):
+            out += struct.pack("<III", 0, rid, kind)
+            noise.update(range(pos, pos + 4))
+            noise.update(range(pos + 12, end))
+        else:
+            out += data[pos:end]
+    return bytes(out), noise
+
+
+def _canon_cedl_meta(data, streams):
+    """214/CEdl/VarMeta +20 is the length of 214/CEdl/Var2Data: noise when it says so."""
+    var2 = streams.get(CEDL_VAR2)
+    if var2 is None or len(data) < 24 or _u32(data, 20) != len(var2):
+        return data, set()
+    return data[:20] + bytes(4) + data[24:], set(range(20, 24))
+
+
+def _canon_view_props(data, streams):
+    """214/Props: the typed record 0x00010007 is the length of 214/CEdl/Var2Data (a size word of
+    the path-bearing stream); noise only when it equals that length."""
+    var2 = streams.get(CEDL_VAR2)
+    recs = frame_records(data, 16) if len(data) >= 16 and var2 is not None else None
+    if recs is None:
+        return data, set()
+    out = bytearray(data)
+    noise = set()
+    for pos, length, rid, kind in recs:
+        if rid == VIEW_CEDL_SIZE_ID and length == 4 and _u32(data, pos + 12) == len(var2):
+            out[pos + 12:pos + 16] = bytes(4)
+            noise.update(range(pos + 12, pos + 16))
+    return bytes(out), noise
+
+
+def _tail_entries(tail):
+    """The Props14 tail [count][entries (id, type 0x1e, UTF-16 name)] as [(id, name bytes)], or
+    None.  A name has no length or terminator; it runs to the next entry's `id 1e 00 00 00`."""
+    if len(tail) < 4:
+        return None
+    count = _u32(tail, 0)
+    marks = []
+    for at in range(4, len(tail) - 7, 2):
+        if _u32(tail, at) in PROPS14_NAME_ENTRIES and _u32(tail, at + 4) == 0x1E:
+            marks.append(at)
+    if len(marks) != count or (marks and marks[0] != 4) or not marks and len(tail) != 4:
+        return None
+    ends = marks[1:] + [len(tail)]
+    return [(_u32(tail, at), tail[at + 8:end]) for at, end in zip(marks, ends)]
+
+
+def _canon_props14(data, streams):
+    """Props14: a blob [size][size][0x10000][count] of Props-format records (size = blob end - 4,
+    derived), then the tail.  Noise: the file path record, the two blob size words, the user-name
+    strings of the tail, and the tail entry id 0xffffffff, which the committed controls and edits
+    carry and 98 of the 99 committed null saves do not (a per-save entry, not decoded)."""
+    if len(data) < 16 or _u32(data, 8) != 0x10000:
+        return data, set()
+    end = _u32(data, 0) + 4
+    if _u32(data, 4) != end - 4 or end > len(data):
+        return data, set()
+    recs = frame_records(data[:end], 16)
+    entries = _tail_entries(data[end:])
+    if recs is None or entries is None:
+        return data, set()
+    out = bytearray(data[:16])
+    out[0:8] = bytes(8)
+    noise = set(range(0, 8))
+    for pos, length, rid, kind in recs:
+        stop = pos + 12 + length + (length & 1)
+        payload = data[pos + 12:pos + 12 + length]
+        if rid == PROPS14_PATH_ID and _text_ok(payload):
+            out += struct.pack("<III", 0, rid, kind)
+            noise.update(range(pos, pos + 4))
+            noise.update(range(pos + 12, stop))
+        else:
+            out += data[pos:stop]
+    kept = [e for e in entries if e[0] != 0xFFFFFFFF]
+    out += struct.pack("<I", len(kept))
+    at = end + 4
+    for eid, name in entries:
+        stop = at + 8 + len(name)
+        if eid == 0xFFFFFFFF:
+            noise.update(range(at, stop))
+        elif _text_ok(name):
+            noise.update(range(at + 8, stop))
+        at = stop
+    noise.update(range(end, end + 4))   # the entry count follows the dropped entry
+    for eid, name in kept:
+        out += struct.pack("<II", eid, 0x1E) + (b"" if _text_ok(name) else name)
+    return bytes(out), noise
+
+
+def _canon_summary(data, streams):
+    """?SummaryInformation (a property set, one section at the offset in the header): the
+    Author, LastAuthor and RevNumber strings and the LastSave FILETIME are noise; the offsets and
+    the section size follow from the values and are rebuilt.  The section must lay its values
+    out back to back, else the stream stays raw."""
+    if len(data) < 56:
+        return data, set()
+    sec = _u32(data, 44)
+    if sec + 8 > len(data) or _u32(data, sec) != len(data) - sec:
+        return data, set()
+    count = _u32(data, sec + 4)
+    table = sec + 8
+    if table + 8 * count > len(data):
+        return data, set()
+    ents = [(_u32(data, table + 8 * i), _u32(data, table + 8 * i + 4)) for i in range(count)]
+    order = sorted(range(count), key=lambda i: ents[i][1])
+    if count == 0 or ents[order[0]][1] != 8 + 8 * count:
+        return data, set()
+    values = {}
+    for k, i in enumerate(order):
+        lo = sec + ents[i][1]
+        hi = sec + ents[order[k + 1]][1] if k + 1 < count else len(data)
+        if hi < lo:
+            return data, set()
+        values[i] = (lo, hi)
+    noise = set()
+    canon = {}
+    for i, (pid, _) in enumerate(ents):
+        lo, hi = values[i]
+        raw = data[lo:hi]
+        if pid in (SI_AUTHOR, SI_LASTAUTHOR, SI_REVNUMBER) and len(raw) >= 8 and \
+                _u32(raw, 0) == 0x1E and 8 + _u32(raw, 4) <= len(raw):
+            # a VT_LPSTR: type, length (with its NUL), bytes, padding to a 4-byte boundary
+            raw = struct.pack("<II", 0x1E, 0)
+            noise.update(range(lo + 4, hi))
+        elif pid == SI_LASTSAVE and len(raw) == 12 and _u32(raw, 0) == 0x40:
+            raw = struct.pack("<I", 0x40) + bytes(8)
+            noise.update(range(lo + 4, hi))
+        canon[i] = raw
+    out = bytearray(data[:sec])
+    offs = {}
+    cur = 8 + 8 * count
+    for i in order:
+        offs[i] = cur
+        cur += len(canon[i])
+    out += struct.pack("<II", cur, count)
+    for i, (pid, _) in enumerate(ents):
+        out += struct.pack("<II", pid, offs[i])
+    for i in order:
+        out += canon[i]
+    noise.update(range(sec, sec + 4))
+    for i in range(count):
+        noise.update(range(table + 8 * i + 4, table + 8 * i + 8))
+    return bytes(out), noise
+
+
+CANON = {
+    CEDL_VAR2: _canon_cedl_var2,
+    CEDL_META: _canon_cedl_meta,
+    VIEW_PROPS: _canon_view_props,
+    PROPS14: _canon_props14,
+    SUMMARY: _canon_summary,
+}
+
+
+def canonical(streams, with_noise=False):
+    """One file's streams with the decoded noise fields of the CANON streams replaced by fixed
+    placeholders.  `with_noise` also returns, per stream, the offsets of the raw bytes that were
+    replaced (the named noise fields)."""
+    out = {}
+    noise = {}
+    for name, data in streams.items():
+        if name in CANON:
+            out[name], noise[name] = CANON[name](data, streams)
+        else:
+            out[name], noise[name] = data, set()
+    return (out, noise) if with_noise else out
 
 
 def props_records(data):
@@ -273,6 +493,7 @@ def compare(traced, ref, ctl, nul):
     names = sorted(set(traced) | set(ref))
     if nul is None:
         return ["no null"], 1, 0, len(names)
+    traced, ref, ctl, nul = (canonical(s) for s in (traced, ref, ctl, nul))
     for name in names:
         if name not in ref:
             lines.append("only-in-traced %s %d" % (name, len(traced[name])))
@@ -283,15 +504,6 @@ def compare(traced, ref, ctl, nul):
             problems += 1
             continue
         a, b = ref[name], traced[name]
-        path = _path_rule(name)
-        if path is not None and len(a) != len(b):
-            if abs(len(a) - len(b)) > path["delta"]:
-                lines.append("size-differs %s %d->%d" % (name, len(a), len(b)))
-                problems += 1
-            else:
-                lines.append("size-noise %s %d->%d" % (name, len(a), len(b)))
-                unchecked += 1
-            continue
         if len(a) != len(b):
             lines.append("size-differs %s %d->%d" % (name, len(a), len(b)))
             problems += 1
@@ -311,16 +523,11 @@ def compare(traced, ref, ctl, nul):
         win |= wb
         nrec = max(nrec, nrb)
         diff = [i for i in range(len(a)) if a[i] != b[i] and i not in mask]
-        if path is not None:
-            ceiling = path["same"]
-            outside = []
-            counted = diff
-        else:
-            outside = [i for i in diff if i not in win]
-            counted = [i for i in diff if i in win]
-            ceiling = ceiling_for(name, nrec)
-            if name.endswith("214/CV_iew/Var2Data"):
-                ceiling += len(font_item_garbage(a, meta_a))
+        outside = [i for i in diff if i not in win]
+        counted = [i for i in diff if i in win]
+        ceiling = ceiling_for(name, nrec)
+        if name.endswith("214/CV_iew/Var2Data"):
+            ceiling += len(font_item_garbage(a, meta_a))
         if outside:
             lines.append("bytes-differ %s %d" % (name, len(outside)))
             problems += 1
@@ -350,7 +557,8 @@ def main(argv):
         nul = None   # the control passed as its own null: no noise was measured
     lines, problems, checked, unchecked = compare(traced, ref, ctl, nul)
     names = set(traced) | set(ref)
-    head = "%d streams, %d checked, %d problems" % (len(names), checked, problems)
+    head = "%d streams, %d checked, %d not checked, %d problems" % (len(names), checked, unchecked,
+                                                                    problems)
     text = "\n".join([head] + lines) + "\n"
     sys.stdout.write(text)
     print("sha256 " + hashlib.sha256(text.encode("ascii")).hexdigest())

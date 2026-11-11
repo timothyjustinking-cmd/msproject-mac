@@ -20,7 +20,9 @@ failed, 77 olefile is not installed (ctest SKIP).
 """
 
 import os
+import re
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
@@ -87,9 +89,14 @@ def run_cli(traced, ref, ctl, nul):
     return p.returncode, p.stdout + p.stderr
 
 
+def _u(blob):
+    return struct.unpack_from("<I", blob, 0)[0]
+
+
 def head_counts(out):
-    first = out.splitlines()[0].split()
-    return int(first[0]), int(first[2]), int(first[4])   # streams, checked, problems
+    m = re.match(r"(\d+) streams, (\d+) checked, (?:(\d+) not checked, )?(\d+) problems",
+                 out.splitlines()[0])
+    return int(m.group(1)), int(m.group(2)), int(m.group(4))   # streams, checked, problems
 
 
 tmp = tempfile.mkdtemp(prefix="trace-gate-test-")
@@ -184,9 +191,55 @@ try:
                   problems == want and (want == 0 or any(view in ln for ln in lines)),
                   "%r" % (lines,))
 
+        # --- the acceptance sweep over every committed pair (W36-0b.2) --------------------------
+        # Positive: the control's own null save, traced against the control, is a PASS.  Negative:
+        # the null save traced against the pair's edit is a FAIL when the edit differs from the null
+        # save outside SummaryInformation.  Two pairs are known not to be a same-state control and
+        # null (their records differ in length), so they FAIL the positive case; two edits equal
+        # their control outside the noise (a no-op percent edit), so they PASS the negative one.
+        NOT_SAME_STATE = {"wave30-inactivate", "wave35-g3-assign-remove-port-saved"}
+        NOOP_EDITS = {"wave28-percent-auto100", "wave28-percent-auto40"}
+        stems = sorted(f[:-len("-control-null.mpp")] for f in os.listdir(DATA)
+                       if f.endswith("-control-null.mpp"))
+        pos_n = pos_bad = neg_n = neg_bad = 0
+        pos_failed, neg_passed = set(), set()
+        for stem in stems:
+            e_path, c_path, n_path = pair(stem)
+            SC, SN = load(c_path), load(n_path)
+            lines, problems, checked, unchecked = g.compare(SN, SC, SC, SN)
+            pos_n += 1
+            if problems:
+                pos_failed.add(stem)
+                check("W36-0b.2 positive %s fails only on CEdl/Var2Data size" % stem,
+                      all(ln.startswith("size-differs ???214/CEdl/Var2Data") for ln in lines),
+                      "%r" % (lines,))
+            if not os.path.exists(e_path):
+                continue
+            SE = load(e_path)
+            if all(SE.get(n) == SN.get(n) for n in set(SE) | set(SN) if n != "?SummaryInformation"):
+                continue
+            neg_n += 1
+            lines, problems, checked, unchecked = g.compare(SN, SE, SC, SN)
+            if not problems:
+                neg_passed.add(stem)
+        print("W36-0b.2 positive: %d pairs, %d FAIL; negative: %d edits, %d PASS" %
+              (pos_n, len(pos_failed), neg_n, len(neg_passed)))
+        check("W36-0b.2 positive sweep: every pair PASSes except the two not-same-state pairs",
+              pos_failed == NOT_SAME_STATE, "%r" % (sorted(pos_failed),))
+        check("W36-0b.2 negative sweep: no edit PASSes except the two no-op edits",
+              neg_passed == NOOP_EDITS, "%r" % (sorted(neg_passed),))
+        for stem in sorted(NOOP_EDITS):
+            e_path, c_path, n_path = pair(stem)
+            lines, problems, checked, unchecked = g.compare(load(e_path), load(c_path),
+                                                            load(c_path), load(n_path))
+            check("W36-0b.2 %s: the no-op edit equals its control outside the noise" % stem,
+                  problems == 0, "%r" % (lines,))
+
         def _nrec(mod, stream, blob):
             return mod.noise_windows(stream, blob)[1]
 
+        CANON_FLIP = {"???214/CEdl/Var2Data": 12, "???214/CEdl/VarMeta": 8,
+                      "???214/Props": 0, "Props14": 8, "?SummaryInformation": 0}
         tested = 0
         skipped = []
         for name in sorted(R):
@@ -197,15 +250,15 @@ try:
             mask = g.control_mask(name, len(data), C.get(name), N.get(name)) or set()
             win, _ = g.noise_windows(name, data, R.get(name[:-len("Var2Data")] + "VarMeta")
                                      if name.endswith("Var2Data") else None)
-            path_rule = g._path_rule(name)
             free = [i for i in range(len(data)) if i not in mask and i not in win]
-            if path_rule is not None:
-                # a path stream tolerates up to `same` differing bytes: flip one more
-                count = path_rule["same"] + 1
-                free = free[:count]
-                if len(free) < count:
+            if name in g.CANON:
+                # a parsed stream: flip a header byte that precedes every noise field, so the
+                # raw and canonical offsets agree (item 7 flips every offset outside the fields)
+                at = CANON_FLIP[name]
+                if at in mask or at in win:
                     skipped.append(name + " (no free bytes)")
                     continue
+                free = [at]
             elif not free:
                 # every byte is mask or window: flip one more window byte than the ceiling allows
                 over = [i for i in sorted(win) if i not in mask and i < len(data)]
@@ -258,19 +311,58 @@ try:
                   problems == want, "%r" % (lines,))
 
         # a gate that checked nothing is not a pass
-        lines, problems, checked, unchecked = g.compare(
-            {"Props14": R["Props14"] + b"\0" * 10}, {"Props14": R["Props14"]}, C, N)
+        lines, problems, checked, unchecked = g.compare({}, {}, C, N)
         check("W36-0.4 nothing checked: a problem 'nothing checked'",
               checked == 0 and problems == 1 and "nothing checked" in lines, "%r" % (lines,))
 
-        # a size change in a path-bearing stream: small is noise, large is a problem
-        name = "???214/CEdl/Var2Data"
-        for grow, want in ((10, 0), (500, 1)):
+        # W36-0b.2: a path-bearing stream is compared field by field.  A longer path, with the
+        # size words that follow from it, is noise; a stray appended byte, a size word that does
+        # not follow from the length, or a changed data record is not.
+        name, meta_n, props_n = "???214/CEdl/Var2Data", "???214/CEdl/VarMeta", "???214/Props"
+        d = R[name]
+        path = [r for r in g.frame_records(d, 20) if r[2] == g.CEDL_PATH_ID][0]
+        new_payload = d[path[0] + 12:path[0] + 12 + path[1] - 4] + "x:\\longer\\".encode("utf-16le") + \
+            b"!\0\0\0"
+        grown = bytearray(d[:path[0]])
+        grown += struct.pack("<III", len(new_payload), path[2], path[3]) + new_payload
+        grown += d[path[0] + 12 + path[1] + (path[1] & 1):]
+        struct.pack_into("<III", grown, 0, len(grown) - 4, len(grown) - 8, len(grown) - 8)
+        mutated = dict(R)
+        mutated[name] = bytes(grown)
+        mm = bytearray(R[meta_n])
+        struct.pack_into("<I", mm, 20, len(grown))
+        mutated[meta_n] = bytes(mm)
+        pp = bytearray(R[props_n])
+        for pos, length, rid, kind in g.frame_records(R[props_n], 16):
+            if rid == g.VIEW_CEDL_SIZE_ID:
+                struct.pack_into("<I", pp, pos + 12, len(grown))
+        mutated[props_n] = bytes(pp)
+        lines, problems, checked, unchecked = g.compare(mutated, R, C, N)
+        check("W36-0b.2 CEdl/Var2Data: a longer path with its derived size words is noise (%d->%d)"
+              % (len(d), len(grown)), problems == 0, "%r" % (lines,))
+        stray = dict(mutated)
+        stray[name] = bytes(grown) + b"\0"
+        lines, problems, checked, unchecked = g.compare(stray, R, C, N)
+        check("W36-0b.2 CEdl/Var2Data: a stray appended byte fails", problems >= 1, "%r" % (lines,))
+        bad_meta = dict(mutated)
+        mm2 = bytearray(mm)
+        mm2[20] ^= 1
+        bad_meta[meta_n] = bytes(mm2)
+        lines, problems, checked, unchecked = g.compare(bad_meta, R, C, N)
+        check("W36-0b.2 CEdl/VarMeta: a size word that is not the stream length fails",
+              any(meta_n in ln for ln in lines), "%r" % (lines,))
+        data_rec = [r for r in g.frame_records(d, 20) if r[2] == 0x26400024][0]
+        for where, nm, offset in (("CEdl sort table", name, data_rec[0] + 12),
+                                  ("Props14 record 0x3540000a", "Props14",
+                                   [r for r in g.frame_records(R["Props14"][:_u(R["Props14"]) + 4], 16)
+                                    if r[2] == 0x3540000A][0][0] + 12)):
             mutated = dict(R)
-            mutated[name] = R[name] + b"\0" * grow
+            b = bytearray(R[nm])
+            b[offset] ^= 0x01
+            mutated[nm] = bytes(b)
             lines, problems, checked, unchecked = g.compare(mutated, R, C, N)
-            check("W36-0.1 CEdl/Var2Data +%d bytes -> %d problem(s)" % (grow, want),
-                  problems == want, "%r" % (lines,))
+            check("W36-0b.2 %s: one flipped data byte fails" % where,
+                  any(nm in ln for ln in lines), "%r" % (lines,))
 
         # W36-0.2: a mask is built only from equal-length control and null, and per record
         # for a fixed-stride stream
