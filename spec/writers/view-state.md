@@ -381,7 +381,8 @@ longer shows).
 | a Show Level on the redo list | clearing the sort | kept (W35f-1.4, R35eG1-4): a cleared sort shows the file's own order, which the level is relative to, so Ctrl+Y re-queues what the display matches |
 
 Tests: `qt_sort_persist` (Collapse All, the row toggle, the summary toggle, a session Level,
-All Subtasks, clearing the Sort, and Expand All disabled) and `qt_outline_persist` (a session
+All Subtasks, clearing the Sort, Expand All disabled, and, on the five-task file, a Level under
+the sort an Undo left shown, not queued (W35f-0.3)) and `qt_outline_persist` (a session
 Sort, clearing it; and, on the six-task outline, where the Sort stays session only: a Level
 shown for the session but not queued under a shown session Sort, an unmeasured Level under it
 shown for the session with the builder's note, and a Level on the redo list ended by a Sort).  No writer changed, no refusal of a persisted shape lifted.
