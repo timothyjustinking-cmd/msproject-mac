@@ -162,6 +162,37 @@ Items:
 
 Note that `wave35-g3-font-bold-range` is a one-row bold, mislabelled.  The trace's two-row selection gave one 88-byte item.  Keep the fixture file, and correct its label in `spec/writers/view-stream-214.md` and the evidence note (decision D-2).  Never rename or edit the fixture.
 
+**Group order after the G1 review (coordinator, Wed 11 Nov 2026).**  The G1 review found 1 High in the font
+writer (R36G1-1), so the driver was stopped after G0b and relaunched with G1b, G2 and CLOSE.  G1b runs
+before G2.
+
+### G1b: the font writer, held to the lift rule (the G1 review's High, first)
+
+Source: `docs/handoff/wave36-verification/review-g1.md` (R36G1-1 to -7; read each **Fix:** paragraph).  `main`
+was merged into this branch before G1b, so round 7's pairs are now in `tests/data` (`wave36-r7-font-*`;
+`build/r7/oracle_r7_font.json` records how each was made).
+
+- **W36-1b.1 (R36G1-1): Bold on is limited to the three measured cells,** (row 1, Name), (row 2, Name) and
+  (row 1, Start), as measured by the pairs `wave35-g3-font-bold-row2`, `wave35-g3-font-bold-start` and
+  `wave30-textstyle`.  Every other row or column, and the joint cell (row 2, Start), is refused again with the
+  decision-9 wording.  Remove the false "no byte of these pairs was used" claims
+  (`tests/roundtrip_viewstream.cpp:582`, `spec/writers/view-stream-214.md:236`).
+  - Then check whether any round 7 font pair is a held-out prediction for a measured shape that the writer
+    accepts.  `wave36-r7-font-bold-session2` is Bold on (row 1, Name) in a second Project session;
+    `wave36-r7-font-second-cell` is Bold on (row 2, Name) beside an existing item.
+  - For each pair the writer accepts, the port's save must match it field by field (field-level masks only),
+    and the test names it as held out.
+  - A pair the writer refuses stays refused, recorded as "not lifted: needs <fact>".
+- **W36-1b.2 (R36G1-2):** the spec and the code agree on the joint cell.
+- **W36-1b.3 (R36G1-3):** the writer checks that the row exists in the file, not only the app.
+- **W36-1b.4 (R36G1-6):** a Qt gate case for B and I with Undo and Redo against Save, and one for a read-only
+  file.
+- **W36-1b.5 (R36G1-7):** a second Bold click before Save says why it was refused.
+- R36G1-4 (the 4(e) method) and R36G1-5 (the Props14 marker byte's writer) go to the record as open, unless
+  the fix is a record line.
+
+Done when every guard is seen red, then green, both quoted.  Marker `WAVE-36-G1b-COMPLETE`.
+
 ### G2: Props
 
 Writer: `core/mppwrite/props_edit.{h,cpp}`, and the plan layer.  The facts from the trace (`trace-props-framing-r4.md`, `trace-baseline-r4.md`, `trace-calculate-r3.md`):
