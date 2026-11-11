@@ -15,8 +15,11 @@
 //   * the measured cell queues exactly one edit and dirties the document;
 //   * a second click while it is pending is refused and the queue keeps one;
 //   * the real save writes it (the file differs from the control) and a reopen of
-//     the saved file refuses a second Bold up front (the view now stores a cell
-//     format), so the write is visible to the reopened document.
+//     the saved file reads it: the button now turns Bold OFF (W36-1.1, the one
+//     measured Bold item, wave35-g3-font-bold-off), the save writes that, and a
+//     third click on the reopened file queues nothing (the view stores a cell
+//     format item that is not Bold), so each write is visible to the reopened
+//     document.
 //
 // Usage: qt_cell_bold_gate <wave30-textstyle-control.mpp> <out-dir>
 #include <QAbstractButton>
@@ -140,7 +143,9 @@ int main(int argc, char** argv) {
     std::filesystem::copy_file(fixture.toStdString(), copy.toStdString(),
                                std::filesystem::copy_options::overwrite_existing, file_error);
     gate::check(!file_error, "the control copy is written under the build tree");
+    const QString unbolded = out_dir + QStringLiteral("/w36-bold-off-saved.mpp");
     std::filesystem::remove(bolded.toStdString(), file_error);
+    std::filesystem::remove(unbolded.toStdString(), file_error);
     if (file_error) {
         return gate::finish();
     }
@@ -270,16 +275,55 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         gate::check(select_cell(window, measured_uid, name_field),
                     "the measured cell can be selected on the reopened file");
+        // W36-1.1: Bold is a toggle.  The saved file carries the cell's one Bold
+        // item, so the button queues Bold OFF (wave35-g3-font-bold-off), saved
+        // in place.
         gate::check(click_bold(window), "Bold clicks on the reopened file");
+        gate::check(window.pending_edits().size() == 1,
+                    "Bold on the saved file queues one edit (Bold off)");
+        gate::check(window.pending_edits().size() == 1 &&
+                        !window.pending_edits().applied().front().cell_bold_on,
+                    "the queued edit turns Bold OFF");
+        gate::check(window.status_left_text().contains(QStringLiteral("queued Font Bold off")),
+                    "the status line reports the queued Bold off");
+        gate::check(window.document_dirty(), "the queued Bold off dirties the document");
+        QString save_error;
+        const bool ok = window.save_document_path(unbolded, &save_error);
+        gate::check(ok, "the Bold off saves");
+        if (!ok) {
+            std::fprintf(stderr, "note: save error: %s\n", save_error.toStdString().c_str());
+            return gate::finish();
+        }
+        gate::check(read_all(unbolded) != read_all(bolded),
+                    "the Bold off file differs from the Bold file");
+    }
+
+    // --- 2b. reopen again: the item is there but no longer Bold ----------------
+    // A third click has nothing to turn on or off: the writer refuses with its
+    // reason and nothing is queued.
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        const bool opened = window.open_file(unbolded, &error);
+        gate::check(opened, "the saved Bold off reopens");
+        if (!opened) {
+            return gate::finish();
+        }
+        window.show();
+        QApplication::processEvents();
+        gate::check(select_cell(window, measured_uid, name_field),
+                    "the measured cell can be selected on the Bold off file");
+        gate::check(click_bold(window), "Bold clicks on the Bold off file");
         gate::check(window.pending_edits().empty(),
-                    "a second Bold on the saved file queues nothing (the view stores a format)");
+                    "a Bold on a view that stores a format item queues nothing");
         gate::check(!window.document_dirty(), "the refused Bold leaves the reopened file clean");
         gate::check(window.status_left_text().contains(
                         QStringLiteral("Font Bold is not implemented in this port for this project")),
-                    "the status line names the refusal on the reopened file");
+                    "the status line names the refusal on the Bold off file");
         gate::check(window.status_left_text().contains(
                         QStringLiteral("already carries a cell format item")),
-                    "the status line gives the writer's reason on the reopened file");
+                    "the status line gives the writer's reason on the Bold off file");
     }
 
     // --- 3. W35-0.2 (R34G4-4) / RW34b-3: the applied view is not the measured one

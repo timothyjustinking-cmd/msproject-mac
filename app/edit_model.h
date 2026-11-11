@@ -286,6 +286,11 @@ struct StructuralEdit {
     // 0 = not set (a hand-built edit), which the save refuses.
     std::uint64_t source_digest = 0;
 
+    // bold_cell (W36-1.1): true appends the cell's Bold item; false turns the
+    // view's one Bold item off in place (wave35-g3-font-bold-off).  make_cell_
+    // bold_edit decides from the file, as Project's Bold button does.
+    bool cell_bold_on = true;
+
     // --- set_field / clear_field -------------------------------------------
     // One of the six measured ids (app::is_measured_task_field): Text1,
     // Number1, Number2, Date1, Duration1, Flag1.
@@ -601,6 +606,12 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
 // streams (the applied view, its main block, the absence of an existing cell
 // format item, the Props size tag) and its refusal text is returned as the
 // reason.  `out` is default-constructed on refusal.
+//
+// W36-1.1: Bold is a toggle, as Project's button is.  A view with no cell format
+// item builds Bold ON (`cell_bold_on` true); a view whose one item is the
+// measured Bold item of this cell (wave35-g3-font-bold-off's control) builds Bold
+// OFF (`cell_bold_on` false), which rewrites that item in place.  Every other
+// view that already carries an item is refused with the Bold ON reason.
 bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
                          std::uint32_t task_uid, std::uint32_t field_id,
                          StructuralEdit& out, std::string& error);

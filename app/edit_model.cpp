@@ -3176,14 +3176,14 @@ std::string cell_bold_plan_refusal(const PlanInput& plan, std::uint32_t task_uid
 }
 
 mppwrite::ViewCellStyleEdit cell_bold_view_edit(std::uint32_t task_uid,
-                                                std::uint32_t field_id) {
+                                                std::uint32_t field_id, bool bold_on) {
     mppwrite::ViewCellStyleEdit view_edit;
     view_edit.view_uid = mppwrite::kMeasuredViewUid;
     view_edit.uid = task_uid;
     view_edit.field_id = field_id;
     view_edit.attribute = mppwrite::ViewCellAttribute::bold;
     view_edit.selection = mppwrite::ViewCellSelection::cell;
-    view_edit.enabled = true;
+    view_edit.enabled = bold_on;
     return view_edit;
 }
 
@@ -3209,19 +3209,38 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
     }
     // The writer's dry run validates the applied view's streams against the FILE
     // (the main block's framing, the VarMeta offsets, the absence of a cell
-    // format item, the Props size tag); nothing is written.
+    // format item, the Props size tag); nothing is written.  Bold is a toggle, as
+    // Project's button is (W36-1.1): when Bold ON is refused because the block
+    // already carries a cell format item, the same dry run is tried as Bold OFF,
+    // which the writer accepts only for the one measured Bold item of the cell
+    // (wave35-g3-font-bold-off).  Both refused: the Bold ON reason is reported.
+    bool bold_on = true;
     try {
         (void)mppwrite::save_view_cell_style(
-            document, {cell_bold_view_edit(task_uid, field_id)}, std::string(), true);
+            document, {cell_bold_view_edit(task_uid, field_id, true)}, std::string(), true);
     } catch (const std::exception& refusal) {
-        error = std::string("Font Bold is not implemented in this port for this "
-                            "project: ") +
-                refusal.what();
-        return false;
+        std::string reason = refusal.what();
+        try {
+            (void)mppwrite::save_view_cell_style(
+                document, {cell_bold_view_edit(task_uid, field_id, false)}, std::string(),
+                true);
+            bold_on = false;
+        } catch (const std::exception& off_refusal) {
+            if (reason.find("already carries a cell format item") != std::string::npos) {
+                reason += " (Bold off: " + std::string(off_refusal.what()) + ")";
+            }
+        }
+        if (bold_on) {
+            error = std::string("Font Bold is not implemented in this port for this "
+                                "project: ") +
+                    reason;
+            return false;
+        }
     }
     out.kind = StructuralKind::bold_cell;
     out.uid = task_uid;
     out.field_id = field_id;
+    out.cell_bold_on = bold_on;
     return true;
 }
 
@@ -6629,7 +6648,8 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         // and writes.  A refusal is an exception, reported as the save error.
         if (bold_edit != nullptr) {
             const std::vector<mppwrite::ViewCellStyleEdit> view_edits{
-                cell_bold_view_edit(bold_edit->uid, bold_edit->field_id)};
+                cell_bold_view_edit(bold_edit->uid, bold_edit->field_id,
+                                    bold_edit->cell_bold_on)};
             (void)mppwrite::save_view_cell_style(document, view_edits, std::string(),
                                                  true);
             const mppwrite::ViewCellStyleWrite written = mppwrite::save_view_cell_style(
@@ -6637,7 +6657,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             result.cell_styles_written = 1;
             result.notes.push_back(
                 "cell (task uid " + std::to_string(written.uid) + ", field " +
-                std::to_string(written.field_id) + ") set to bold (view block " +
+                std::to_string(written.field_id) +
+                (bold_edit->cell_bold_on ? ") set to bold (view block "
+                                         : ") turned off bold (view block ") +
                 std::to_string(written.block_payload_before) + " -> " +
                 std::to_string(written.block_payload_after) + " bytes)");
         }

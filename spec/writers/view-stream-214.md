@@ -215,8 +215,15 @@ What this settles:
   rule as Bold on (see the font word's top byte above; W35b-3.6 tests that
   `0x80` is refused).  `core/mppwrite/viewstream_edit` implements
   exactly this (`ViewCellStyleEdit::enabled = false`) and the pair test proves it
-  with zero KnownGaps; the edit model and the shells do not build such an edit
-  yet.
+  with zero KnownGaps.  **Wired (W36-1.1):** `app::make_cell_bold_edit` builds it
+  for the measured cell (uid 1, Task Name) when the view's one item is the
+  measured Bold item (`StructuralEdit::cell_bold_on` false; Bold is a toggle, as
+  Project's button is), both shells queue it, and `app_edits_cell_bold` compares
+  the port's save of `wave35-g3-font-bold-off-control` with Project's
+  `wave35-g3-font-bold-off` under its null save (3 effect bytes: two in
+  Var2Data, one in `Props14`, no mismatch).  No pair holds another Bold-off
+  shape, so (b) of the lift rule has no held-out pair and the writer stays
+  limited to this one measured shape.
 - **Block digest.**  A control saved by another Project session differs from the
   wave-30 control at payload offset 42,678 (`0x18` -> `0x26`) and nowhere else
   in the block.  The byte is **not per-save noise** (W35b-3.5, R35G3-10): it is

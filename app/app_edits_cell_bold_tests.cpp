@@ -8,7 +8,11 @@
 //       appends one 0x2240000c cell-format item to the applied view's main
 //       block and re-points the later view blocks
 //
-// with a committed null save of the control (the null-save mask source).
+// with a committed null save of the control (the null-save mask source), and
+// (W36-1.1, Bold off through the same builder):
+//
+//   wave35-g3-font-bold-off-control.mpp    -> wave35-g3-font-bold-off.mpp
+//       the same cell with Bold turned off; Project rewrites the item in place
 //
 // This test:
 //
@@ -117,6 +121,14 @@ const std::array<const char*, 4> kDeclared{{kViewMeta, kViewVar2, kViewProps, kM
 const char* const kControl = "wave30-textstyle-control.mpp";
 const char* const kNull = "wave30-textstyle-control-null.mpp";
 const char* const kProject = "wave30-textstyle.mpp";
+/* W36-1.1: Bold off on the same cell; the control already carries the Bold item. */
+const char* const kOffControl = "wave35-g3-font-bold-off-control.mpp";
+const char* const kOffNull = "wave35-g3-font-bold-off-control-null.mpp";
+const char* const kOffProject = "wave35-g3-font-bold-off.mpp";
+/* Bold off owns two streams: the item's bytes in Var2Data and the Props14 marker. */
+const std::array<const char*, 2> kOffDeclared{{kViewVar2, kMarker}};
+/* The pair's effect bytes: two in Var2Data (flags byte, font word byte), one in Props14. */
+constexpr std::size_t kOffPairEffects = 3;
 
 /* The total of the pair's effect bytes (tests/roundtrip_viewstream.cpp:
  * Var2Data 6542, VarMeta 7, 214/Props 1, Props14 1). */
@@ -238,6 +250,7 @@ void check_pair() {
     check(edit.kind == app::StructuralKind::bold_cell, label + ": the built edit has the kind");
     check_size(edit.uid, kTaskUid, label + ": the edit names the row");
     check_size(edit.field_id, kNameField, label + ": the edit names the cell's field");
+    check(edit.cell_bold_on, label + ": an unformatted cell builds Bold ON");
 
     /* --- push + display + undo/redo --------------------------------------- */
     app::StructuralEdits edits;
@@ -333,6 +346,146 @@ void check_pair() {
     }
 }
 
+/* --- Bold off (W36-1.1) ----------------------------------------------------- */
+
+void check_off_pair() {
+    const std::string label = "cell-bold-off";
+    const std::filesystem::path control_path = data_path(kOffControl);
+    const std::filesystem::path result_path = data_path(kOffProject);
+    const std::filesystem::path null_path = data_path(kOffNull);
+    fixture::require_committed(control_path);
+    fixture::require_committed(result_path);
+    fixture::require_committed(null_path);
+    check(null_path.filename().string() == save_pair::null_fixture_name(kOffControl),
+          label + ": the null save is the control's committed null fixture");
+
+    app::PlanInput plan;
+    try {
+        plan = load_plan(control_path);
+    } catch (const std::exception& error) {
+        check(false, label + ": the control loads through the reader");
+        std::printf("LOAD ERROR: %s\n", error.what());
+        return;
+    }
+
+    /* The control carries the Bold item; Project's save carries it turned off. */
+    const CellEntry before = read_cell(control_path.string(), kTaskUid, kNameField);
+    check(before.found, label + ": the control carries the cell format entry");
+    check_size(before.flags, 0x01000003u, label + ": the control's flags are Bold's");
+    check_size(before.font_word, kMeasuredFontWord, label + ": the control's font word is Bold's");
+    const CellEntry project_cell = read_cell(result_path.string(), kTaskUid, kNameField);
+    check(project_cell.found, label + ": Project's save keeps the cell format entry");
+    check_size(project_cell.flags, 0x00000003u, label + ": Project's flags are 0x00000003");
+    check_size(project_cell.font_word, 0x90000000u, label + ": Project's font word is 0x90000000");
+
+    /* The same builder the Bold button calls decides from the file. */
+    app::StructuralEdit edit;
+    std::string edit_error;
+    const bool built = app::make_cell_bold_edit(plan, control_path.string(), kTaskUid,
+                                                kNameField, edit, edit_error);
+    check(built, label + ": make_cell_bold_edit accepts the Bold item's cell");
+    if (!built) {
+        std::printf("EDIT ERROR: %s\n", edit_error.c_str());
+        return;
+    }
+    check(edit.kind == app::StructuralKind::bold_cell, label + ": the built edit has the kind");
+    check_size(edit.uid, kTaskUid, label + ": the edit names the row");
+    check_size(edit.field_id, kNameField, label + ": the edit names the cell's field");
+    check(!edit.cell_bold_on, label + ": a bold cell builds Bold OFF");
+
+    app::StructuralEdits edits;
+    check(edits.push(edit, &plan), label + ": the edit is queued");
+    check(same_plan(edits.apply(plan), plan), label + ": the display is unchanged");
+    check(edits.undo(), label + ": the edit undoes");
+    check(edits.empty(), label + ": undo empties the queue");
+    check(edits.redo(), label + ": the edit redoes");
+    check_size(edits.size(), 1, label + ": redo restores the one edit");
+    check(!edits.applied().front().cell_bold_on, label + ": redo keeps the edit OFF");
+
+    const std::filesystem::path out = out_path("app-cell-bold-off.mpp");
+    std::error_code error;
+    std::filesystem::remove(out, error);
+    const app::StructuralSaveResult saved =
+        app::save_structural_edits(edits, {}, control_path.string(), out.string(), false);
+    check(saved.ok, label + ": the save succeeds");
+    if (!saved.ok) {
+        std::printf("SAVE ERROR: %s\n", saved.error.c_str());
+        return;
+    }
+    check_size(saved.cell_styles_written, 1, label + ": the cascade wrote the cell format");
+    check(saved.api.find(" save_view_cell_style") != std::string::npos,
+          label + ": the save's api names the writer");
+    check(saved.warnings.empty(), label + ": the save has no warnings");
+    bool notes_off = false;
+    for (const std::string& note : saved.notes) {
+        notes_off = notes_off || note.find("turned off") != std::string::npos;
+    }
+    check(notes_off, label + ": the save's note says the cell was turned off");
+
+    mppwrite::CfbDocument control;
+    mppwrite::CfbDocument null_save;
+    mppwrite::CfbDocument project;
+    mppwrite::CfbDocument output;
+    try {
+        control = mppwrite::CfbDocument::from_file(control_path.string());
+        null_save = mppwrite::CfbDocument::from_file(null_path.string());
+        project = mppwrite::CfbDocument::from_file(result_path.string());
+        output = mppwrite::CfbDocument::from_file(out.string());
+    } catch (const std::exception& open_error) {
+        check(false, label + ": the control, null save, Project pair and port save open");
+        std::printf("OPEN ERROR: %s\n", open_error.what());
+        return;
+    }
+
+    /* Every stream, under the null-save discipline, the two owned streams declared. */
+    const Context context;
+    save_pair::compare_all(context, label, control, null_save, project, output, nullptr, 0,
+                           kOffDeclared.data(), kOffDeclared.size());
+    const std::vector<save_pair::TailNormalisation> no_normalisation;
+    std::size_t effects = 0;
+    for (const char* path : kOffDeclared) {
+        const save_pair::Kind kind = save_pair::kind_for_path(path);
+        const save_pair::Verdict verdict = save_pair::compare(
+            kind, stream_or_empty(control, path), stream_or_empty(null_save, path),
+            stream_or_empty(project, path), stream_or_empty(output, path), true,
+            save_pair::normalisation_for(no_normalisation, path));
+        effects += verdict.effects + verdict.tail_effects;
+        check_size(verdict.mismatches, 0, label + ": " + path + ": equals Project's save");
+    }
+    std::printf("   %s: declared effect bytes = %llu\n", label.c_str(),
+                static_cast<unsigned long long>(effects));
+    check_size(effects, kOffPairEffects, label + ": the pair's declared effect bytes");
+
+    for (const std::string& path : control.stream_paths()) {
+        bool owned = false;
+        for (const char* declared : kOffDeclared) {
+            owned = owned || path == declared;
+        }
+        if (owned) {
+            continue;
+        }
+        check(stream_or_empty(output, path) == stream_or_empty(control, path),
+              label + ": " + path + ": untouched by the edit");
+    }
+
+    /* The app's view reader reads back what Project saved, field by field. */
+    const CellEntry after = read_cell(out.string(), kTaskUid, kNameField);
+    check(after.found, label + ": the port's save keeps the cell format entry");
+    check_size(after.flags, project_cell.flags, label + ": entry flags equal Project's");
+    check_size(after.font_word, project_cell.font_word, label + ": entry font word equals Project's");
+    check_size(after.pattern, project_cell.pattern, label + ": entry pattern equals Project's");
+    check(after.has_background == project_cell.has_background,
+          label + ": entry background equals Project's");
+    check_size(after.entries, project_cell.entries, label + ": the entry count equals Project's");
+    try {
+        const app::PlanInput reread = load_plan(out);
+        check(same_plan(reread, plan), label + ": the reader reads the same plan back");
+    } catch (const std::exception& read_error) {
+        check(false, label + ": the reader reopens the port's save");
+        std::printf("READ ERROR: %s\n", read_error.what());
+    }
+}
+
 /* --- refusals -------------------------------------------------------------- */
 
 void expect_refused(const app::PlanInput& plan, const std::string& source, std::uint32_t task,
@@ -401,9 +554,15 @@ void check_refusals() {
     }
 
     /* The file decides the rest (the writer's dry run). */
-    expect_refused(formatted_plan, formatted_path.string(), kTaskUid, kNameField,
+    /* W36-1.1: a view whose one item is the Bold item of the cell is Bold OFF
+     * (check_off_pair), so the "already formatted" refusals use a view whose item
+     * is neither: the cell already turned off, and another row's Bold item. */
+    expect_refused(formatted_plan, data_path(kOffProject).string(), kTaskUid, kNameField,
                    "the view main block already carries a cell format item",
-                   "a view that already carries a cell format item");
+                   "a view that already carries a cell format item (Bold already off)");
+    expect_refused(formatted_plan, data_path("wave35-g3-font-bold-row2.mpp").string(), kTaskUid,
+                   kNameField, "the view main block already carries a cell format item",
+                   "a view whose cell format item is another row's");
     /* R34G4-4: the writer edits view uid 2, so the file's applied view must be
      * that view and its record the measured control's.  The two wave 31 files
      * apply the Resource Sheet (uid 4) and Resource Usage (uid 5). */
@@ -578,6 +737,7 @@ void check_refusals() {
 
 int main() {
     check_pair();
+    check_off_pair();
     check_refusals();
     // W35-4.1: the range refusal both shells print names the cause and the pair.
     {

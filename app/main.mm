@@ -3595,14 +3595,18 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         [g_view setNeedsDisplay:YES];
         return;
     }
+    // W36-1.1: the builder decides from the file, as Project's button does: Bold
+    // on an unformatted cell, Bold off on the cell's one Bold item.
+    const bool bold_on = edit.cell_bold_on;
     if (!plan.edits.push(std::move(edit), &plan.base)) {
         note(plan, "Font Bold: the edit was refused", true);
         [g_view setNeedsDisplay:YES];
         return;
     }
     apply_structural_change(plan);
-    note(plan, "queued Font Bold on the Task Name cell of task uid " +
-                   std::to_string(task_uid) + "; Save writes it",
+    note(plan, std::string(bold_on ? "queued Font Bold on" : "queued Font Bold off") +
+                   " the Task Name cell of task uid " + std::to_string(task_uid) +
+                   "; Save writes it",
          false);
     [g_view refreshAfterChange];
     refresh_menu_bar();
