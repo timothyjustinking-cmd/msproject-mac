@@ -283,10 +283,14 @@ int main(int argc, char** argv) {
                     "Formula... beside a queued sort opens no input dialog");
         gate::check(queued_sort(window) != nullptr,
                     "a refused formula leaves the sort queued, and queues nothing beside it");
+        // W35g-1.5 (R35fG1-2): the advice is one the next change does not refuse again.
         gate::check(status_contains(window,
-                                    "a Sort is queued and File > Save would write it, not a "
-                                    "custom-field formula edit"),
-                    "Formula... beside a queued sort: the status line names the refusal");
+                                    "a Sort is queued and File > Save would refuse a "
+                                    "custom-field formula edit beside it; clear the sort or "
+                                    "undo it first") &&
+                        !status_contains(window, "another sort first"),
+                    "Formula... beside a queued sort: the status line names the refusal and "
+                    "advises clearing or Undo");
         window.apply_sort_choice(core::view::SortDefinition{}, "", true);
         QApplication::processEvents();
         gate::check(window.pending_edits().empty() && !window.document_dirty(),
@@ -304,9 +308,12 @@ int main(int argc, char** argv) {
                     "Table / Date Format does not open beside a queued sort");
         gate::check(queued_sort(window) != nullptr, "the queued sort stays queued");
         gate::check(status_contains(window,
-                                    "a Sort is queued and File > Save would write it, not a "
-                                    "table / date format edit"),
-                    "Table / Date Format beside a queued sort: the status line names it");
+                                    "a Sort is queued and File > Save would refuse a table / "
+                                    "date format edit beside it; clear the sort or undo it "
+                                    "first") &&
+                        !status_contains(window, "another sort first"),
+                    "Table / Date Format beside a queued sort: the status line names it and "
+                    "advises clearing or Undo");
         window.apply_sort_choice(core::view::SortDefinition{}, "", true);
         QApplication::processEvents();
         gate::check(window.pending_edits().empty(), "the format case: the sort is withdrawn");

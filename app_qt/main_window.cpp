@@ -1669,6 +1669,18 @@ std::string MainWindow::document_edit_refusal(const std::string& change) const {
     if (!structural_.has_exclusive_edit()) {
         return {};
     }
+    // W35g-1.5 (R35fG1-2): view_change_refusal's advice ("choose another level" or "another
+    // sort") queues another Show Level or Sort, which is refused again here, and "would write
+    // it, not X" suggests Save drops X when it refuses the two together.  These two get their
+    // own text; view_change_refusal keeps its words for the view changes it was written for.
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::show_level)) {
+        return "outline: a Show Level is queued and File > Save would refuse " + change +
+               " beside it; choose All Subtasks or undo the level first";
+    }
+    if (queued_edit_is(structural_.applied(), app::StructuralKind::sort_view)) {
+        return "sort: a Sort is queued and File > Save would refuse " + change +
+               " beside it; clear the sort or undo it first";
+    }
     const std::string reason = data_change_refusal(change);
     if (!reason.empty()) {
         return reason;
