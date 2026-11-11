@@ -487,3 +487,25 @@ coordinator's review closes an id.
 - **Still partly fixed or open, unchanged:** R35dG2-1, R35cG0-2, R35cG0-4, R35cW-4 (remainder
   R35dW-5, fixed in source with `macos-appkit` as its gate), the four 35b ids (R35bW-1, R35bW-2,
   R35bG2-2, R35bG3-1), R35bG0-9, R35bG1-10 and R35bG2-9.
+
+## Queued from wave 35g (CLOSE): no wave 35h (11 November 2026)
+
+Waves 34 to 35g are merged into `main`.  Fable's work order of 11 November 2026 makes 35g the last
+fix-only wave: under standing rule 5, only a Critical or High goes to the front of the next wave,
+and wave 36 is the writer wave.  None is open.  The record is
+`wave35g-verification/coord-gates-close.md`.
+
+- **Lows (queued, no wave assigned):**
+  - R35gG0-1 to -4: no Formula...-then-Cancel test; two narrow assertions; the input-dialog
+    helper's timers; a silent refused Formula... while the dialog is open.
+  - R35gG1-1 to -5: 1.4's advice holds only in some cases; 1.7's note on the all-fail path; 1.1's
+    read-only test; the rest of R35fW-1 (state files); one more commit-message misattribution.
+  - R35gW-1 to -5: state files at the CLOSE tip; the R35eG1-3 and R35eW-1 rows unannotated in
+    `wave35f-complete.md`; the Calculate refusal's "would write it, not X" wording; 1.6's test
+    cannot see an Undo that does nothing.
+  - R35gW-1's state-file part goes to W36-0.6 (START-HERE rewritten).
+- **Closed by the coordinator:** R35dW-5 (`macos-appkit` green three times since its fix), which
+  closes R35cW-4's last remainder.
+- **Still partly fixed or open, unchanged:** R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), the four
+  35b ids (R35bW-1, R35bW-2, R35bG2-2, R35bG3-1), R35bG0-9, R35bG1-10 and R35bG2-9.  Revisit at
+  wave 37 planning.
