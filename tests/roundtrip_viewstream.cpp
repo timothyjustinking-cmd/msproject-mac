@@ -573,6 +573,86 @@ void test_bold_off_pair(TestContext& t) {
     }
 }
 
+/* ---- Bold on another row and on the Start column (W36-1.2) ---------------- */
+
+/* Three committed Bold pairs from the wave35-g3 session.  The writer's item is
+ * the textstyle pair's with the row (payload +0) and the field key (payload +4)
+ * taken from the caller, the two words trace-font-item-r6.md section 2 traces to
+ * the caller's arguments (0xe389d0 `mov [rbx], r14d`, 0xe389db `mov [rbx+4],
+ * r12d`); no byte of these pairs was used to build it, so each is a held-out
+ * check of the rule: row2 and range change the row, start changes the field.
+ *
+ * The one byte the trace names as written by no instruction is the font word's
+ * top byte (payload +43, Var2Data 85,327): Project's saves hold 0x6b, 0x00 and
+ * 0x00 there, the writer pins 0x90.  The comparison masks that byte by its exact
+ * field, the 0x2240000c item at Var2Data 85,272 and its payload offset 43, in
+ * Project's save only; the port's byte is asserted to be the pinned 0x90 first. */
+struct BoldCellPair {
+    char const* stem;
+    std::uint32_t row;
+    std::uint32_t field;
+    std::uint8_t project_top;
+};
+
+constexpr std::size_t kItemFontTopAt = kInsertAt + 12 + 43;
+constexpr std::uint32_t kStartFieldId = 0x0B400505u;
+
+void test_bold_cell_pairs(TestContext& t) {
+    std::array<BoldCellPair, 3> const pairs{{
+        {"wave35-g3-font-bold-row2", 2, kMeasuredFieldId, 0x6b},
+        {"wave35-g3-font-bold-start", 1, kStartFieldId, 0x00},
+        {"wave35-g3-font-bold-range", 2, kMeasuredFieldId, 0x00}}};
+    for (BoldCellPair const& pair : pairs) {
+        std::string const stem = pair.stem;
+        std::string const label = "bold cell " + stem;
+        std::string const control_name = stem + "-control.mpp";
+        std::string const null_name = stem + "-control-null.mpp";
+        std::string const edit_name = stem + ".mpp";
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, control_name));
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, null_name));
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, edit_name));
+
+        CfbDocument doc = doc_from_data(control_name);
+        ViewCellStyleEdit edit = measured_edit();
+        edit.uid = pair.row;
+        edit.field_id = pair.field;
+        std::string const out = out_path("w36-bold-" + stem + ".mpp");
+        ViewCellStyleWrite const written =
+            mppwrite::save_view_cell_style(doc, {edit}, out);
+        t.equal(written.uid, pair.row, label + ": the row is the caller's");
+        t.equal(written.field_id, pair.field, label + ": the field is the caller's");
+        t.equal(written.appended_bytes, 56, label + ": the item is 56 B");
+        t.equal(written.var2_bytes_after, 100234, label + ": Var2Data is 100,234 B");
+
+        CfbDocument port = CfbDocument::from_file(out);
+        CfbDocument project = doc_from_data(edit_name);
+        std::vector<std::uint8_t> port_var2 = port.read_stream(kViewVar2);
+        std::vector<std::uint8_t> project_var2 = project.read_stream(kViewVar2);
+        t.equal(port_var2.size(), project_var2.size(),
+                label + ": the port's Var2Data is Project's size");
+        for (std::vector<std::uint8_t> const* var2 : {&port_var2, &project_var2}) {
+            t.equal(u32_at(*var2, kInsertAt), 44, label + ": the item's length is 44");
+            t.equal(u32_at(*var2, kInsertAt + 4), 0x2240000Cu,
+                    label + ": the item's id is 0x2240000c");
+            t.equal(u32_at(*var2, kInsertAt + 12), pair.row,
+                    label + ": payload +0 is the row");
+            t.equal(u32_at(*var2, kInsertAt + 16), pair.field,
+                    label + ": payload +4 is the field key");
+        }
+        t.equal(port_var2[kItemFontTopAt], 0x90, label + ": the port pins the top byte 0x90");
+        t.equal(project_var2[kItemFontTopAt], pair.project_top,
+                label + ": Project's top byte is the session's leftover");
+        project_var2[kItemFontTopAt] = port_var2[kItemFontTopAt];
+        project.replace_stream(kViewVar2, project_var2);
+
+        std::array<char const*, 4> const declared{{
+            kViewMeta, kViewVar2, kViewProps, "Props14"}};
+        save_pair::compare_all(t, "view-bold-" + stem, doc_from_data(control_name),
+                               doc_from_data(null_name), project, port, nullptr, 0,
+                               declared.data(), declared.size());
+    }
+}
+
 /* ---- refusals ----------------------------------------------------------- */
 
 void test_edit_refusals(TestContext& t) {
@@ -623,16 +703,18 @@ void test_edit_refusals(TestContext& t) {
         refuses(control, {edit}, "field id 0 is not a stored field",
                 "field id 0 refused");
     }
-    /* W35-0.4 RC-W8: the pair formats one cell, the Task Name cell of row uid
-     * 1; the writer stored any other row uid or field id verbatim. */
-    for (std::uint32_t const uid : {2u, 3u, 0xFFFFFFFFu}) {
+    /* W35-0.4 RC-W8, widened by W36-1.2: Bold ON is measured on the Task Name
+     * cell of row 1 and 2 and on the Start cell of row 1 (test_bold_cell_pairs);
+     * any other field id is refused, and so is the all-ones row, which is no row.
+     * The field id is printed in hex, as it is written everywhere else. */
+    {
         ViewCellStyleEdit edit = measured_edit();
-        edit.uid = uid;
-        refuses(control, {edit}, "is not the measured row uid",
-                "row uid " + std::to_string(uid) + " refused");
+        edit.uid = 0xFFFFFFFFu;
+        refuses(control, {edit}, "row uid 4294967295 is not a stored row",
+                "row uid 4294967295 refused");
     }
     for (std::uint32_t const field_id : {0x0B40000Fu, 0x0B400001u, 0x0B40000Du,
-                                         0x0C40000Eu, 1u}) {
+                                         0x0C40000Eu, 1u, 0x0B400506u}) {
         ViewCellStyleEdit edit = measured_edit();
         edit.field_id = field_id;
         /* W35b-4.G0-11 (R35G0-11): the refusal prints both field ids in hex, the form the
@@ -641,8 +723,21 @@ void test_edit_refusals(TestContext& t) {
         std::snprintf(given, sizeof given, "0x%08x", field_id);
         refuses(control, {edit},
                 std::string("field id ") + given +
-                    " is not the measured field id (0x0b40000e, the Task Name cell)",
+                    " is not a measured field id (0x0b40000e, the Task Name cell, "
+                    "or 0x0b400505, the Start cell)",
                 "field id " + std::to_string(field_id) + " refused");
+    }
+    /* Bold OFF has one measured shape, the Task Name cell of row 1 (the pair's
+     * own cell, no held-out Bold off pair): every other cell is refused. */
+    for (std::pair<std::uint32_t, std::uint32_t> const cell :
+         {std::pair<std::uint32_t, std::uint32_t>{2u, kMeasuredFieldId},
+          std::pair<std::uint32_t, std::uint32_t>{1u, kStartFieldId}}) {
+        ViewCellStyleEdit edit = bold_off_edit();
+        edit.uid = cell.first;
+        edit.field_id = cell.second;
+        refuses(doc_from_data(kOffControl), {edit}, "only the Task Name cell of row uid 1",
+                "Bold off on row " + std::to_string(cell.first) + ", field " +
+                    std::to_string(cell.second) + " refused");
     }
     std::array<std::pair<ViewCellAttribute, char const*>, 5> const siblings{{
         {ViewCellAttribute::italic, "italic"},
@@ -1059,6 +1154,7 @@ int main() {
         TestContext t;
         test_textstyle_pair(t);
         test_bold_off_pair(t);
+        test_bold_cell_pairs(t);
         test_edit_refusals(t);
         test_path_refusals(t);
         test_damaged_streams(t);

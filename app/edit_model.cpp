@@ -53,6 +53,8 @@ namespace app {
 // W35b-4.G0-11 (R35G0-11): the app's copy of the Bold cell pin cannot drift from the writer's.
 static_assert(kBoldMeasuredTaskUid == mppwrite::kMeasuredCellUid,
               "the edit model's Bold row pin is the writer's");
+static_assert(kBoldMeasuredStartFieldId == mppwrite::kMeasuredStartFieldId,
+              "the app's Start cell is the writer's measured Start cell");
 static_assert(kBoldMeasuredFieldId == mppwrite::kMeasuredCellFieldId,
               "the edit model's Bold field pin is the writer's");
 
@@ -3152,25 +3154,28 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
 
 namespace {
 
-// W34-4.5: the plan-side half of the Font Bold rule, shared by the builder and
-// push().  wave30-textstyle formats ONE cell (the Task Name of UniqueID 1), and
-// one pair is one data point, so every other row and column is a save no pair
-// measured.  Returns the reason, or an empty string.
+// The plan-side half of the Font Bold rule, shared by the builder and push()
+// (W34-4.5, widened by W36-1.2).  The measured pairs bold the Task Name cell of
+// rows 1 and 2 and the Start cell of row 1; the item stores the caller's row and
+// field key, so any saved row of those two columns is built.  No committed pair
+// separates a row's ID from its UniqueID (equal in every one), so a task whose
+// two differ is refused rather than guessed.  Returns the reason, or an empty
+// string.
 std::string cell_bold_plan_refusal(const PlanInput& plan, std::uint32_t task_uid,
                                    std::uint32_t field_id) {
     const TaskRow* task = task_row_for_uid(plan.tasks, task_uid);
     if (task == nullptr || task->file_row == 0) {
         return "the cell is not on a saved task of the open plan";
     }
-    if (field_id != kBoldMeasuredFieldId) {
-        return "Font Bold on a cell outside the Task Name column is not "
-               "implemented in this port: the measured Project pair bolds a Task "
-               "Name cell";
+    if (field_id != kBoldMeasuredFieldId && field_id != kBoldMeasuredStartFieldId) {
+        return "Font Bold on a cell outside the Task Name and Start columns is not "
+               "implemented in this port: the measured Project pairs bold a Task "
+               "Name cell and a Start cell";
     }
-    if (task_uid != kBoldMeasuredTaskUid) {
-        return "Font Bold on this row is not implemented in this port: the "
-               "measured Project pair bolds the Task Name cell of the task with "
-               "UniqueID 1, and a second pair has not been measured";
+    if (task->id != task->uid) {
+        return "Font Bold on this row is not implemented in this port: the task's "
+               "ID differs from its UniqueID, and the measured pairs (where the "
+               "two are equal) do not say which one the view stores";
     }
     return {};
 }

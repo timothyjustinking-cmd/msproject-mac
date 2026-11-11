@@ -3437,17 +3437,19 @@ void MainWindow::bold_selected_cell() {
     if (refuse_beside_document_edit("Font Bold")) {
         return;
     }
-    // W34-4.5: one cell only.  The measured pair bolds a single Task Name cell,
-    // so a range is refused with the reason before anything is built.
+    // W34-4.5: one cell only.  The measured pairs bold a single cell, so a range
+    // is refused with the reason before anything is built.
     if (!(sheet.anchor() == sheet.focus())) {
         set_message("Font Bold: " + std::string(app::bold_range_refusal()), true);
         update_status();
         return;
     }
     const std::uint32_t task_uid = task->uid;
-    // The sheet's field id for Task Name equals the stored one the writer is
-    // measured for; the builder names the refusal for any other column.
-    const std::uint32_t field_id = sheet.column(sheet.focus().column).field;
+    // The key the view stores a cell format under is the column's `214/CTable`
+    // field id (Task Name 0x0b40000e, Start 0x0b400505); the builder names the
+    // refusal for any other column.
+    const core::sheet::SheetColumn& column = sheet.column(sheet.focus().column);
+    const std::uint32_t field_id = app::bold_cell_field_id(column.table_field, column.field);
     app::StructuralEdit edit;
     std::string error;
     if (!app::make_cell_bold_edit(doc_.plan(), doc_.path(), task_uid, field_id, edit, error)) {
@@ -3465,7 +3467,8 @@ void MainWindow::bold_selected_cell() {
     }
     after_structural_change(task_uid);
     set_message(std::string(bold_on ? "queued Font Bold on" : "queued Font Bold off") +
-                    " the Task Name cell of task uid " + std::to_string(task_uid) +
+                    " the " + std::string(app::bold_cell_column_name(field_id)) +
+                    " cell of task uid " + std::to_string(task_uid) +
                     "; File > Save writes it",
                 false);
     update_status();

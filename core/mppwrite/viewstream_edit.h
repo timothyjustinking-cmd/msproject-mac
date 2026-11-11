@@ -67,7 +67,17 @@
  *                               highlight colour, font colour)
  *   selection        cell       refused (whole row)
  *   view             uid 2      refused (the other views are unmeasured)
- *   row              uid != 0   refused (the project summary row, uid 0)
+ *   row              any row    refused (the project summary row, uid 0, and the
+ *                               all-ones sentinel); W36-1.2: Bold ON takes the
+ *                               caller's row (payload +0, 0xe389d0) and field key
+ *                               (payload +4, 0xe389db), measured on rows 1 and 2
+ *                               (wave30-textstyle, wave35-g3-font-bold-row2 and
+ *                               -range) and on Task Name and Start
+ *                               (wave35-g3-font-bold-start).  No pair separates
+ *                               the row number from the UniqueID (they are equal
+ *                               in every committed pair), so the caller must pass
+ *                               a row where both agree.
+ *   field            Name, Start  refused (every other column)
  *   block state      no 0x2240000c item in the target block
  *   edits per save   exactly one
  *
@@ -78,17 +88,24 @@
  * item IN PLACE (flags 0x01000003 -> 0x00000003, font word 0x90000001 ->
  * 0x90000000; no size, offset or Props change), and so does `enabled = false`
  * here.  Every other un-format (another item, another layout, a second item) is
- * refused.  The shells still build only `enabled = true` edits.  The block
- * digest masks one noise byte (payload offset 42,678) because a control saved
- * by another Project session differs there.  The payload's row uid and
- * field id are pinned to the cell the pair measures, uid 1 / field 0x0B40000E
- * (Task/Name); any other row or field is refused (W35-0.4, RC-W8).
+ * refused.  The block digest masks one noise byte (payload offset 42,678)
+ * because a control saved by another Project session differs there.  Bold OFF
+ * stays pinned to the cell its pair measures, row uid 1 / field 0x0B40000E
+ * (Task Name): there is no held-out Bold off pair, so any other cell is refused
+ * (W35-0.4, RC-W8).
+ *
+ * THE TOP BYTE.  The font word's top byte (payload +43) is written by no
+ * instruction in any traced run (trace-font-item-r6.md section 2): it is what the
+ * buffer held, 0x90, 0x6b or 0x00 in the committed Bold saves.  The writer pins
+ * 0x90, and a port test compares a save with Project's by masking that one byte
+ * by its exact field (the 0x2240000c item, payload +43), never by stream name.
  *
  * Refusals (all before `doc` or the output path is touched; every one has a
  * test in tests/roundtrip_viewstream.cpp):
- *   - a count other than one, an empty or unusable output path, uid 0, a uid
- *     other than the measured 1, field id 0, a field id other than the
- *     measured 0x0B40000E, an attribute other than Bold, Bold off without the one measured Bold item, a whole-row selection,
+ *   - a count other than one, an empty or unusable output path, uid 0,
+ *     the all-ones row, field id 0, a field id other than Task Name or Start,
+ *     an attribute other than Bold, Bold off on any cell but Task Name of row 1,
+ *     Bold off without the one measured Bold item, a whole-row selection,
  *     a view uid other than the measured 2;
  *   - a missing 214/CV_iew/VarMeta, Var2Data or 214/Props stream; a VarMeta
  *     that is not 24 + 12*n, a magic or declared count that is not the physical
@@ -148,9 +165,14 @@ inline constexpr std::uint32_t kMeasuredFontWord = 0x90000001u;
 /* The pair's applied view: the CV_iew row whose main block Project grew. */
 inline constexpr std::uint32_t kMeasuredViewUid = 2u;
 /* The pair's formatted cell: the Task Name cell (field id 0x0b40000e) of the
- * row with UniqueID 1.  Every other row and field is unmeasured and refused. */
+ * row with UniqueID 1.  Bold OFF is measured on this cell only (no held-out Bold
+ * off pair); Bold ON is measured on more (below). */
 inline constexpr std::uint32_t kMeasuredCellUid = 1u;
 inline constexpr std::uint32_t kMeasuredCellFieldId = 0x0B40000Eu;
+/* W36-1.2: the Start column's field key (StartText), measured by
+ * wave35-g3-font-bold-start.  Bold ON is accepted for a row and one of these two
+ * fields; every other field is unmeasured and refused. */
+inline constexpr std::uint32_t kMeasuredStartFieldId = 0x0B400505u;
 
 /* The Font group's attributes.  Only Bold is measured; the rest are refused. */
 enum class ViewCellAttribute : std::uint8_t {
@@ -168,13 +190,14 @@ enum class ViewCellSelection : std::uint8_t {
     whole_row = 1,
 };
 
-/* One measured cell-format append.  The cell (row uid + field id) is pinned to
- * the pair's (kMeasuredCellUid, kMeasuredCellFieldId); every other word is
- * fixed by the pair. */
+/* One measured cell-format append.  The row and field id are the caller's (Bold
+ * ON: any row, Task Name or Start; Bold OFF: the pair's Task Name cell of row 1,
+ * kMeasuredCellUid / kMeasuredCellFieldId); every other word is fixed by the
+ * pairs. */
 struct ViewCellStyleEdit {
     std::uint32_t view_uid = 0;  /* the CV_iew row; measured 2 */
-    std::uint32_t uid = 0;       /* the formatted row's UniqueID; not 0 */
-    std::uint32_t field_id = 0;  /* the cell's field id; measured 0x0b40000e */
+    std::uint32_t uid = 0;       /* the formatted row; not 0 */
+    std::uint32_t field_id = 0;  /* the cell's field id; measured 0x0b40000e, 0x0b400505 */
     ViewCellAttribute attribute = ViewCellAttribute::bold;
     ViewCellSelection selection = ViewCellSelection::cell;
     bool enabled = true; /* true appends the Bold item; false turns the one Bold

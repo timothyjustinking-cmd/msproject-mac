@@ -14,6 +14,21 @@
 //   wave35-g3-font-bold-off-control.mpp    -> wave35-g3-font-bold-off.mpp
 //       the same cell with Bold turned off; Project rewrites the item in place
 //
+// and (W36-1.2, Bold on another row and on the Start column; held-out pairs,
+// none used to build the item):
+//
+//   wave35-g3-font-bold-row2-control.mpp   -> wave35-g3-font-bold-row2.mpp
+//       the Task Name cell of row 2
+//   wave35-g3-font-bold-start-control.mpp  -> wave35-g3-font-bold-start.mpp
+//       the Start cell of row 1
+//   wave35-g3-font-bold-range-control.mpp  -> wave35-g3-font-bold-range.mpp
+//       the Task Name cell of row 2 again (a one-row Bold, mislabelled "range")
+//
+// The font word's top byte (item payload +43) is written by no instruction in the
+// trace and differs by session (0x90, 0x6b, 0x00); the port pins 0x90.  Each
+// comparison masks that one byte by its exact field (the 0x2240000c item at
+// Var2Data 85,272, payload +43) in Project's save, never by stream name.
+//
 // This test:
 //
 //   1. loads the control through the app's reader adapter and builds the edit
@@ -136,7 +151,26 @@ constexpr std::size_t kPairEffects = 6607;
 
 constexpr std::uint32_t kTaskUid = app::kBoldMeasuredTaskUid;
 constexpr std::uint32_t kNameField = app::kBoldMeasuredFieldId;
+constexpr std::uint32_t kStartField = 0x0B400505u;
 constexpr std::uint32_t kMeasuredFontWord = 0x90000001u;
+
+/* One committed Bold pair: the cell it formats and the font word's top byte in
+ * Project's save (the session's leftover, payload +43 of the item). */
+struct BoldPair {
+    const char* label;
+    const char* control;
+    const char* null_save;
+    const char* project;
+    std::uint32_t uid;
+    std::uint32_t field;
+    std::uint32_t project_top;
+    std::size_t effects;
+};
+
+/* The item the view's main block gains: Var2Data 42,576 + 4 + 42,692 = 85,272,
+ * and its font word's top byte at payload +43 (header 12 + 43). */
+constexpr std::size_t kItemAt = 42576 + 4 + 42692;
+constexpr std::size_t kItemFontTopAt = kItemAt + 12 + 43;
 
 std::filesystem::path data_path(const std::string& name) {
     return std::filesystem::path(APP_TEST_DATA_DIR) / name;
@@ -150,6 +184,12 @@ std::filesystem::path out_path(const std::string& name) {
 
 Bytes stream_or_empty(const mppwrite::CfbDocument& document, const std::string& path) {
     return document.has_stream(path) ? document.read_stream(path) : Bytes{};
+}
+
+std::uint32_t u32_at(const Bytes& bytes, std::size_t at) {
+    return static_cast<std::uint32_t>(bytes[at]) | (static_cast<std::uint32_t>(bytes[at + 1]) << 8) |
+           (static_cast<std::uint32_t>(bytes[at + 2]) << 16) |
+           (static_cast<std::uint32_t>(bytes[at + 3]) << 24);
 }
 
 app::PlanInput load_plan(const std::filesystem::path& path) {
@@ -209,15 +249,17 @@ CellEntry read_cell(const std::string& path, std::uint32_t uid, std::uint32_t fi
 
 /* --- the measured pair ----------------------------------------------------- */
 
-void check_pair() {
-    const std::string label = "cell-bold";
-    const std::filesystem::path control_path = data_path(kControl);
-    const std::filesystem::path result_path = data_path(kProject);
-    const std::filesystem::path null_path = data_path(kNull);
+void check_pair(const BoldPair& spec) {
+    const std::string label = spec.label;
+    const std::uint32_t task_uid = spec.uid;
+    const std::uint32_t field = spec.field;
+    const std::filesystem::path control_path = data_path(spec.control);
+    const std::filesystem::path result_path = data_path(spec.project);
+    const std::filesystem::path null_path = data_path(spec.null_save);
     fixture::require_committed(control_path);
     fixture::require_committed(result_path);
     fixture::require_committed(null_path);
-    check(null_path.filename().string() == save_pair::null_fixture_name(kControl),
+    check(null_path.filename().string() == save_pair::null_fixture_name(spec.control),
           label + ": the null save is the control's committed null fixture");
 
     app::PlanInput plan;
@@ -230,26 +272,29 @@ void check_pair() {
     }
 
     /* The control carries no format for the cell; Project's save carries one. */
-    const CellEntry before = read_cell(control_path.string(), kTaskUid, kNameField);
+    const CellEntry before = read_cell(control_path.string(), task_uid, field);
     check(!before.found, label + ": the control has no cell format for the cell");
-    const CellEntry project_cell = read_cell(result_path.string(), kTaskUid, kNameField);
+    const CellEntry project_cell = read_cell(result_path.string(), task_uid, field);
     check(project_cell.found, label + ": Project's save has the cell format entry");
-    check_size(project_cell.font_word, kMeasuredFontWord,
-               label + ": Project's font word is the measured literal");
+    /* The font word is Bold's 0x01 under the session's leftover top byte. */
+    check_size(project_cell.font_word & 0x00FFFFFFu, kMeasuredFontWord & 0x00FFFFFFu,
+               label + ": Project's font word is Bold's (top byte aside)");
+    check_size(project_cell.font_word >> 24, spec.project_top,
+               label + ": Project's font word top byte is the session's leftover");
 
     /* --- make_cell_bold_edit ---------------------------------------------- */
     app::StructuralEdit edit;
     std::string edit_error;
-    const bool built = app::make_cell_bold_edit(plan, control_path.string(), kTaskUid,
-                                                kNameField, edit, edit_error);
+    const bool built = app::make_cell_bold_edit(plan, control_path.string(), task_uid, field,
+                                                edit, edit_error);
     check(built, label + ": make_cell_bold_edit accepts the measured cell");
     if (!built) {
         std::printf("EDIT ERROR: %s\n", edit_error.c_str());
         return;
     }
     check(edit.kind == app::StructuralKind::bold_cell, label + ": the built edit has the kind");
-    check_size(edit.uid, kTaskUid, label + ": the edit names the row");
-    check_size(edit.field_id, kNameField, label + ": the edit names the cell's field");
+    check_size(edit.uid, task_uid, label + ": the edit names the row");
+    check_size(edit.field_id, field, label + ": the edit names the cell's field");
     check(edit.cell_bold_on, label + ": an unformatted cell builds Bold ON");
 
     /* --- push + display + undo/redo --------------------------------------- */
@@ -263,7 +308,7 @@ void check_pair() {
     check_size(edits.size(), 1, label + ": redo restores the one edit");
 
     /* --- save through the real cascade ------------------------------------ */
-    const std::filesystem::path out = out_path("app-cell-bold.mpp");
+    const std::filesystem::path out = out_path(std::string("app-") + spec.label + ".mpp");
     std::error_code error;
     std::filesystem::remove(out, error);
     const app::StructuralSaveResult saved =
@@ -295,6 +340,30 @@ void check_pair() {
         return;
     }
 
+    /* The font word's top byte, masked by its exact field: the 0x2240000c item at
+     * Var2Data 85,272 (length 44, row and field key checked), payload +43.  Both
+     * saves are asserted first (the port pins 0x90, Project holds the session's
+     * leftover) and only Project's byte is then set to the port's. */
+    Bytes project_var2 = stream_or_empty(project, kViewVar2);
+    const Bytes output_var2 = stream_or_empty(output, kViewVar2);
+    check_size(project_var2.size(), output_var2.size(),
+               label + ": the port's Var2Data is Project's size");
+    if (project_var2.size() > kItemFontTopAt && output_var2.size() > kItemFontTopAt) {
+        const Bytes* const both[2] = {&project_var2, &output_var2};
+        for (const Bytes* var2 : both) {
+            check_size(u32_at(*var2, kItemAt), 44, label + ": the item's length is 44");
+            check_size(u32_at(*var2, kItemAt + 4), 0x2240000Cu,
+                       label + ": the item's id is 0x2240000c");
+            check_size(u32_at(*var2, kItemAt + 12), task_uid, label + ": payload +0 is the row");
+            check_size(u32_at(*var2, kItemAt + 16), field, label + ": payload +4 is the field");
+        }
+        check_size(output_var2[kItemFontTopAt], 0x90, label + ": the port pins the top byte 0x90");
+        check_size(project_var2[kItemFontTopAt], spec.project_top,
+                   label + ": Project's top byte is the session's leftover");
+        project_var2[kItemFontTopAt] = output_var2[kItemFontTopAt];
+        project.replace_stream(kViewVar2, project_var2);
+    }
+
     /* Every stream, under the null-save discipline. */
     const Context context;
     save_pair::compare_all(context, label, control, null_save, project, output, nullptr, 0,
@@ -313,7 +382,7 @@ void check_pair() {
     }
     std::printf("   %s: declared effect bytes = %llu\n", label.c_str(),
                 static_cast<unsigned long long>(effects));
-    check_size(effects, kPairEffects, label + ": the pair's declared effect bytes");
+    check_size(effects, spec.effects, label + ": the pair's declared effect bytes");
 
     /* Every stream OUTSIDE the declared ones is byte-identical to the control. */
     for (const std::string& path : control.stream_paths()) {
@@ -328,11 +397,14 @@ void check_pair() {
               label + ": " + path + ": untouched by the edit");
     }
 
-    /* The app's view reader reads back what Project saved, field by field. */
-    const CellEntry after = read_cell(out.string(), kTaskUid, kNameField);
+    /* The app's view reader reads back what Project saved, field by field (the
+     * font word's top byte aside, which is the masked field). */
+    const CellEntry after = read_cell(out.string(), task_uid, field);
     check(after.found, label + ": the port's save carries the cell format entry");
     check_size(after.flags, project_cell.flags, label + ": entry flags equal Project's");
-    check_size(after.font_word, project_cell.font_word, label + ": entry font word equals Project's");
+    check_size(after.font_word & 0x00FFFFFFu, project_cell.font_word & 0x00FFFFFFu,
+               label + ": entry font word equals Project's (top byte aside)");
+    check_size(after.font_word >> 24, 0x90, label + ": the port's entry top byte is the pinned 0x90");
     check_size(after.pattern, project_cell.pattern, label + ": entry pattern equals Project's");
     check(after.has_background == project_cell.has_background,
           label + ": entry background equals Project's");
@@ -529,9 +601,11 @@ void check_refusals() {
     /* The key and the measured cell (brief rule 2: one pair, one cell). */
     expect_refused(plan, source, 0, kNameField, "not on a saved task", "row uid 0 (the project row)");
     expect_refused(plan, source, 4242, kNameField, "not on a saved task", "an unknown task");
-    expect_refused(plan, source, kTaskUid, 0, "Task Name column", "field id 0");
-    expect_refused(plan, source, kTaskUid, 0x0B40000Fu, "Task Name column",
-                   "a column other than Task Name");
+    expect_refused(plan, source, kTaskUid, 0, "Task Name and Start columns", "field id 0");
+    expect_refused(plan, source, kTaskUid, 0x0B40000Fu, "Task Name and Start columns",
+                   "a column other than Task Name and Start");
+    expect_refused(plan, source, kTaskUid, 0x0B400506u, "Task Name and Start columns",
+                   "the Finish column (unmeasured)");
     /* The pair's Italic, Underline, strikethrough and colours are not even a
      * parameter of the builder: Font Bold is the only attribute it builds. */
     std::uint32_t other_task = 0;
@@ -541,7 +615,19 @@ void check_refusals() {
         }
     }
     check(other_task != 0, "the control has a second saved task for the row refusal");
-    expect_refused(plan, source, other_task, kNameField, "UniqueID 1", "a task other than UniqueID 1");
+    /* W36-1.2: any saved row is a Bold target, but no pair separates a row's
+     * ID from its UniqueID (equal in every committed pair), so a task whose two
+     * differ is refused rather than guessed. */
+    {
+        app::PlanInput renumbered = plan;
+        for (app::TaskRow& row : renumbered.tasks) {
+            if (row.uid == other_task) {
+                row.id = row.uid + 40;
+            }
+        }
+        expect_refused(renumbered, source, other_task, kNameField, "ID differs from its UniqueID",
+                       "a task whose ID differs from its UniqueID");
+    }
     {
         app::PlanInput changed = plan;
         for (app::TaskRow& row : changed.tasks) {
@@ -614,10 +700,21 @@ void check_refusals() {
         check(!edits.push(hand_edit(kTaskUid, 0), &plan), "push() refuses field id 0");
         check(!edits.push(hand_edit(4242, kNameField), &plan), "push() refuses an unknown task");
         check(!edits.push(hand_edit(kTaskUid, 0x0B40000Fu), &plan),
-              "push() refuses a column other than Task Name");
-        check(!edits.push(hand_edit(other_task, kNameField), &plan),
-              "push() refuses a task other than UniqueID 1");
+              "push() refuses a column other than Task Name and Start");
+        {
+            app::PlanInput renumbered = plan;
+            for (app::TaskRow& row : renumbered.tasks) {
+                if (row.uid == other_task) {
+                    row.id = row.uid + 40;
+                }
+            }
+            check(!edits.push(hand_edit(other_task, kNameField), &renumbered),
+                  "push() refuses a task whose ID differs from its UniqueID");
+        }
         check(edits.empty(), "no refused bold left anything in the queue");
+        check(edits.push(hand_edit(other_task, kStartField), &plan),
+              "push() accepts the Start cell of a saved row (W36-1.2)");
+        check_size(edits.size(), 1, "the accepted Start bold is queued");
     }
 
     /* Exclusivity, in both directions and with the other exclusive kinds. */
@@ -736,7 +833,22 @@ void check_refusals() {
 }  // namespace
 
 int main() {
-    check_pair();
+    /* The effect counts of the three new pairs are the measured ones (printed as
+     * "declared effect bytes" by each run); textstyle's is the wave 34 figure. */
+    const std::array<BoldPair, 4> pairs{{
+        {"cell-bold", kControl, kNull, kProject, kTaskUid, kNameField, 0x90, kPairEffects},
+        {"cell-bold-row2", "wave35-g3-font-bold-row2-control.mpp",
+         "wave35-g3-font-bold-row2-control-null.mpp", "wave35-g3-font-bold-row2.mpp", 2,
+         kNameField, 0x6b, 6607},
+        {"cell-bold-start", "wave35-g3-font-bold-start-control.mpp",
+         "wave35-g3-font-bold-start-control-null.mpp", "wave35-g3-font-bold-start.mpp", 1,
+         kStartField, 0x00, 6608},
+        {"cell-bold-range", "wave35-g3-font-bold-range-control.mpp",
+         "wave35-g3-font-bold-range-control-null.mpp", "wave35-g3-font-bold-range.mpp", 2,
+         kNameField, 0x00, 6607}}};
+    for (const BoldPair& pair : pairs) {
+        check_pair(pair);
+    }
     check_off_pair();
     check_refusals();
     // W35-4.1: the range refusal both shells print names the cause and the pair.

@@ -3585,9 +3585,11 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     const std::uint32_t task_uid = selected.uid;
-    // The sheet's field id for Task Name equals the stored one the writer is
-    // measured for; the builder names the refusal for any other column.
-    const std::uint32_t field_id = plan.sheet->column(plan.sheet->focus().column).field;
+    // The key the view stores a cell format under is the column's `214/CTable`
+    // field id (Task Name 0x0b40000e, Start 0x0b400505); the builder names the
+    // refusal for any other column.
+    const core::sheet::SheetColumn& column = plan.sheet->column(plan.sheet->focus().column);
+    const std::uint32_t field_id = app::bold_cell_field_id(column.table_field, column.field);
     app::StructuralEdit edit;
     std::string error;
     if (!app::make_cell_bold_edit(plan.base, plan.path, task_uid, field_id, edit, error)) {
@@ -3605,7 +3607,8 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     }
     apply_structural_change(plan);
     note(plan, std::string(bold_on ? "queued Font Bold on" : "queued Font Bold off") +
-                   " the Task Name cell of task uid " + std::to_string(task_uid) +
+                   " the " + std::string(app::bold_cell_column_name(field_id)) +
+                   " cell of task uid " + std::to_string(task_uid) +
                    "; Save writes it",
          false);
     [g_view refreshAfterChange];

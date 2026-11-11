@@ -598,10 +598,13 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
                           bool assign, StructuralEdit& out, std::string& error);
 
 // Builds a ready-to-push bold_cell edit for ONE cell (W34-4.5).  The plan-side
-// rule is the measured pair's own cell: Project's wave30-textstyle formats the
-// Task Name cell of the task with UniqueID 1, and one pair is one data point
-// (brief rule 2), so every other row and every other column is refused here with
-// the decision-9 "is not implemented in this port" text.  The FILE is the
+// rule (W36-1.2) is the measured pairs' cells: Project's wave30-textstyle and
+// wave35-g3-font-bold-row2 format the Task Name cell of rows 1 and 2 and
+// wave35-g3-font-bold-start the Start cell of row 1, and the item stores the
+// caller's row and field key, so any saved row of the Task Name and Start columns
+// is built (a task whose ID differs from its UniqueID is refused: no pair says
+// which one the view stores).  Every other column is refused here with the
+// decision-9 "is not implemented in this port" text.  The FILE is the
 // authority for the view shape: the writer's dry run validates the three view
 // streams (the applied view, its main block, the absence of an existing cell
 // format item, the Props size tag) and its refusal text is returned as the
@@ -610,8 +613,9 @@ bool make_assignment_edit(const PlanInput& plan, std::string_view source_path,
 // W36-1.1: Bold is a toggle, as Project's button is.  A view with no cell format
 // item builds Bold ON (`cell_bold_on` true); a view whose one item is the
 // measured Bold item of this cell (wave35-g3-font-bold-off's control) builds Bold
-// OFF (`cell_bold_on` false), which rewrites that item in place.  Every other
-// view that already carries an item is refused with the Bold ON reason.
+// OFF (`cell_bold_on` false), which rewrites that item in place.  Bold OFF is
+// measured on that one cell only (no held-out Bold off pair); every other view
+// that already carries an item is refused with the Bold ON reason.
 bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
                          std::uint32_t task_uid, std::uint32_t field_id,
                          StructuralEdit& out, std::string& error);
@@ -728,10 +732,27 @@ core::view::SortKey queued_sort_display_key(const StructuralEdit& edit);
 bool make_show_level_edit(const PlanInput& plan, std::string_view source_path, int level,
                           StructuralEdit& out, std::string& error);
 
-// The one cell Font Bold is measured for: Task Name of the task with
-// UniqueID 1 (core/mppwrite/viewstream_edit.h, wave30-textstyle).
+// The cell Font Bold OFF is measured for: Task Name of the task with UniqueID 1
+// (core/mppwrite/viewstream_edit.h, wave30-textstyle).  Bold ON (W36-1.2) is
+// measured on a Task Name cell of rows 1 and 2 and on the Start cell of row 1,
+// and the writer takes any row of the two columns; the Start column's stored
+// field key is StartText.
 inline constexpr std::uint32_t kBoldMeasuredTaskUid = 1;
 inline constexpr std::uint32_t kBoldMeasuredFieldId = 0x0B40000Eu;
+inline constexpr std::uint32_t kBoldMeasuredStartFieldId = 0x0B400505u;
+
+// The field key a sheet column stores a cell format under: the `214/CTable`
+// field id the column came from (SheetColumn::table_field), else its model field
+// (a hand-built column).  Both shells call this, so they cannot drift.
+inline std::uint32_t bold_cell_field_id(std::uint32_t table_field,
+                                        std::uint32_t model_field) noexcept {
+    return table_field != 0 ? table_field : model_field;
+}
+
+// What the shells call the cell in their message ("Task Name", "Start").
+inline std::string_view bold_cell_column_name(std::uint32_t field_id) noexcept {
+    return field_id == kBoldMeasuredStartFieldId ? "Start" : "Task Name";
+}
 
 // The Created stamp Project writes for a resource added now: the local date
 // and time as a packed date (day 0 is 1983-12-31, then seconds / 6).

@@ -224,6 +224,31 @@ What this settles:
   Var2Data, one in `Props14`, no mismatch).  No pair holds another Bold-off
   shape, so (b) of the lift rule has no held-out pair and the writer stays
   limited to this one measured shape.
+- **Bold on any task row and on the Start column (W36-1.2).**  The append
+  shape above is enabled for the Task Name cell and the Start cell
+  (`0x0b40000e`, `0x0b400505`) of any stored row uid (not 0, not the all-ones
+  sentinel), for Bold on only.  The rule is the structure the wave-30 pair
+  measured with the row uid and the field id substituted: (a) the entry's
+  builder and layout are in `trace-font-item-r6.md` (row +0, field +4, mask +10,
+  font word +40); (b) the held-out pairs are `wave35-g3-font-bold-row2` and
+  `wave35-g3-font-bold-start`, neither of which the structure was fitted to
+  (it came from the wave-30 pair), and the third Bold save, `wave35-g3-font-bold-range`,
+  which is a one-row Bold on row 2 and is not a range (see D-2); (c)
+  `roundtrip_viewstream` (`test_bold_cell_pairs`) and `app_edits_cell_bold`
+  save each control through the real writer and compare every stream with
+  Project's save under its null save: 6607 effect bytes for row 2, 6608 for
+  Start and 6607 for the one-row range, with no mismatch outside the one masked
+  byte.  **The mask is the font word's top byte (entry offset +43), by exact
+  field** (Var2Data block at 42576, item at 85272): Project stores `0x6b` (row 2)
+  and `0x00` (Start, range) there and the port pins `0x90`; the tests assert
+  both values and the port's `0x90`, then set Project's byte to the port's
+  before the stream comparison, so no other byte of the item is masked.  4(e)
+  (the COM read-back of the cell's `Font.Bold`) is the coordinator's and is not
+  claimed by these tests.  Not measured and still refused: Bold off anywhere
+  but (row 1, Name), the joint cell (row 2, Start) as a direct pair, and any
+  other column.  The app also refuses a task whose ID differs from its UniqueID:
+  every pair has the two equal, so none says which one the view stores, and a
+  collapsed, sorted or filtered view could separate them.
 - **Block digest.**  A control saved by another Project session differs from the
   wave-30 control at payload offset 42,678 (`0x18` -> `0x26`) and nowhere else
   in the block.  The byte is **not per-save noise** (W35b-3.5, R35G3-10): it is

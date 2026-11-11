@@ -602,19 +602,26 @@ void validate_edit(ViewCellStyleEdit const& edit, std::string const& function) {
     if (edit.field_id == 0) {
         throw Error(function + ": field id 0 is not a stored field");
     }
-    if (edit.uid != kMeasuredCellUid) {
+    if (edit.uid == 0xFFFFFFFFu) {
         throw Error(function + ": row uid " + std::to_string(edit.uid) +
-                    " is not the measured row uid (" +
-                    std::to_string(kMeasuredCellUid) +
-                    "); the pair formats one cell and every other row is "
-                    "unmeasured and refused");
+                    " is not a stored row");
     }
-    if (edit.field_id != kMeasuredCellFieldId) {
+    if (edit.field_id != kMeasuredCellFieldId &&
+        edit.field_id != kMeasuredStartFieldId) {
         throw Error(function + ": field id " + hex_u32(edit.field_id) +
-                    " is not the measured field id (" +
-                    hex_u32(kMeasuredCellFieldId) +
-                    ", the Task Name cell); every other field is unmeasured "
-                    "and refused");
+                    " is not a measured field id (" +
+                    hex_u32(kMeasuredCellFieldId) + ", the Task Name cell, or " +
+                    hex_u32(kMeasuredStartFieldId) +
+                    ", the Start cell); every other field is unmeasured and "
+                    "refused");
+    }
+    if (!edit.enabled &&
+        (edit.uid != kMeasuredCellUid || edit.field_id != kMeasuredCellFieldId)) {
+        throw Error(function + ": turning Bold off on row uid " +
+                    std::to_string(edit.uid) + ", field " + hex_u32(edit.field_id) +
+                    " is not measured; only the Task Name cell of row uid " +
+                    std::to_string(kMeasuredCellUid) + " is (no held-out Bold "
+                    "off pair)");
     }
     if (edit.attribute != ViewCellAttribute::bold) {
         throw Error(function + ": only Bold is measured; italic, underline, "
