@@ -947,7 +947,8 @@ add_test(NAME qt_outline_persist
                  "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-deep-level1-control.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}"
                  "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-level1.mpp"
-                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-level1-control-null.mpp")
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave35-viewstate-outline-level1-control-null.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave33-fat-slack.mpp")
 
 # ===========================================================================
 # WAVE 31 (G2, W31-2.2): Entire Project and Selected Tasks are fitted to the
