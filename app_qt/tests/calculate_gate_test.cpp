@@ -435,6 +435,31 @@ int main(int argc, char** argv) {
                 gate::check(!redo->isEnabled(),
                             "partial apply (trial): the redo list stays cleared");
             }
+
+            // W35g-1.6 (R35fG1-4): two fields commit (Name, then a valid Duration) and the
+            // Finish does not parse.  Each field is its own undo step, so the status must not
+            // say that Undo takes the apply back: one Ctrl+Z restores the Duration only.
+            {
+                msqt::TaskInformationValues third;
+                gate::check(window.task_information_values(&third),
+                            "partial apply (two fields): the values are readable");
+                third.name = "Third partial apply";
+                third.duration_text = "9d";
+                third.finish_text = "not a date";
+                gate::check(!window.apply_task_information(third, "task form"),
+                            "partial apply (two fields): the Finish fails");
+                gate::check(window.status_left_text().contains(QStringLiteral(
+                                "Name, Duration applied; Undo takes back one field per step")) &&
+                                !window.status_left_text().contains(
+                                    QStringLiteral("Undo takes it back")),
+                            "partial apply (two fields): the status counts the fields and "
+                            "says one Undo takes back one");
+                undo->trigger();
+                QApplication::processEvents();
+                gate::check(model->data(model->index(1, name_column)).toString() ==
+                                QStringLiteral("Third partial apply"),
+                            "partial apply (two fields): one Undo leaves the Name committed");
+            }
         }
     }
 
