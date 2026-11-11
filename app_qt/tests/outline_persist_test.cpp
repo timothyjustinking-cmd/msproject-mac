@@ -140,10 +140,10 @@ QAbstractButton* project_summary_box(msqt::MainWindow& window) {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     msqt::configure_application();
-    if (argc < 6) {
+    if (argc < 7) {
         std::fprintf(stderr,
                      "usage: qt_outline_persist_tests <five-task.mpp> <six-task.mpp> <out-dir> "
-                     "<project-result.mpp> <control-null-save.mpp>\n");
+                     "<project-result.mpp> <control-null-save.mpp> <fat-slack.mpp>\n");
         return 2;
     }
     const QString five = QString::fromLocal8Bit(argv[1]);
@@ -151,6 +151,7 @@ int main(int argc, char** argv) {
     const QString out_dir = QString::fromLocal8Bit(argv[3]);
     const std::string project_result = argv[4];
     const std::string null_save_path = argv[5];
+    const QString read_only_file = QString::fromLocal8Bit(argv[6]);
 
     msqt::MainWindow window;
     window.resize(msqt::kWindowWidth, msqt::kWindowHeight);
@@ -884,6 +885,31 @@ int main(int argc, char** argv) {
                         ("redo then " + label + ": Ctrl+Y re-queues the Level the display shows")
                             .c_str());
         }
+    }
+
+    // W35g-1.1 (R35fG0-5): the read-only case of W35f-0.1.  A read-only file shows a session Sort,
+    // and a Level chosen under it names the read-only reason, not the shown sort's refusal.  The
+    // read-only check must stay before the sort check in apply_outline_level.  The file is only
+    // opened and never saved.
+    {
+        core::view::SortDefinition by_name;
+        by_name.id = "app.sort";
+        by_name.name = "Name descending";
+        by_name.keys.push_back(core::view::SortKey{app::task_field_id("Name"), false});
+        gate::check(window.open_file(read_only_file, &error), "the read-only fixture opens");
+        QApplication::processEvents();
+        gate::check(status_contains(window, "saving is not supported yet"),
+                    "read-only: the status line names the read-only reason on opening");
+        window.apply_sort_choice(by_name, "Name descending", false);
+        QApplication::processEvents();
+        window.apply_outline_level(1);
+        QApplication::processEvents();
+        gate::check(window.pending_edits().empty(), "read-only: a Level under a Sort queues nothing");
+        gate::check(status_contains(window, "outline: level 1 (session only; saved by Project with "
+                                            "unreferenced sectors"),
+                    "read-only: the Level's note is the read-only reason");
+        gate::check(!status_contains(window, "so the level is not queued"),
+                    "read-only: the shown-sort refusal is not what the note says");
     }
 
     // W35b-3.4: Level 1 on the five-task control, saved through File > Save, is Project's own
