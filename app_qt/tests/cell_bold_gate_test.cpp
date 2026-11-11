@@ -26,10 +26,15 @@
 //     measured Bold item, wave35-g3-font-bold-off), the save writes that, and a
 //     third click on the reopened file queues nothing (the view stores a cell
 //     format item that is not Bold), so each write is visible to the reopened
-//     document.
+//     document;
+//   * W36-1b.4: B and I each queue, Undo withdraws the edit (a Save then writes
+//     nothing and the source is byte-equal), Redo restores it (the next Save is
+//     byte-equal to the direct save); Bold off is the same; and on a read-only
+//     file (wave33-fat-slack.mpp) B and I queue nothing and give the reason.
 //
-// Usage: qt_cell_bold_gate <wave30-textstyle-control.mpp> <out-dir>
+// Usage: qt_cell_bold_gate <wave30-textstyle-control.mpp> <wave33-fat-slack.mpp> <out-dir>
 #include <QAbstractButton>
+#include <QAction>
 #include <QApplication>
 
 #include <cstddef>
@@ -153,6 +158,18 @@ bool select_stored_cell(msqt::MainWindow& window, std::uint32_t uid, std::uint32
     return ok;
 }
 
+// Triggers an Edit-menu command (Undo or Redo); false when it is absent or disabled.
+bool trigger_edit(msqt::MainWindow& window, app::MenuAction id) {
+    QAction* action = gate::find_action(window, id);
+    if (action == nullptr || !action->isEnabled()) {
+        return false;
+    }
+    action->trigger();
+    QApplication::processEvents();
+    QApplication::processEvents();
+    return true;
+}
+
 std::vector<char> read_all(const QString& path) {
     std::ifstream in(path.toStdString(), std::ios::binary);
     return std::vector<char>((std::istreambuf_iterator<char>(in)),
@@ -164,12 +181,15 @@ std::vector<char> read_all(const QString& path) {
 int main(int argc, char** argv) {
     QApplication app(argc, argv);
     msqt::configure_application();
-    if (argc < 3) {
-        std::fprintf(stderr, "usage: qt_cell_bold_gate <textstyle-control.mpp> <out-dir>\n");
+    if (argc < 4) {
+        std::fprintf(stderr,
+                     "usage: qt_cell_bold_gate <textstyle-control.mpp> <wave33-fat-slack.mpp> "
+                     "<out-dir>\n");
         return 2;
     }
     const QString fixture = QString::fromLocal8Bit(argv[1]);
-    const QString out_dir = QString::fromLocal8Bit(argv[2]);
+    const QString slack_fixture = QString::fromLocal8Bit(argv[2]);
+    const QString out_dir = QString::fromLocal8Bit(argv[3]);
     gate::check(!app::unmeasured_paths_allowed_for_tests(),
                 "the shipped refusal default is on in this program");
     gate::check(std::filesystem::exists(fixture.toStdString()),
@@ -515,6 +535,135 @@ int main(int argc, char** argv) {
                         "the status line names the changed-view refusal");
         } else {
             gate::check(false, "the changed-view control opens");
+        }
+    }
+
+    // --- 4. W36-1b.4 (R36G1-6): Undo and Redo against Save, and a read-only file ----
+    // The model layer tests undo and redo of the queued font edits; this is the
+    // shell: B and I queue, Undo withdraws the edit so a Save has nothing to write and
+    // the source stays byte-equal, and Redo brings the edit back so the next Save
+    // writes the file the direct save wrote.  Bold OFF is the same through a reopened file.
+    {
+        struct UndoRedoCase {
+            const char* label;
+            const char* button;
+            const QString& source;
+            const QString& direct_save;
+            const char* undone_file;
+            const char* redone_file;
+        };
+        const UndoRedoCase cases[] = {
+            {"Bold", "B", copy, bolded, "/w36-bold-undone.mpp", "/w36-bold-redone.mpp"},
+            {"Italic", "I", copy, italicised, "/w36-italic-undone.mpp", "/w36-italic-redone.mpp"},
+            {"Bold off", "B", bolded, unbolded, "/w36-bold-off-undone.mpp",
+             "/w36-bold-off-redone.mpp"},
+        };
+        for (const UndoRedoCase& item : cases) {
+            const std::string label = item.label;
+            const QString undone = out_dir + QString::fromLatin1(item.undone_file);
+            const QString redone = out_dir + QString::fromLatin1(item.redone_file);
+            std::filesystem::remove(undone.toStdString(), file_error);
+            std::filesystem::remove(redone.toStdString(), file_error);
+            const std::vector<char> source_before = read_all(item.source);
+            msqt::MainWindow window;
+            window.resize(msqt::kParityWidth, 800);
+            QString error;
+            const bool opened = window.open_file(item.source, &error);
+            gate::check(opened, (label + " undo: the source opens").c_str());
+            if (!opened) {
+                return gate::finish();
+            }
+            window.show();
+            QApplication::processEvents();
+            gate::check(select_cell(window, measured_uid, name_field),
+                        (label + " undo: the measured cell can be selected").c_str());
+            gate::check(click_font(window, QString::fromLatin1(item.button)),
+                        (label + " undo: the button clicks").c_str());
+            gate::check(window.pending_edits().size() == 1,
+                        (label + " undo: one edit is queued").c_str());
+            gate::check(trigger_edit(window, app::MenuAction::undo),
+                        (label + " undo: Undo is live with the font edit queued").c_str());
+            gate::check(window.pending_edits().empty(),
+                        (label + " undo: Undo withdraws the queued edit").c_str());
+            gate::check(!window.document_dirty(),
+                        (label + " undo: the undone document is clean").c_str());
+            QString save_error;
+            // With the queue empty there is nothing to write: Save reports it, writes
+            // no file, and the source on disk is byte-for-byte what it was.
+            const bool saved_undone = window.save_document_path(undone, &save_error);
+            gate::check(saved_undone, (label + " undo: Save on the undone state succeeds").c_str());
+            gate::check(!std::filesystem::exists(undone.toStdString()),
+                        (label + " undo: Save writes no file after Undo").c_str());
+            gate::check(window.status_left_text().contains(QStringLiteral("nothing to save")),
+                        (label + " undo: the status line says there is nothing to save").c_str());
+            gate::check(read_all(item.source) == source_before,
+                        (label + " undo: the source file is byte-equal after Undo and Save").c_str());
+            gate::check(trigger_edit(window, app::MenuAction::redo),
+                        (label + " redo: Redo is live after the Undo").c_str());
+            gate::check(window.pending_edits().size() == 1,
+                        (label + " redo: Redo restores the queued edit").c_str());
+            gate::check(window.document_dirty(),
+                        (label + " redo: the redone document is dirty").c_str());
+            const bool saved_redone = window.save_document_path(redone, &save_error);
+            gate::check(saved_redone, (label + " redo: the redone state saves").c_str());
+            if (saved_redone) {
+                gate::check(read_all(redone) == read_all(item.direct_save),
+                            (label + " redo: Redo then Save is byte-equal to the direct save")
+                                .c_str());
+            } else {
+                std::fprintf(stderr, "note: save error: %s\n", save_error.toStdString().c_str());
+            }
+        }
+    }
+
+    // wave33-fat-slack.mpp opens read-only (unreferenced sectors): B and I refuse
+    // before any other check, queue nothing, and the status line gives the reason.
+    {
+        const std::string slack_reason =
+            "saved by Project with unreferenced sectors; saving is not supported yet";
+        gate::check(std::filesystem::exists(slack_fixture.toStdString()),
+                    "the committed fixture wave33-fat-slack.mpp is present");
+        const QString slack_copy = out_dir + QStringLiteral("/w36-font-read-only.mpp");
+        std::filesystem::copy_file(slack_fixture.toStdString(), slack_copy.toStdString(),
+                                   std::filesystem::copy_options::overwrite_existing, file_error);
+        gate::check(!file_error, "the read-only copy is written under the build tree");
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        const bool opened = !file_error && window.open_file(slack_copy, &error);
+        gate::check(opened, "the read-only file opens");
+        if (opened && window.sheet() != nullptr) {
+            window.show();
+            QApplication::processEvents();
+            gate::check(window.read_only_reason() == slack_reason,
+                        "the file is read-only for the session");
+            const std::size_t name_column =
+                window.sheet_table_model()->visible_column_for_field(name_field);
+            std::size_t task_row = core::sheet::kNoIndex;
+            for (std::size_t row = 0; row < window.sheet()->row_count(); ++row) {
+                if (window.sheet()->row_uid(row) != 0) {
+                    task_row = row;
+                    break;
+                }
+            }
+            gate::check(task_row != core::sheet::kNoIndex && name_column != core::sheet::kNoIndex &&
+                            window.sheet()->select_cell(task_row, name_column),
+                        "a task's Name cell can be selected on the read-only file");
+            window.refresh_menu_state();
+            QApplication::processEvents();
+            for (const char* const button : {"B", "I"}) {
+                const std::string label = std::string("read-only ") + button;
+                gate::check(click_font(window, QString::fromLatin1(button)),
+                            (label + ": the button clicks").c_str());
+                gate::check(window.pending_edits().empty(),
+                            (label + ": nothing is queued").c_str());
+                gate::check(!window.document_dirty(),
+                            (label + ": the document stays clean").c_str());
+                gate::check(window.status_left_text() == QString::fromStdString(slack_reason),
+                            (label + ": the status line gives the read-only reason").c_str());
+            }
+        } else {
+            gate::check(false, "the read-only file has a sheet");
         }
     }
     return gate::finish();

@@ -369,6 +369,7 @@ add_test(NAME qt_cell_bold_gate
          COMMAND ${CMAKE_COMMAND} -E env QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=1
                  $<TARGET_FILE:qt_cell_bold_gate_tests>
                  "${QT_TEST_DATA_DIR_CMAKE}/wave30-textstyle-control.mpp"
+                 "${QT_TEST_DATA_DIR_CMAKE}/wave33-fat-slack.mpp"
                  "${QT_TEST_OUT_DIR_CMAKE}")
 
 # Wave 34 (W34-4.6): Project > Properties > WBS > Define Code... is enabled for
