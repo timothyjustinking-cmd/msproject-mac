@@ -4,10 +4,14 @@
 `docs/START-HERE.md`, then the current wave.  Historical handoffs are
 kept for investigation; each is the record of its stream at that wave.
 
-## Now (9 November 2026)
+## Now (11 November 2026)
 
 | file | what |
 |---|---|
+| `wave36-brief.md` | **the wave-36 work order**: the writer wave, the trace's rules into the writers (G0 the gate and the records, G1 the font item, G2 Props, CLOSE; G3 not started) |
+| `wave36-complete.md` | **the wave-36 gate**: each group's marker, gate line, "Guards seen red", "Deferred" and "Found, not fixed" |
+| `history-waves34-35.md` | the wave 34 to 35g history moved out of START-HERE and `memory/coordinator.md` (W36-0.6): read only to investigate a decision |
+| `wave35g-verification/` | the wave 35g coordinator's gates, mutations, CI and reviews; the open queue after the merge is `coord-gates-close.md` |
 | `wave35-brief.md` | **the wave-35 work order**: G0 carry-over fixes, G1 the scheduler save path (Calculate Project), G2 view-state persistence, G3 the wave-34 deferrals, G4 the macOS shell, CLOSE |
 | `wave35-complete.md` | **the wave-35 gate**: G0-G4 and CLOSE with gates, the deferrals with their evidence, the open Highs; `WAVE-35-COMPLETE`; push, CI and the merge decision by the coordinator |
 | `wave35-verification/` | `gates-g0..g3.md` and `review-g0..g3.md` (the per-group verifier) and `close-review-writers.md` / `close-review-shells.md` (the CLOSE reviews of `wave34b..wave35`: **Highs open**, so a fix-only `wave35b` comes before any merge) |
