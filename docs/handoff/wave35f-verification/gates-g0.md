@@ -42,9 +42,9 @@ pair tests are inside the suites above).
 queued (a read-only file, Level 3 to 9, a file the builder refuses), which wave 31 shows for the
 session only, and its text was false for them. The `doc_.sort_active()` check is now on the queue
 branch of `apply_outline_level` only: the edit is built as before, and when it would queue under a
-shown session Sort the Level is shown for the session, nothing is built or pushed, and the note
-reads "session only; a session Sort is shown and File > Save would write the file's own order, so
-the level is not queued". A Level that could never queue keeps its own note. The message is a
+shown session Sort the Level is shown for the session, the edit is built but not pushed, and the
+note reads "session only; a session Sort is shown and File > Save would write the file's own order,
+so the level is not queued". A Level that could never queue keeps its own note. The message is a
 note, not an error (as the other session-only notes are); 35e's was an error.
 
 Tests (`qt_outline_persist`, six-task outline where the Sort stays session only): a Level 1 under
@@ -87,13 +87,16 @@ the stale "still open, one High" paragraph of `status-2026-11-10.md` is dated as
 
 ## Guards seen red
 
-- 0.1: the queue-branch `sort_active()` check (the parent's `main_window.cpp`), 3 FAILs in
-  `qt_outline_persist` (`build/w35f/0.1-red-run.log`).
+- 0.1: the narrowing against the parent's refusal (the parent's `main_window.cpp` has the broader
+  35e refusal and no queue-branch check), 3 FAILs (the note, the shown Level, Level 3) in
+  `qt_outline_persist` (`build/w35f/0.1-red-run.log`). This run does not show the new branch
+  turned off; that was seen red only by 0.3's mutation below.
 - 0.2: the `show_custom_fields` guard (the parent's `main_window.cpp`), 2 FAILs in
   `qt_calculate_gate` (`0.2-red-run.log`).
 - 0.3: the queue-branch check mutated so it cannot fire (`level < 0 && doc_.sort_active()`, then
   restored; a constant `false &&` is refused by MSVC's warnings as errors), 4 FAILs in the new
   block and 3 knock-on FAILs in the Undo-first block of `qt_sort_persist` (`0.3-red-run.log`).
+  This is the run that shows the queue-branch `sort_active()` check (0.1's branch) seen red.
 - 0.4: records; no guard.
 
 ## Deferred

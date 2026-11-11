@@ -20,11 +20,13 @@ none. 0.4 is records only (scans, fixtures and `git diff --check`, 0). The measu
 write and match with effects on.
 
 **Guards seen red:**
-- 0.1: the queue-branch `sort_active()` check, 3 FAILs in `qt_outline_persist`
-  (`build/w35f/0.1-red-run.log`).
+- 0.1: the narrowing against the parent's refusal, 3 FAILs in `qt_outline_persist`
+  (`build/w35f/0.1-red-run.log`); the parent has no queue-branch check, so this run does not show
+  that branch turned off.
 - 0.2: the `show_custom_fields` guard, 2 FAILs in `qt_calculate_gate` (`0.2-red-run.log`).
 - 0.3: the queue-branch check mutated so it cannot fire, 4 FAILs in the new `qt_sort_persist`
-  block and 3 knock-on FAILs (`0.3-red-run.log`).
+  block and 3 knock-on FAILs (`0.3-red-run.log`); this is where the queue-branch `sort_active()`
+  check was seen red.
 
 **Deferred:** nothing.
 
