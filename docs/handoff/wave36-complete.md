@@ -59,3 +59,61 @@ None.  Every G0 item is fixed.
 * **`python -I` cannot import `olefile`** here (it lives in the user site-packages), so the trace tests run without `-I`; they read only committed files.
 
 WAVE-36-G0-COMPLETE
+
+## G1: the font item
+
+### W36-1.4: the 4(e) read-back plan for the font item
+
+**Status: planned, not run.**  The builder uses no COM (brief section 1), so no method below has been tried.  Nothing here is a
+finding that a read-back exists; each method is a candidate with the result that would settle it.  The coordinator runs them in
+order and records, per method, the command and what came back, including a failure.
+
+**What is known.**  The wave 35g close record says "there is no COM read-back of cell font state: `FontBold` is setter-only"
+(`docs/handoff/wave35g-verification/coord-gates-close.md`).  That is the only method on record as failed, and it was a statement about
+`Application.FontBold` and `FontItalic`, not a survey of the object model.  The wave 35 oracle (`scripts/oracle_w35_g3.py`,
+`font_edit`) only selects the cell with `SelectTaskField(Row, Column, RowRelative=False)` and calls the setter.  Because of that,
+4(e) counted `cell-bold` as "not checked, vacuous because Project's reopen equals the control's": the facts it reads (tasks,
+dates, assignments) do not change when a font does.
+
+**Why this matters.**  Every font pair (`cell-bold`, `cell-bold-row2`, `cell-bold-start`, `cell-bold-range`, `cell-bold-off`,
+`cell-italic`) is currently checked only field by field against Project's own save.  4(e) is the one step that asks Project
+whether it reads the port's save as it reads its own, and it cannot while the read has no font in it.
+
+**Method A: enumerate the object model, then read a getter if one exists.**  With the Project COM server running in the neutral root:
+1. `ti = app._oleobj_.GetTypeInfo()`, then walk `ti.GetTypeAttr().cFuncs` with `GetFuncDesc` and `GetNames`; print every member
+   whose name contains `Font`, `Style`, `Bold` or `Italic`, with its `invkind` (1 = function, 2 = property get, 4 = put,
+   8 = putref).  Do the same for the `Task`, `Selection` (`app.ActiveSelection`), `View` and `Table` interfaces, and for
+   `app.ActiveProject.TextStyles` if the attribute exists.
+2. Record the list.  If any member is a property get (`invkind` 2) or a function that returns a font or style object, call it
+   after `SelectTaskField(Row=r, Column=c, RowRelative=False)` and read `.Bold`, `.Italic` (and `.Underline`).
+3. Positive control before any claim: open `wave35-g3-font-bold-row2-control.mpp` and `wave35-g3-font-bold-row2.mpp`, select
+   row 2, `Name`, and read the getter on each.  The method is usable only if the two reads differ (control not bold, Project's
+   save bold).  If they do not differ, or the getter raises, the method failed: record the exception text and stop on A.
+
+**Method B: read the formatting from the clipboard (no getter needed).**  `SelectTaskField(Row=r, Column=c, RowRelative=False)`,
+`app.EditCopy()`, then read the clipboard formats `HTML Format` and `Rich Text Format` (`win32clipboard`, after
+`RegisterClipboardFormat`).  Bold is `font-weight:bold` or `<b>` in the HTML, `\b` in the RTF; italic is `font-style:italic`
+or `<i>`, `\i`.  This uses the same HTML serialiser that `view-stream-214.md` notes reads the styles for export, so it is
+the most likely to carry the font.  Same positive control as A step 3.  It changes the clipboard: save and restore it, and run
+it in the neutral root.  If the copy carries no formatting at all (plain text only), the method failed: record the formats the
+clipboard held.
+
+**Method C: compare a rendered cell.**  Last resort, weaker because it is pixels and not a stored value.  If A step 1 lists
+`EditCopyPicture` (or a similar call), select the cell, copy a picture of the selected row, and compare the bitmaps of control,
+Project's save and the port's save.  Record the call signature found in step 1; do not guess it.
+
+**What 4(e) must then report, per font pair.**
+- A pair is **checked** only if the read-back of the edited cell on the control differs from the read-back on Project's save.
+  A pair whose reads are equal stays **not checked**, as `cell-bold` is today.
+- It **passes** if the read-back of the port's save equals Project's on the edited cell, and equals the control's on every other
+  cell of the first ten rows of the `Name` and `Start` columns (this catches a font written onto the wrong cell).
+- Pairs and files (all committed under `tests/data`): `wave30-textstyle` (row 1, Name, Bold), `wave35-g3-font-bold-row2`,
+  `wave35-g3-font-bold-start`, `wave35-g3-font-bold-range` (a one-row Bold on row 2, not a range: decision D-2),
+  `wave35-g3-font-bold-off` (the control is the Bold file, so the read-back must go from bold to not bold) and
+  `wave35-g3-font-italic`.  The report states checked and not-checked counts for these six, separately from the other pairs.
+- The port saves are built the way `reopen_4e.py` builds them for `cell-bold` (through `save_view_cell_style`'s cascade), not
+  by copying Project's file.
+
+**If A, B and C all fail.**  The coordinator records each command and its failure here.  4(e) then stays vacuous for the font
+item, the six pairs count as not checked, and the wave record says so in those words.  The font writers stay limited to their
+field-by-field pairs, which is what the lift rule already requires.
