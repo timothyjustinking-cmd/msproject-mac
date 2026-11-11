@@ -172,8 +172,9 @@ six font pairs (`cell-bold`, `cell-bold-row2`, `cell-bold-start`, `cell-bold-ran
 * **Italic has one pair.**  The writer is limited to Italic on, row uid 1, Task Name; Italic off, another cell and a second change are refused.
   A second Italic pair (another row, or a held-out cell) is what lifts it.
 * **Bold off is limited to (row 1, Name).**  No pair holds another Bold-off shape.
-* **The joint cell (row 2, Start) is unmeasured.**  The row pair and the column pair are separate; no pair crosses them.  The writer accepts it by
-  the rule, and no fixture tests it.
+* **The joint cell (row 2, Start) is unmeasured.**  The row pair and the column pair are separate; no pair crosses them.  ~~The writer accepts it by
+  the rule, and no fixture tests it.~~  Corrected by W36-1b.1 and W36-1b.2 (R36G1-2): the writer and the app now refuse it ("is not a measured
+  cell"; `test_bold_cell_pairs` and `app_edits_cell_bold` assert the refusal), and `spec/writers/view-stream-214.md` says the same.
 * **Row ID, UniqueID and the displayed row are not separated by any pair.**  Every pair has them equal, so the app refuses a task whose ID differs
   from its UniqueID, and the writer's row is the UniqueID.  A sorted, filtered or collapsed view could separate them.
 * **The font word's top byte (entry +43) is uninitialised in Project.**  The port pins `0x90`; the tests assert Project's value (`0x6b` or
