@@ -440,7 +440,10 @@ a document edit is pending. Sort and Show Level keep the session-only fallback i
 refusal (the display still changes; nothing is queued, and the note names the pending edit).
 Tested in qt_task_mode_document_edit_gate (Manually Schedule, both orders, the generic wording),
 qt_sort_persist and qt_outline_persist (both orders each). The refusals at the other five
-builder entries share one helper and are driven only through the Manually Schedule case.
+builder entries share one helper; W35g-1.8 (R35fG1-3) drives each beside a pending date format
+(qt_task_mode_document_edit_gate for Add Resources, Assign Resources, Font Bold and Define WBS
+Code, qt_resource_information_gate for Resource Information) and adds Custom Field Formula beside
+a queued Manually Schedule and a queued Sort.
 
 *The AppKit shell (W35f-1.10, R35eG2-3).* It had neither half of 2.6, and no record said so. It
 now mirrors both halves and the redo clear in `app/main.mm`: `tableDateFormat:` and

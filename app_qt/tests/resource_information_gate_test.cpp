@@ -26,8 +26,11 @@
 #include <QAbstractItemModel>
 #include <QAction>
 #include <QApplication>
+#include <QComboBox>
 #include <QModelIndex>
 #include <QTableView>
+#include <QTimer>
+#include <QVariant>
 
 #include <cstddef>
 #include <cstdint>
@@ -36,6 +39,7 @@
 #include <string>
 #include <system_error>
 
+#include "dialogs.h"
 #include "edit_model.h"
 #include "gate_util.h"
 #include "main_window.h"
@@ -327,6 +331,52 @@ int main(int argc, char** argv) {
         const app::ResourceRow* back = resource_by_uid(reopened.plan(), 2, nullptr);
         gate::check(back != nullptr && back->name == renamed.toStdString(),
                     "the reopened file carries the new name");
+    }
+
+    // --- 6. W35g-1.8 (R35fG1-3): beside a pending table / date format edit ---------------
+    // The shared pending-edit helper refuses Information with its own name, opens no prompt and
+    // queues nothing.  The date format is queued from the Task Sheet, then the view switches.
+    {
+        msqt::MainWindow other;
+        other.resize(msqt::kParityWidth, 800);
+        QString other_error;
+        gate::check(other.open_file(copy, &other_error), "the control reopens for the format case");
+        other.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+        QTimer::singleShot(0, []() {
+            auto* dialog =
+                dynamic_cast<msqt::TableDateFormatDialog*>(QApplication::activeModalWidget());
+            if (dialog == nullptr) {
+                return;
+            }
+            const int index = dialog->date_format_combo()->findData(QVariant(5));
+            if (index >= 0) {
+                dialog->date_format_combo()->setCurrentIndex(index);
+            }
+            dialog->accept();
+        });
+        trigger(other, app::MenuAction::table_date_format);
+        gate::check(other.document_dirty(), "a table / date format edit is pending");
+        trigger(other, app::MenuAction::view_resource_sheet);
+        QTableView* other_view = other.sheet_view();
+        QAbstractItemModel* other_model = other_view != nullptr ? other_view->model() : nullptr;
+        gate::check(other_model != nullptr && other_model->rowCount() > plan_index,
+                    "the Resource Sheet shows the resource's row (format case)");
+        if (other_model != nullptr && other_model->rowCount() > plan_index) {
+            other_view->setCurrentIndex(other_model->index(plan_index, name_column));
+            QApplication::processEvents();
+            Prompt prompt;
+            gate::check(click_information(other, &prompt, true, QStringLiteral("Anything")),
+                        "Information clicks beside a pending date format");
+            gate::check(!prompt.seen, "Information beside a pending date format opens no prompt");
+            gate::check(other.pending_edits().empty(),
+                        "Information beside a pending date format queues nothing");
+            gate::check(other.status_left_text().contains(QStringLiteral(
+                            "resource information: a table / date format or custom-field "
+                            "formula edit is pending")),
+                        "Information beside a pending date format: the status line names it");
+        }
     }
     return gate::finish();
 }

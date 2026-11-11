@@ -281,5 +281,102 @@ int main(int argc, char** argv) {
                         "formula edit beside it")),
                     "Formula... beside a queued mode edit: the status line names the refusal");
     }
+
+    // W35g-1.8 (R35fG1-3): Project > Custom Field Formula beside a queued exclusive edit other
+    // than Calculate Project (W35f-1.8 widened its check; the Calculate case has its own gate).
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control opens for Custom Field Formula");
+        window.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+        gate::check(click_manual(window, 1) && window.pending_edits().size() == 1,
+                    "Manually Schedule is queued for Custom Field Formula");
+        QAction* formula = gate::find_action(window, app::MenuAction::custom_field_formula);
+        gate::check(formula != nullptr && formula->isEnabled(),
+                    "Custom Field Formula is an enabled menu action");
+        if (formula != nullptr && formula->isEnabled()) {
+            bool dialog_seen = false;
+            QTimer::singleShot(0, [&dialog_seen]() {
+                if (QWidget* modal = QApplication::activeModalWidget()) {
+                    dialog_seen = true;
+                    modal->close();
+                }
+            });
+            formula->trigger();
+            QApplication::processEvents();
+            QApplication::processEvents();
+            gate::check(!dialog_seen, "Custom Field Formula beside a queued mode edit opens no "
+                                      "dialog");
+            gate::check(window.pending_edits().size() == 1,
+                        "Custom Field Formula beside a queued mode edit leaves it queued once");
+            gate::check(window.status_left_text().contains(QStringLiteral(
+                            "File > Save writes on its own, so it would refuse a custom-field "
+                            "formula edit beside it")),
+                        "Custom Field Formula beside a queued mode edit: the status line names "
+                        "it");
+        }
+    }
+
+    // W35g-1.8 (R35fG1-3): the shared pending-edit helper, driven through the Task Sheet entries
+    // that use it.  A pending date format first; each command is refused with its own name, opens
+    // no dialog and queues nothing.  (Manually Schedule is covered above, and Resource
+    // Information, which needs the Resource Sheet, in qt_resource_information_gate.)
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        gate::check(window.open_file(copy, &error), "the control opens for the helper loop");
+        window.show();
+        QApplication::processEvents();
+        QApplication::processEvents();
+        gate::check(queue_date_format(window, 5), "the date format is queued for the helper loop");
+        struct Entry {
+            app::MenuAction action;
+            const char* command;
+        };
+        const Entry entries[] = {{app::MenuAction::insert_resource, "add resources"},
+                                 {app::MenuAction::assign_resources, "assign resources"},
+                                 {app::MenuAction::font_bold, "Font Bold"},
+                                 {app::MenuAction::define_wbs_code, "Define WBS Code"}};
+        for (const Entry& entry : entries) {
+            const std::string label = entry.command;
+            select_task(window, 1);
+            QAction* action = gate::find_action(window, entry.action);
+            gate::check(action != nullptr && action->isEnabled(),
+                        (label + " is an enabled menu action").c_str());
+            if (action == nullptr || !action->isEnabled()) {
+                continue;
+            }
+            // A sentinel status first, so another row's refusal cannot satisfy this one.
+            window.apply_outline_level(0);
+            QApplication::processEvents();
+            gate::check(!window.status_left_text().contains(QString::fromLatin1(entry.command)),
+                        (label + ": the sentinel status holds no earlier refusal").c_str());
+            bool dialog_seen = false;
+            QTimer::singleShot(0, [&dialog_seen]() {
+                if (QWidget* modal = QApplication::activeModalWidget()) {
+                    dialog_seen = true;
+                    modal->close();
+                }
+            });
+            action->trigger();
+            QApplication::processEvents();
+            QApplication::processEvents();
+            gate::check(!dialog_seen,
+                        (label + " beside a pending date format opens no dialog").c_str());
+            gate::check(window.pending_edits().empty(),
+                        (label + " beside a pending date format queues nothing").c_str());
+            gate::check(window.status_left_text().contains(QString::fromLatin1(entry.command) +
+                                                           QStringLiteral(": a table / date "
+                                                                          "format or custom-field "
+                                                                          "formula edit is "
+                                                                          "pending")),
+                        (label + " beside a pending date format: the status line names it")
+                            .c_str());
+        }
+    }
     return gate::finish();
 }
