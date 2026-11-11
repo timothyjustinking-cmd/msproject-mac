@@ -199,10 +199,14 @@ int main(int argc, char** argv) {
         gate::check(!queue_date_format(window, 5),
                     "Table / Date Format does not open beside a queued level");
         gate::check(queued_level(window) != nullptr, "the queued level stays queued");
+        // W35g-1.5 (R35fG1-2): the advice is one the next change does not refuse again.
         gate::check(status_contains(window,
-                                    "a Show Level is queued and File > Save would write it, not "
-                                    "a table / date format edit"),
-                    "Table / Date Format beside a queued level: the status line names it");
+                                    "a Show Level is queued and File > Save would refuse a "
+                                    "table / date format edit beside it; choose All Subtasks or "
+                                    "undo the level first") &&
+                        !status_contains(window, "another level first"),
+                    "Table / Date Format beside a queued level: the status line names it and "
+                    "advises All Subtasks or Undo");
         window.apply_outline_level(0);
         QApplication::processEvents();
         gate::check(window.pending_edits().empty(), "the format case: the level is withdrawn");
