@@ -9,7 +9,9 @@ REFERENCE    the committed file the trace must reproduce (the pair's edited file
              committed null save for the null target)
 CONTROL, CONTROL_NULL
              the committed control and its committed null save; the bytes where these two
-             differ (same length only) are the control mask.
+             differ are the control mask.  It is built from an equal-length control and null
+             only, and is refused (line "mask-refused") when the reference's length differs
+             from the control's, except in a fixed-stride stream, which is masked per record.
 
 A byte of the traced save may differ from the reference only where
   1. the control mask covers it, or
@@ -218,11 +220,31 @@ def ceiling_for(name, nrec):
 
 
 def control_mask(name, ref_len, ctl, nul):
-    """The offsets where the control and its null save differ (equal-length control and null
-    only), applied to the reference by index."""
+    """The offsets of the REFERENCE where the control and its null save differ, or None when the
+    mask is refused.  A mask is built only from equal-length control and null.  When the
+    reference is the same length as the control the offsets map one to one.  When it is not,
+    only a fixed-stride stream is masked, record by record (a row the control does not have
+    is not masked); any other stream gets no mask (W36-0.2 / A-4)."""
     if ctl is None or nul is None or len(ctl) != len(nul):
         return None
-    return {i for i in range(len(ctl)) if ctl[i] != nul[i]}
+    if len(ctl) == ref_len:
+        return {i for i in range(ref_len) if ctl[i] != nul[i]}
+    stride = _stride(name)
+    if stride is None:
+        return None
+    base, size = stride
+    mask = set()
+    for i in range(min(base, len(ctl), ref_len)):
+        if ctl[i] != nul[i]:
+            mask.add(i)
+    nrec = (len(ctl) - base) // size
+    nref = (ref_len - base) // size
+    for r in range(min(nrec, nref)):
+        for k in range(size):
+            j = base + r * size + k
+            if ctl[j] != nul[j]:
+                mask.add(j)
+    return mask
 
 
 def compare(traced, ref, ctl, nul):
@@ -257,7 +279,10 @@ def compare(traced, ref, ctl, nul):
             continue
         checked += 1
         c, n = ctl.get(name), nul.get(name)
-        mask = control_mask(name, len(a), c, n) or set()
+        mask = control_mask(name, len(a), c, n)
+        if mask is None and c is not None and n is not None and len(c) == len(n) and len(c) != len(a):
+            lines.append("mask-refused %s control %d reference %d" % (name, len(c), len(a)))
+        mask = mask or set()
         meta = None
         if name.endswith("Var2Data"):
             meta_name = name[:-len("Var2Data")] + "VarMeta"
