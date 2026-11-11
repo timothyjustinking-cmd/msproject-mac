@@ -8,8 +8,9 @@ TRACED       the traced save (C:\\trace\\work\\<target>.mpp)
 REFERENCE    the committed file the trace must reproduce (the pair's edited file, or the
              committed null save for the null target)
 CONTROL, CONTROL_NULL
-             the committed control and its committed null save; the bytes where these two
-             differ are the control mask.  It is built from an equal-length control and null
+             the committed control and its committed null save.  An absent, unreadable or
+             control-identical CONTROL_NULL is a FAIL named "no null", never a pass (W36-0.3).
+             The bytes where these two differ are the control mask.  It is built from an equal-length control and null
              only, and is refused (line "mask-refused") when the reference's length differs
              from the control's, except in a fixed-stride stream, which is masked per record.
 
@@ -248,12 +249,15 @@ def control_mask(name, ref_len, ctl, nul):
 
 
 def compare(traced, ref, ctl, nul):
-    """-> (lines, problems, checked, not_checked).  The four dicts are stream name -> bytes."""
+    """-> (lines, problems, checked, not_checked).  The four dicts are stream name -> bytes;
+    `nul` is None when there is no usable control null, which is a FAIL named "no null"."""
     lines = []
     problems = 0
     checked = 0
     unchecked = 0
     names = sorted(set(traced) | set(ref))
+    if nul is None:
+        return ["no null"], 1, 0, len(names)
     for name in names:
         if name not in ref:
             lines.append("only-in-traced %s %d" % (name, len(traced[name])))
@@ -325,7 +329,14 @@ def main(argv):
     if olefile is None:
         print("trace_gate: install olefile (pip install olefile)")
         return 2
-    traced, ref, ctl, nul = (streams(p) for p in argv[1:])
+    traced, ref, ctl = (streams(p) for p in argv[1:4])
+    nul = None
+    try:
+        nul = streams(argv[4])
+    except (OSError, ValueError, AttributeError):
+        nul = None   # an absent or unreadable control null
+    if nul is not None and nul == ctl:
+        nul = None   # the control passed as its own null: no noise was measured
     lines, problems, checked, unchecked = compare(traced, ref, ctl, nul)
     names = set(traced) | set(ref)
     head = "%d streams, %d checked, %d problems" % (len(names), checked, problems)

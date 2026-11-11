@@ -9,7 +9,7 @@ if (Test-Path "C:\trace\work\$t.mpp") { Remove-Item "C:\trace\work\$t.mpp" -Forc
 try { if ($MidSave) { powershell -NoProfile -ExecutionPolicy Bypass -File C:\trace\cmd\trace-save6.ps1 -Target $t -MidSave | Out-Null } else { powershell -NoProfile -ExecutionPolicy Bypass -File C:\trace\cmd\trace-save6.ps1 -Target $t | Out-Null } } catch { Write-Host "CAPTURE FAILED $t $_" }
 if (-not (Test-Path "C:\trace\work\$t.mpp")) { "$t NOSAVE" | Out-File "C:\trace\out\$t.saved.txt" -Encoding ascii; Get-Content "C:\trace\out\$t.saved.txt"; return }
 $ctl = $i + $nm.Ctl + '.mpp'
-$nul = if ($nm.Null) { $i + $nm.Null + '.mpp' } else { $ctl }
+$nul = if ($nm.Null) { $i + $nm.Null + '.mpp' } else { 'C:\trace\in\NO-NULL.mpp' }   # an absent control null makes the gate FAIL "no null" (W36-0.3); never the control in its place
 & C:\trace\python\python.exe C:\trace\tools\trace_gate.py "C:\trace\work\$t.mpp" ($i + $nm.Ref + '.mpp') $ctl $nul | Out-File "C:\trace\out\$t.gate.txt" -Encoding ascii
 $gx = $LASTEXITCODE   # the gate's exit code: 0 is PASS, anything else is not (W36-0.1)
 "$t gate exit $gx" | Out-File "C:\trace\out\$t.gate.exit.txt" -Encoding ascii
