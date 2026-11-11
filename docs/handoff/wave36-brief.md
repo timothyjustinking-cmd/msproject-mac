@@ -73,6 +73,66 @@ Done when every guard is seen red then green, both quoted.  Marker `WAVE-36-G0-C
 
 **After G0, the coordinator:** re-gates all 109 recordings, plus the round 7 captures, with the committed gate inside the VM, and commits the gate texts.  Every FAIL becomes a finding with an id before G1's lifts are merged.
 
+**Group order after the G0 review (coordinator, Wed 11 Nov 2026).**  G0 and G1 ran first.  The G0 review
+found 1 Critical and 3 High in the gate, so the driver was stopped between groups and relaunched with
+G0b, G2 and CLOSE.  G0b runs before G2.
+
+### G0b: the gate, fixed (the G0 review's Critical and Highs, first)
+
+Source: `docs/handoff/wave36-verification/review-g0.md` (R36G0-1 to -11; every finding has a **Fix:**
+paragraph; read it before the item).  The review ran the gate with an unedited save posing as "traced" and the
+edit as the reference.  The gate PASSed 12 of 89 pairs that way, so the gate passes wrong files.  Nothing in
+G1 or G2 depends on the trace gate, but the merge does: no Critical or High may be open.
+
+**The design rule for every item here: a mask names a field, never a region.**
+- A noise mask is an exact (stream, record id or row uid, byte offset, length) taken from a decoded noise
+  source in the evidence: the `UuidCreateSequential` GUID counter bytes in the Fixed2Data rows; the creation
+  date-time words; the per-file Props identity records by record id; the path and user-name strings in
+  `CEdl` and `SummaryInformation`; and the font word's top byte at payload +43 of each `0x2240000c` item in
+  `214/CV_iew/Var2Data`.
+- No window spans a stream, a row or a record.
+- No size change is waived.  A size change is allowed only where a decoded variable-length noise field (a
+  path or user-name string) explains it exactly.
+- Ceilings copied from one null run are gone.
+
+Items:
+- **W36-0b.1 (R36G0-1):** remove the whole-stream window on `214/CV_iew/Var2Data`.  Mask only the font word's
+  top byte of each item, located by parsing the bag records (`trace-bold-r4.md`, `trace-font-item-r6.md`).
+  This also closes R36G0-6.
+- **W36-0b.2 (R36G0-2):** `214/CEdl/Var2Data`, `Props14` and `SummaryInformation` are compared field by field.
+  Path and user-name strings are masked as decoded fields, and any other byte or length change FAILs.
+- **W36-0b.3 (R36G0-3):** stream names match exactly, never by suffix.  `DocumentSummaryInformation` is
+  compared in full, because the port writes it.
+- **W36-0b.4 (R36G0-4):** remove the windows over Assn Fixed2Data +32..+42, the creation stamp of EXISTING
+  Task FixedData rows, and Props record 0x02401394.  Mask only what the evidence names as per-save noise,
+  quoting the note and line for each mask in a comment.  The trace notes are leaving the public repo (the operator's D-4): read them from `D:devmsproject-mac-traceevidence`, and cite them by file name only.
+- **W36-0b.5 (R36G0-5):** there are no single-run ceilings.  The acceptance tests below replace them.
+- **W36-0b.6 (R36G0-7):** settle the KVP reply-length check without the VM: build the guest's `Out-String`
+  reply shape in a unit test, then make `host.ps1` accept exactly that shape, trailing newline and CR
+  handling included.  The coordinator confirms it on the VM with one `vmx` call before the re-gate.
+- **W36-0b.7 (R36G0-8):** the flip test also FAILs when a window covers a whole stream, a row or a record.
+  Assert, for every stream class, that a flip at EVERY offset outside the named noise fields FAILs.
+  Sampling is not enough; the stream sizes are small enough to do every offset.
+- **W36-0b.8 (R36G0-9):** fixed-stride masks map rows by unique id, read from the row's uid field.  A row
+  missing on either side is a FAIL.
+- **W36-0b.9 (R36G0-10, R36G0-11):** correct the three overstated sentences, commit `gates-g0.md`, and
+  restore the standing-facts section (the writer inventory) into `history-waves34-35.md` verbatim.
+
+**Acceptance, in a committed ctest (`trace_gate_guards`):**
+- **Negative:** for EVERY committed pair in `tests/data` whose edit file differs from its control-null outside
+  `SummaryInformation`, the gate run with TRACED = the control-null and REFERENCE = the edit must exit
+  non-zero.  Report the count; none may PASS.
+- **Positive:** for every pair that has two independent saves of the same content, the gate must exit 0.
+  Wave 36's round 7 pairs give these: the control and its control-null are both saves of one file.  Run
+  with TRACED = the control-null and REFERENCE = the control.
+- Both counts go in the commit message and `gates-g0b.md`.  If the positive test cannot pass without
+  widening a mask beyond a named field, stop that item and record the field that is not decoded.  Do not
+  widen it.
+- CI has no `olefile`, so `trace_gate_guards` skips there.  Add `olefile` to the CI Python setup in
+  `ci.yml`, so the test runs in CI too.
+
+Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0b-COMPLETE`.
+
 ### G1: the font item (the pilot)
 
 Precondition: `trace-font-item-r6.md` is committed and answers "which bits, which instruction".  It is: `ad388e9`.
