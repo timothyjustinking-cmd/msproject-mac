@@ -795,6 +795,34 @@ void test_edit_refusals(TestContext& t) {
                 "Bold on row " + std::to_string(cell.first) + ", field " +
                     std::to_string(cell.second) + " refused");
     }
+    /* W36-1b.3 (R36G1-3): the writer checks the row itself, not only the app.  A
+     * file whose Task table has no row with the edit's UniqueID (here the row's
+     * UniqueID word is changed to one nothing uses) is refused, for Bold on and for
+     * Bold off, and the document is untouched. */
+    {
+        auto without_row_uid = [&](std::string const& name, std::uint32_t uid) {
+            CfbDocument doc = doc_from_data(name);
+            mppwrite::TaskTable table = mppwrite::TaskTable::from_document(doc);
+            table.set_u32(table.row_for_uid(uid), mppwrite::task_row::kUniqueId,
+                          9999u);
+            table.store_into(doc);
+            return doc;
+        };
+        ViewCellStyleEdit on = measured_edit();
+        refuses(without_row_uid(kControl, on.uid), {on},
+                "row uid 1 is not in the Task table",
+                "Bold on a row the Task table does not hold refused");
+        ViewCellStyleEdit second = measured_edit();
+        second.uid = 2;
+        refuses(without_row_uid(kControl, second.uid), {second},
+                "row uid 2 is not in the Task table",
+                "Bold on row 2 the Task table does not hold refused");
+        ViewCellStyleEdit off = measured_edit();
+        off.enabled = false;
+        refuses(without_row_uid("wave35-g3-font-bold-off-control.mpp", off.uid),
+                {off}, "row uid 1 is not in the Task table",
+                "Bold off a row the Task table does not hold refused");
+    }
     /* Round 7 pairs the writer does not reproduce, each "not lifted: needs <fact>":
      *  - font-second-cell: Bold on (row 2, Name) in a view that already holds the
      *    row 1 item.  Project stores ONE 88-byte item for both cells; the writer

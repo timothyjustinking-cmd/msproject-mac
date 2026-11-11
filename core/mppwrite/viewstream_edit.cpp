@@ -565,6 +565,22 @@ void require_measured_view(CfbDocument const& doc, ViewState const& state,
     }
 }
 
+/* W36-1b.3 (R36G1-3): the row the item names must be a row of the opened file's
+ * Task table, so a direct caller cannot save a format for a row that is not
+ * there.  Row 0 is the project row and is refused by validate_edit. */
+void require_task_row(CfbDocument const& doc, ViewCellStyleEdit const& edit,
+                      std::string const& function) {
+    TaskTable const tasks = TaskTable::from_document(doc);
+    for (std::size_t row = 1; row < tasks.rows(); ++row) {
+        if (tasks.uid(row) == edit.uid) {
+            return;
+        }
+    }
+    throw Error(function + ": row uid " + std::to_string(edit.uid) +
+                " is not in the Task table of the opened file; a cell format "
+                "written for a row that is not there would format nothing");
+}
+
 /* The measured 44-byte cell-format entry for the caller's cell, plus its item
  * header.  Every constant here is the one wave30-textstyle stores; the font
  * word is accepted only in the measured form. */
@@ -851,6 +867,7 @@ ViewCellStyleWrite save_view_cell_style(
     }
     ViewCellStyleEdit const& edit = edits.front();
     validate_edit(edit, function);
+    require_task_row(doc, edit, function);
     if (!edit.enabled) {
         return unbold_cell(doc, edit, path, dry_run, function);
     }

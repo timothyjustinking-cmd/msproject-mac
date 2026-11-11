@@ -88,6 +88,9 @@
  *                               row (uid 0) and the all-ones sentinel are refused
  *                               too, and no pair separates the row number from
  *                               the UniqueID (equal in every committed pair).
+ *   row exists       in Task    refused when no row of the opened file's Task
+ *                               table has the edit's UniqueID (W36-1b.3), for
+ *                               Bold on and Bold off alike.
  *   block state      no 0x2240000c item in the target block
  *   edits per save   exactly one
  *
