@@ -62,6 +62,26 @@ WAVE-36-G0-COMPLETE
 
 ## G1: the font item
 
+Items, one finding or item id per commit, in order:
+
+| item | commit | what |
+|---|---|---|
+| W36-1.1 | `baab011` | Bold off is wired: `make_cell_bold_edit` builds the writer's Bold off when the view's one item is the measured Bold item (a toggle, as Project's button is); both shells queue it |
+| W36-1.2 | `95e8195` | Bold on any stored task row and on the Start column; held-out pairs `wave35-g3-font-bold-row2` and `-start`; 6607 / 6608 effect bytes, no mismatch outside the font word's top byte, masked by exact field |
+| W36-1.3 | `893684f` | Italic for the one measured cell (row uid 1, Task Name, on); `font_italic` in both shells (Edit > Font Italic, no shortcut: Cmd+I is Insert Task) and the ribbon's I; 6607 effect bytes; **no held-out Italic pair, so (b) is not met and the writer stays limited to that one shape**; the pin and the backlog regenerated |
+| W36-1.4 | `64a185e` | the 4(e) read-back plan, below: **planned, not run** (the builder uses no COM) |
+| W36-1.5 (D-2) | `1fa7338` | `wave35-g3-font-bold-range` relabelled in `view-stream-214.md` and its evidence note as a one-row Bold, not a range; the fixture is untouched |
+| Underline, size, name, colour, range, combined attributes, a second change | none | **not started**, with the evidence in Deferred below |
+
+**Gate line.**  At `1fa7338`, trees `build/w35g-close-fresh` (core), `-app` and `-qt` (configured fresh at the wave 35g CLOSE, built
+incrementally here, not re-cloned): core build 0, `ctest -E plan_recalc -j4` 67/67 (this includes `engine_diff_harness`,
+`engine_diff_apply` and `engine_diff_suite`, the engine suite lane); `MPP_NO_CORPUS=1 ctest -R plan_recalc` 1/1; M2
+`recalc corpus/project_a.mpp --compare corpus/probe/project_a-recalc.mpp` overall 332 / 332 (the log's other two `overall` lines,
+268 / 268 and 64 / 64, are two subsets of the same 332 fields); `check_fixtures.py` 0; app build 0, ctest 34/34; Qt build 0, ctest 52/52
+(`build/w36/1fa7338-W36-G1-group-*`).  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0, `scan_client_names` 0,
+the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean, no CR; each commit carries both trailers.  `app/main.mm` is
+AppKit code and builds only on macOS, so it is gated by the CI job `macos-appkit`, not here; its edits mirror the Qt ones.
+
 ### W36-1.4: the 4(e) read-back plan for the font item
 
 **Status: planned, not run.**  The builder uses no COM (brief section 1), so no method below has been tried.  Nothing here is a
@@ -117,3 +137,54 @@ Project's save and the port's save.  Record the call signature found in step 1; 
 **If A, B and C all fail.**  The coordinator records each command and its failure here.  4(e) then stays vacuous for the font
 item, the six pairs count as not checked, and the wave record says so in those words.  The font writers stay limited to their
 field-by-field pairs, which is what the lift rule already requires.
+
+### Guards seen red
+
+Each red was run on the tree before the change, then the green on the new one.
+
+| item | red | green |
+|---|---|---|
+| 1.1 | `app_edits_cell_bold` on `53351b2`: "make_cell_bold_edit accepts the Bold item's cell", 406 checks passed, 1 failure (`build/w36/53351b2-W36-1.1-red.log`) | 720 checks passed (`-green.log`); app 34/34, Qt 52/52 |
+| 1.2 | core: "row uid 2 is not the measured row uid (1)"; app: 9 failures, 747 checks passed, among them "cell-bold-row2: make_cell_bold_edit accepts the measured cell" and "cell-bold-start: ..." (`build/w36/baab011-W36-1.2-red-*`) | core 67/67, app 34/34, Qt 52/52 with the row 2 and Start cells saved |
+| 1.3 | core: `mppwrite_roundtrip_viewstream` dies with "FAIL: unhandled exception: view cell style write: only Bold is measured; italic, underline, ..." (`build/w36/95e8195-W36-1.3-red-core-ctest.log`).  **App: red by a temporary probe, not by the old tree**: the italic builder was made to refuse, and `app_edits_cell_bold` failed with "cell-italic: make_cell_italic_edit accepts the measured cell" and four more, 5 failures, 1763 checks passed (`-red-app-*`); the probe was removed before the commit | core 67/67, app 34/34, Qt 52/52; the pair has 6607 effect bytes and 0 mismatches |
+| 1.3, Qt | after the I button was enabled, `qt_ribbon_inventory` failed ("tab 0 (Task) / Font / I: enabled state is the independent pin's") and `qt_command_backlog` failed ("PIN ENABLED but backlog disabled: Task / Font / I"): both pins were stale, which is the check working | pin and generated backlog updated; Qt 52/52 |
+
+### Deferred
+
+Each of these is **not started**, not a failed attempt: the lift rule's (b) or (a) has no pair or no trace to stand on, so there is nothing to
+build.  The evidence is a command run on the committed pairs, `python build/w36/dump_font_item.py tests/data/<pair>.mpp`
+(`build/w36/1fa7338-W36-1.6-underline-dump.log`), which prints the appended 44-byte item:
+
+| item | what the committed pair holds | why it is not started |
+|---|---|---|
+| Underline | `wave35-g3-font-underline`: words `00000001 0b40000e 04000003`, zeros at +12 and +24, 0 at +36, font word `000000ca` | The pair is the `Font32Ex` shape, not the toolbar path's (`ff000000` at +12 and +24, 1 at +36, font word `…02`, as the italic pair `02000003 ff000000 … 00000001 6b000004` shows).  A writer built to the toolbar shape could not match this pair, and no toolbar-path Underline pair exists, so there is no pair to derive from and none held out.  The toolbar `FontUnderline(True)` call raised a Python `TypeError` in wave 35 (a harness error, not a Project statement) and has not been re-measured |
+| Size, name | `font-size` and `font-name` differ from each other only in the top (noise) byte of the font word: `…00000006 … 6b0000d8` against `…00000006 … 340000d8` | The storage of font size and name is not located (`trace-font-item-r6.md`): the item carries neither, so a writer has nowhere to put them |
+| Colour | `wave35-g3-font-colour`: `00000003 000000ff … d70000c8` | waits on the open bits 0x40 and 0x80 of the font word (`trace-font-item-r6.md`), and the pair is `Font32Ex` shaped |
+| Range | `wave35-g3-font-bold-range` holds one 44-byte item for row 2, so it is a one-row Bold (D-2) | the missing pair is a Bold (or Italic) saved with `ActiveSelection.Tasks.Count == 2` confirmed before the call; no capture round 7 font pair is committed under `tests/data` (listed at `1fa7338`: only the `wave30-textstyle` and `wave35-g3-font-*` files) |
+| Combined attributes | none | the missing pair is two attributes on one cell (for example Bold then Italic) saved once |
+| A second change to a cell | none | the missing pair is two font edits on one cell, or a font edit on a cell of a view that already stores a cell format; the writer refuses a view that already carries one (except the measured Bold off) |
+
+The 1.4 read-back is **planned, not run**: the section above is the coordinator's to run, and until it does 4(e) is vacuous for the
+six font pairs (`cell-bold`, `cell-bold-row2`, `cell-bold-start`, `cell-bold-range`, `cell-bold-off` and `cell-italic`).
+
+### Found, not fixed
+
+* **Italic has one pair.**  The writer is limited to Italic on, row uid 1, Task Name; Italic off, another cell and a second change are refused.
+  A second Italic pair (another row, or a held-out cell) is what lifts it.
+* **Bold off is limited to (row 1, Name).**  No pair holds another Bold-off shape.
+* **The joint cell (row 2, Start) is unmeasured.**  The row pair and the column pair are separate; no pair crosses them.  The writer accepts it by
+  the rule, and no fixture tests it.
+* **Row ID, UniqueID and the displayed row are not separated by any pair.**  Every pair has them equal, so the app refuses a task whose ID differs
+  from its UniqueID, and the writer's row is the UniqueID.  A sorted, filtered or collapsed view could separate them.
+* **The font word's top byte (entry +43) is uninitialised in Project.**  The port pins `0x90`; the tests assert Project's value (`0x6b` or
+  `0x00` by session) and the port's, then mask that one byte by exact field (record id and offset), never by stream name.
+* **The sheet does not paint the stored font.**  This is the W34-4.5 record's finding and was not re-checked in G1: Bold and Italic are written
+  and read back by the port's own reader, and the sheet is not claimed to show bold or italic text.
+* **`app/main.mm` is CI-gated only** (`macos-appkit`); the three font edits there were not built on this machine.
+* **The backlog's Font Bold gap text was stale** from W36-1.2 until 1.3, which regenerated it.
+* **The pair-anatomy note for `wave35-g3-font-bold-range` carries a hand-added paragraph** (1.5); regenerating the note with `scripts/pair_anatomy.py`
+  drops it.  The correction in `view-stream-214.md` stays.
+* **The fresh-tree gates are the wave 35g CLOSE trees built incrementally**, not a re-clone; the coordinator's verify-worktree gates follow the marker.
+* **Gate scripts** (`build/w36/*.sh`, git-ignored) are the builder's; they are named in each commit message by log path only.
+
+WAVE-36-G1-COMPLETE
