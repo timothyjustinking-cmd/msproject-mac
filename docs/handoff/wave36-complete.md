@@ -102,8 +102,12 @@ whether it reads the port's save as it reads its own, and it cannot while the re
 **Method A: enumerate the object model, then read a getter if one exists.**  With the Project COM server running in the neutral root:
 1. `ti = app._oleobj_.GetTypeInfo()`, then walk `ti.GetTypeAttr().cFuncs` with `GetFuncDesc` and `GetNames`; print every member
    whose name contains `Font`, `Style`, `Bold` or `Italic`, with its `invkind` (1 = function, 2 = property get, 4 = put,
-   8 = putref).  Do the same for the `Task`, `Selection` (`app.ActiveSelection`), `View` and `Table` interfaces, and for
-   `app.ActiveProject.TextStyles` if the attribute exists.
+   8 = putref).  Do the same for the `Task`, `Selection` (`app.ActiveSelection`), `View` and `Table` interfaces, for
+   `app.ActiveProject.TextStyles` if the attribute exists, and for `app.ActiveCell` and its `Cell` interface (W36-1b,
+   R36G1-4).  `Cell` is where Project's object model keeps per-cell formatting, so it is the most direct candidate and is
+   walked before Method B.  Whether `Cell` has a Bold or Italic getter in Project 2021 is UNVERIFIED: this line adds the
+   interface to the enumeration and claims nothing about its members.  `app.ActiveCell` needs a cell selected
+   (`SelectTaskField` as in step 2); if it raises with a selection made, record the exception text.
 2. Record the list.  If any member is a property get (`invkind` 2) or a function that returns a font or style object, call it
    after `SelectTaskField(Row=r, Column=c, RowRelative=False)` and read `.Bold`, `.Italic` (and `.Underline`).
 3. Positive control before any claim: open `wave35-g3-font-bold-row2-control.mpp` and `wave35-g3-font-bold-row2.mpp`, select
