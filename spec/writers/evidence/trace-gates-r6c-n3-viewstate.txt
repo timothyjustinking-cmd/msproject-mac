@@ -1,0 +1,345 @@
+Round 6c N-3: wave35-viewstate re-gate with the committed tools/trace/trace_gate.py (sha256 f8261162...1692, hash-checked in the VM).
+TRACED = the VM's saved copy (C:\trace\work\<t>.mpp), REFERENCE = committed edited file, CONTROL = committed control, CONTROL_NULL = committed -control-null. No waiver, no gs6. Raw text and exit code only; no verdict recorded.
+
+=== wave35-viewstate-outline-all | exit code 1 | KVP sha OK A318F5092A42
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 143
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 554->538
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 22
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 594->512
+sha256 00ae4f24a29370a21442c66285403ed494f99e5323fac50a154a28f131991c53
+EXIT 1
+INPUTS traced 223BC8E7 ref EEB61D10 ctl 1EF56EC6 null E0D70A05
+
+=== wave35-viewstate-outline-deep-level1 | exit code 1 | KVP sha OK 54A916BB4DFE
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 169
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 546->530
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 22
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 610->528
+sha256 81512fe47f732a3daf6193ed273e49952fde460b52191d96a0919991362f068c
+EXIT 1
+INPUTS traced 34703A52 ref 0033075E ctl 57F34F48 null 9326F007
+
+=== wave35-viewstate-outline-deep-level2 | exit code 1 | KVP sha OK A2573D8A0904
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 169
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 562->546
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 20
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 610->528
+sha256 961cd1a16c4b72becf0ccab160cb1e61104c6c77390045f3249ae86be8801af7
+EXIT 1
+INPUTS traced 574E1D70 ref 1353CAA7 ctl 9C858EBF null A02436AE
+
+=== wave35-viewstate-outline-level1 | exit code 1 | KVP sha OK 8197D27B1193
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 143
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 506->528
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 23
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 600->518
+sha256 491fe4d1b6a9ede807321c87265a9f4e0cb9db7d15724a045fda99208ca5e8f3
+EXIT 1
+INPUTS traced 5171F093 ref B5037B1B ctl 75B319AC null A7BB9B68
+
+=== wave35-viewstate-outline-level2 | exit code 1 | KVP sha OK 72805DA058A4
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 24
+bytes-differ ???114/TBkndAssn/Fixed2Data 80
+bytes-differ ???114/TBkndCal/Fixed2Data 10
+bytes-differ ???114/TBkndTask/Fixed2Data 110
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 560->544
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 17
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 600->518
+sha256 3be7690ad43390705354bc4f17ed0c55ad37bec337e8c7f2bd57db27cf6198da
+EXIT 1
+INPUTS traced E5FD7624 ref 689510CD ctl EDA2BE6F null 029621B8
+
+=== wave35-viewstate-sort-duration-desc | exit code 1 | KVP sha OK 67D63A754291
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 96
+bytes-differ ???114/TBkndCal/Fixed2Data 12
+bytes-differ ???114/TBkndTask/Fixed2Data 132
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 568->552
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 21
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 608->526
+sha256 d2c781eff2f232fcbb7c95dbf6bac300dbca60ff5e980c6037b3f8136e5b46ae
+EXIT 1
+INPUTS traced F61FA055 ref 725A211D ctl 09772916 null A517B46C
+
+=== wave35-viewstate-sort-flat-name-desc | exit code 1 | KVP sha OK 6144BBD6ED20
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 96
+bytes-differ ???114/TBkndCal/Fixed2Data 12
+bytes-differ ???114/TBkndTask/Fixed2Data 132
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 570->554
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 5
+bytes-differ ???214/Props 20
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 610->528
+sha256 d31f5b1f5f4c29b9fcdab1ae7a22a5e4292710c22e7e362f318dcaac2d755ed9
+EXIT 1
+INPUTS traced 522A64FE ref 68CC7954 ctl 896234F2 null 278F89C2
+
+=== wave35-viewstate-sort-name-asc | exit code 1 | KVP sha OK 60D17894C2CD
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 96
+bytes-differ ???114/TBkndCal/Fixed2Data 12
+bytes-differ ???114/TBkndTask/Fixed2Data 132
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 558->542
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 21
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 598->516
+sha256 15ec51b5420297b6d4ac74a86d4fc0ed9de0023fce9089eafd277e1694c509dd
+EXIT 1
+INPUTS traced BD8FACEF ref 440168CB ctl 3F19CFDE null B85A3FA8
+
+=== wave35-viewstate-sort-name-desc | exit code 1 | KVP sha OK 881F2E461F86
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 143
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 514->544
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 21
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 600->518
+sha256 100d6ce7770cbbac6e9a5c1e5c3e6514b691ab8cebf976af576c254c5a18c63a
+EXIT 1
+INPUTS traced 7F92AFDA ref 2473BAFB ctl E901ECAD null 0DC1D465
+
+=== wave35-viewstate-sort-two-keys | exit code 1 | KVP sha OK AAE83A025734
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 143
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 558->542
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 22
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 598->516
+sha256 1850149a40cb07ed61f58fbdf6d7f1f8c955a22b5b8b35cd86216e00873bcbdd
+EXIT 1
+INPUTS traced 347C6925 ref 79DCF0B4 ctl 2AB28E72 null FEE481AF
+
+=== wave35-viewstate-table-cost | exit code 1 | KVP sha OK E1ECFD38979B
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 143
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 504->534
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 27
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 23
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 592->510
+sha256 c141896d4be2488392a6807af18faaca44d32d6f84c5e201da09f9c207addfe5
+EXIT 1
+INPUTS traced EE2436A5 ref F29B4384 ctl 23C950CE null 1A10CB0E
+
+=== wave35-viewstate-table-schedule | exit code 1 | KVP sha OK 43BEE6018A90
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 80
+bytes-differ ???114/TBkndCal/Fixed2Data 10
+bytes-differ ???114/TBkndTask/Fixed2Data 110
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 566->550
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 24
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 18
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 600->518
+sha256 489335c31cb19722f7724430b5ed4aaafb28bf9715f2c7a56289dbb3107455f4
+EXIT 1
+INPUTS traced 1501D986 ref 47DB52EB ctl 1A4FABE7 null 256A0350
+
+=== wave35-viewstate-zoom-custom | exit code 1 | KVP sha OK E8B41ABE05F8
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 96
+bytes-differ ???114/TBkndCal/Fixed2Data 12
+bytes-differ ???114/TBkndTask/Fixed2Data 132
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 554->538
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 8
+bytes-differ ???214/Props 21
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 594->512
+sha256 7d2fb3ff2bd3cdbf790c0b779200f3309d1a9eb9fcf050320688c3b2f4c209b0
+EXIT 1
+INPUTS traced 126DEE1B ref 02437C5F ctl AAD57DD5 null CFE5C279
+
+=== wave35-viewstate-zoom-custom-10d | exit code 1 | KVP sha OK EFE4880C9BFF
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 80
+bytes-differ ???114/TBkndCal/Fixed2Data 10
+bytes-differ ???114/TBkndTask/Fixed2Data 110
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 562->546
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 8
+bytes-differ ???214/Props 17
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 602->520
+sha256 2d557ed53ff2ba42708264e17d4560d2d3519c8874311f9266bb733715da472f
+EXIT 1
+INPUTS traced 419F688D ref 8BB97314 ctl 398840AD null 68593B3F
+
+=== wave35-viewstate-zoom-custom-narrow | exit code 1 | KVP sha OK F05D9244E25C
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 96
+bytes-differ ???114/TBkndCal/Fixed2Data 12
+bytes-differ ???114/TBkndTask/Fixed2Data 132
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 568->544
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 7
+bytes-differ ???214/Props 20
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 608->526
+sha256 f851096de9952ea25e397c8faad27132820167dd20f2a2f243666e635ecffc9a
+EXIT 1
+INPUTS traced 61DA1F64 ref 4B69F745 ctl 36D57377 null 43090F74
+
+=== wave35-viewstate-zoom-entire | exit code 1 | KVP sha OK 0ACFEEA888C9
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 80
+bytes-differ ???114/TBkndCal/Fixed2Data 10
+bytes-differ ???114/TBkndTask/Fixed2Data 110
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 554->530
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 6
+bytes-differ ???214/Props 17
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 594->512
+sha256 f1ad5377fb7eb80171cda728b1dda8ef520972057a211fe631f2fdb16161ff75
+EXIT 1
+INPUTS traced 9463F756 ref 98A91E6D ctl 3DD9599B null 64F59D83
+
+=== wave35-viewstate-zoom-reset | exit code 1 | KVP sha OK FFF49FA3DEEC
+96 streams, 93 checked, 12 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 80
+bytes-differ ???114/TBkndCal/Fixed2Data 10
+bytes-differ ???114/TBkndTask/Fixed2Data 110
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 552->528
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 7
+bytes-differ ???214/Props 16
+size-differs ?SummaryInformation 296->288
+noise-whole Props14 592->510
+sha256 2cc0041c20dc5ddd533aa7e8eece247d824d563c79fdf4359a39ed7b1304fc30
+EXIT 1
+INPUTS traced 13F28562 ref C69D3671 ctl 6A536AE8 null 87DEB891
+

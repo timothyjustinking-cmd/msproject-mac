@@ -1,0 +1,451 @@
+Round 6c N-6: raw stored gate texts, read from C:\trace\out\<target>.gate.txt in the VM through the hash-checked KVP channel (no regeneration, no re-gate).
+These are the gates runone6.ps1 ran at capture time (the gate tool of that run); runone6 stored only the text, not the exit code, so the exit code is 'not stored'. Where the gate's own sha256 line matches the text above it the header says own-sha ok. No verdict recorded.
+
+=== wave35-g3-font-bold-row2 | group 1 (wave35-g3) | exit code not stored | KVP sha OK 60CAFD6EBCD4 | FILE size 710 mtime 2026-11-11 03:30:55 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 60
+bytes-differ ???114/TBkndCal/Fixed2Data 30
+bytes-differ ???114/TBkndRsc/Fixed2Data 20
+bytes-differ ???114/TBkndTask/Fixed2Data 70
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 520->518
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 16
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 572->504
+sha256 10a4e7e1a4f98578a03821bd118717bd8012fce813b669797d7223c1c57ff5ec
+
+=== wave35-g3-font-bold-start | group 1 (wave35-g3) | exit code not stored | KVP sha OK 1D0D348FB415 | FILE size 710 mtime 2026-11-11 03:32:32 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 78
+bytes-differ ???114/TBkndCal/Fixed2Data 39
+bytes-differ ???114/TBkndRsc/Fixed2Data 26
+bytes-differ ???114/TBkndTask/Fixed2Data 91
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 522->520
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 22
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 574->506
+sha256 ecc103d371422af51c8a1eab63933a9c444a23e3edd48afadc2900b0cb98c22f
+
+=== wave35-g3-font-bold-range | group 1 (wave35-g3) | exit code not stored | KVP sha OK D5E0FAD93A77 | FILE size 761 mtime 2026-11-11 03:47:39 | own-sha ok
+96 streams, 92 checked, 14 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 78
+bytes-differ ???114/TBkndCal/Fixed2Data 39
+bytes-differ ???114/TBkndRsc/Fixed2Data 26
+bytes-differ ???114/TBkndTask/Fixed2Data 91
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 522->520
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+size-differs ???214/CV_iew/Var2Data 100234->100278
+bytes-differ ???214/CV_iew/VarMeta 6
+bytes-differ ???214/Props 23
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 574->506
+sha256 26cbe94f9f67922102ec175f17a7b1e3482f882d92290676ae2120ebd08710e6
+
+=== wave35-g3-font-bold-off | group 1 (wave35-g3) | exit code not stored | KVP sha OK 0450E64640D3 | FILE size 710 mtime 2026-11-11 04:33:29 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 72
+bytes-differ ???114/TBkndCal/Fixed2Data 36
+bytes-differ ???114/TBkndRsc/Fixed2Data 24
+bytes-differ ???114/TBkndTask/Fixed2Data 84
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 518->516
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 20
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 570->502
+sha256 eeaec966871ec4bfd2bc574af9490f1f1e16f0b35b0fa402f57fdf1b8abbae83
+
+=== wave35-g3-font-italic | group 1 (wave35-g3) | exit code not stored | KVP sha OK 4C0D98933B12 | FILE size 710 mtime 2026-11-11 04:34:53 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 60
+bytes-differ ???114/TBkndCal/Fixed2Data 30
+bytes-differ ???114/TBkndRsc/Fixed2Data 20
+bytes-differ ???114/TBkndTask/Fixed2Data 70
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 514->512
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 16
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 566->498
+sha256 d05e91a1a795554353fb5eda2d41a1f19a4f0c7a2dafd45d780dc637cc5da065
+
+=== wave35-g3-font-underline | group 1 (wave35-g3) | exit code not stored | KVP sha OK 706C8B966EA9 | FILE size 710 mtime 2026-11-11 04:36:18 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 60
+bytes-differ ???114/TBkndCal/Fixed2Data 30
+bytes-differ ???114/TBkndRsc/Fixed2Data 20
+bytes-differ ???114/TBkndTask/Fixed2Data 70
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 520->518
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 16
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 572->504
+sha256 10a4e7e1a4f98578a03821bd118717bd8012fce813b669797d7223c1c57ff5ec
+
+=== wave35-g3-font-size | group 1 (wave35-g3) | exit code not stored | KVP sha OK 3BFA9BCB5E57 | FILE size 710 mtime 2026-11-11 03:28:30 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 78
+bytes-differ ???114/TBkndCal/Fixed2Data 39
+bytes-differ ???114/TBkndRsc/Fixed2Data 26
+bytes-differ ???114/TBkndTask/Fixed2Data 91
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 510->508
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 22
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 562->494
+sha256 94f950a8643b0335084a01eb9905dfb38367da4d79f7259aa8addd940191c4c5
+
+=== wave35-g3-font-name | group 1 (wave35-g3) | exit code not stored | KVP sha OK 972544A00AFB | FILE size 710 mtime 2026-11-11 04:37:54 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 72
+bytes-differ ???114/TBkndCal/Fixed2Data 36
+bytes-differ ???114/TBkndRsc/Fixed2Data 24
+bytes-differ ???114/TBkndTask/Fixed2Data 84
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 510->508
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 21
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 562->494
+sha256 45a492d95ccb2e466703202c2f415cd94b5afc17765df5c74cb552d66a59983a
+
+=== wave35-g3-font-colour | group 1 (wave35-g3) | exit code not stored | KVP sha OK 72F2093ABDAF | FILE size 710 mtime 2026-11-11 04:39:23 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 60
+bytes-differ ???114/TBkndCal/Fixed2Data 30
+bytes-differ ???114/TBkndRsc/Fixed2Data 20
+bytes-differ ???114/TBkndTask/Fixed2Data 70
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 514->512
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 17
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 566->498
+sha256 0382bae695d3b22415f0bab0af9de23e0cc5fa829f80acf1f3322a4fa82cd322
+
+=== wave35-g3-insert-milestone-nested | group 1 (wave35-g3) | exit code not stored | KVP sha OK 85454145F006 | FILE size 789 mtime 2026-11-11 04:41:11 | own-sha ok
+96 streams, 93 checked, 15 problems
+bytes-differ ???114/Props 32
+bytes-differ ???114/TBkndAssn/Fixed2Data 132
+bytes-differ ???114/TBkndAssn/Var2Data 3
+bytes-differ ???114/TBkndCal/Fixed2Data 13
+bytes-differ ???114/TBkndTask/Fixed2Data 197
+bytes-differ ???114/TBkndTask/FixedData 3
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 508->560
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 23
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 590->522
+sha256 be5de83dfeb25c99299fee9706bae16d3424d072a61ff9baa342be17cf8c0c6f
+
+=== wave35-g3-insert-milestone-first | group 1 (wave35-g3) | exit code not stored | KVP sha OK 9F5D54AEAFFF | FILE size 789 mtime 2026-11-11 04:42:52 | own-sha ok
+96 streams, 93 checked, 15 problems
+bytes-differ ???114/Props 26
+bytes-differ ???114/TBkndAssn/Fixed2Data 108
+bytes-differ ???114/TBkndAssn/Var2Data 3
+bytes-differ ???114/TBkndCal/Fixed2Data 10
+bytes-differ ???114/TBkndTask/Fixed2Data 158
+bytes-differ ???114/TBkndTask/FixedData 3
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 506->558
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 19
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 588->520
+sha256 a292553d506ae2880368f77082ad59fb5b0aa2cfd22085d7e04a77ec15b155b7
+
+=== wave35-g3-insert-milestone-last | group 1 (wave35-g3) | exit code not stored | KVP sha OK 9D6481CBD42D | FILE size 789 mtime 2026-11-11 04:44:26 | own-sha ok
+96 streams, 93 checked, 15 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 124
+bytes-differ ???114/TBkndAssn/Var2Data 3
+bytes-differ ???114/TBkndCal/Fixed2Data 12
+bytes-differ ???114/TBkndTask/Fixed2Data 184
+bytes-differ ???114/TBkndTask/FixedData 3
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 504->556
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 22
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 586->518
+sha256 8ed106915e62a7fd0644e8e73cdc6365f1b5fbffbe77181dc9cad940c5cebfe5
+
+=== wave35-g3-insert-summary-nested | group 1 (wave35-g3) | exit code not stored | KVP sha OK EF1F59BFEC0E | FILE size 746 mtime 2026-11-11 04:46:01 | own-sha ok
+96 streams, 93 checked, 14 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 96
+bytes-differ ???114/TBkndCal/Fixed2Data 12
+bytes-differ ???114/TBkndTask/Fixed2Data 184
+bytes-differ ???114/TBkndTask/FixedData 3
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 504->556
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 21
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 586->518
+sha256 4f812993a02ae1cacd481578860f56c28ebe33a117051a9f1d704b9ee0e63785
+
+=== wave35-g3-baseline-set-nested | group 1 (wave35-g3) | exit code not stored | KVP sha OK 6311E24B232E | FILE size 790 mtime 2026-11-11 04:48:12 | own-sha ok
+96 streams, 93 checked, 15 problems
+bytes-differ ???114/Props 49
+bytes-differ ???114/TBkndAssn/Fixed2Data 104
+bytes-differ ???114/TBkndAssn/Var2Data 40
+bytes-differ ???114/TBkndCal/Fixed2Data 27
+bytes-differ ???114/TBkndTask/Fixed2Data 169
+bytes-differ ???114/TBkndTask/Var2Data 42
+bytes-differ ???214/CEdl/FixedData 13
+noise-whole ???214/CEdl/Var2Data 496->544
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 26
+bytes-differ ???214/CGrouping/FixedData 26
+bytes-differ ???214/CTable/FixedData 13
+bytes-differ ???214/CV_iew/FixedData 39
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 23
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 582->514
+sha256 80dfc64463ef02e99d30cf54e7f6cf30a12b919c629633a278cbe9faf07d38d4
+
+=== wave35-g3-wbs-renumber-defined | group 1 (wave35-g3) | exit code not stored | KVP sha OK D3EA166591A2 | FILE size 710 mtime 2026-11-11 04:49:51 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 72
+bytes-differ ???114/TBkndCal/Fixed2Data 36
+bytes-differ ???114/TBkndRsc/Fixed2Data 24
+bytes-differ ???114/TBkndTask/Fixed2Data 84
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 532->530
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 20
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 584->516
+sha256 247d09ecc67cdce53983eea482748d67e210c0493143fb63e87e7daef985fa18
+
+=== wave35-g3-notes-generator | group 1 (wave35-g3) | exit code not stored | KVP sha OK 6E203B519B4F | FILE size 752 mtime 2026-11-11 04:51:23 | own-sha ok
+96 streams, 93 checked, 14 problems
+bytes-differ ???114/Props 30
+bytes-differ ???114/TBkndAssn/Fixed2Data 72
+bytes-differ ???114/TBkndCal/Fixed2Data 36
+bytes-differ ???114/TBkndRsc/Fixed2Data 24
+bytes-differ ???114/TBkndTask/Fixed2Data 84
+bytes-differ ???114/TBkndTask/Var2Data 6
+bytes-differ ???214/CEdl/FixedData 12
+noise-whole ???214/CEdl/Var2Data 484->520
+bytes-differ ???214/CFilter/FixedData 24
+bytes-differ ???214/CGrouping/FixedData 24
+bytes-differ ???214/CTable/FixedData 12
+bytes-differ ???214/CV_iew/FixedData 36
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 20
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 574->506
+sha256 7ef429654c8c98256f121f909485cb108d3e2afce86152f8eaba5f92abeaff67
+
+=== wave35-g3-assign-remove-port-saved | group 1 (wave35-g3) | exit code not stored | KVP sha OK DB384C959A2A | FILE size 711 mtime 2026-11-11 04:52:49 | own-sha ok
+96 streams, 93 checked, 13 problems
+bytes-differ ???114/Props 14
+bytes-differ ???114/TBkndAssn/Fixed2Data 56
+bytes-differ ???114/TBkndAssn/Var2Data 3
+bytes-differ ???114/TBkndCal/Fixed2Data 35
+bytes-differ ???114/TBkndRsc/Fixed2Data 28
+bytes-differ ???114/TBkndTask/Fixed2Data 49
+bytes-differ ???214/CEdl/FixedData 7
+noise-whole ???214/CEdl/Var2Data 540->538
+bytes-differ ???214/CFilter/FixedData 14
+bytes-differ ???214/CGrouping/FixedData 14
+bytes-differ ???214/CTable/FixedData 7
+bytes-differ ???214/CV_iew/FixedData 21
+bytes-differ ???214/Props 13
+size-differs ?SummaryInformation 288->280
+noise-whole Props14 592->524
+sha256 125280eb7b2dfd150bba5a4774342348d453b47c7751ad75848999b98b1a0b04
+
+=== wave28-mark-auto | round 5c Mark on Track | exit code not stored | KVP sha OK E34E381692A6 | FILE size 626 mtime 2026-11-11 09:34:58 | own-sha ok
+96 streams, 94 checked, 11 problems
+bytes-differ ???114/Props 18
+bytes-differ ???114/TBkndAssn/Fixed2Data 54
+bytes-differ ???114/TBkndCal/Fixed2Data 27
+bytes-differ ???114/TBkndRsc/Fixed2Data 18
+bytes-differ ???114/TBkndTask/Fixed2Data 63
+bytes-differ ???214/CEdl/FixedData 9
+noise-whole ???214/CEdl/Var2Data 498->494
+bytes-differ ???214/CFilter/FixedData 18
+bytes-differ ???214/CGrouping/FixedData 18
+bytes-differ ???214/CTable/FixedData 9
+bytes-differ ???214/CV_iew/FixedData 27
+bytes-differ ???214/Props 15
+noise-whole Props14 550->508
+sha256 994e5bdec56e5bf5e8fd197a1093684c75c5b593159c3c99a6e4011a1e909cab
+
+=== wave28-mark-manual | round 5c Mark on Track | exit code not stored | KVP sha OK 40A5B3D94BAE | FILE size 626 mtime 2026-11-11 09:36:52 | own-sha ok
+96 streams, 94 checked, 11 problems
+bytes-differ ???114/Props 18
+bytes-differ ???114/TBkndAssn/Fixed2Data 54
+bytes-differ ???114/TBkndCal/Fixed2Data 27
+bytes-differ ???114/TBkndRsc/Fixed2Data 18
+bytes-differ ???114/TBkndTask/Fixed2Data 63
+bytes-differ ???214/CEdl/FixedData 9
+noise-whole ???214/CEdl/Var2Data 502->498
+bytes-differ ???214/CFilter/FixedData 18
+bytes-differ ???214/CGrouping/FixedData 18
+bytes-differ ???214/CTable/FixedData 9
+bytes-differ ???214/CV_iew/FixedData 27
+bytes-differ ???214/Props 15
+noise-whole Props14 554->512
+sha256 2a48fa6b6e67d88ad626ed9038c23f45e61c129bac19a73f28a6180516636866
+
+=== wave29-mark-60-after | round 5c Mark on Track | exit code not stored | KVP sha OK A21B29B9D1A8 | FILE size 737 mtime 2026-11-11 09:38:57 | own-sha ok
+96 streams, 94 checked, 14 problems
+bytes-differ ???114/Props 20
+bytes-differ ???114/TBkndAssn/Fixed2Data 54
+bytes-differ ???114/TBkndCal/Fixed2Data 27
+bytes-differ ???114/TBkndRsc/Fixed2Data 18
+bytes-differ ???114/TBkndTask/Fixed2Data 63
+bytes-differ ???214/CEdl/FixedData 9
+noise-whole ???214/CEdl/Var2Data 520->502
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 18
+bytes-differ ???214/CGrouping/FixedData 18
+bytes-differ ???214/CTable/FixedData 9
+bytes-differ ???214/CV_iew/FixedData 27
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 18
+bytes-differ ?SummaryInformation 1
+noise-whole Props14 572->516
+sha256 27d436062b1d101594ad7a010532cdf493521eb4760a9fa66ffdc0f8aa5a4873
+
+=== wave29-mark-60-before | round 5c Mark on Track | exit code not stored | KVP sha OK EB214C650BAE | FILE size 737 mtime 2026-11-11 09:41:37 | own-sha ok
+96 streams, 94 checked, 14 problems
+bytes-differ ???114/Props 20
+bytes-differ ???114/TBkndAssn/Fixed2Data 54
+bytes-differ ???114/TBkndCal/Fixed2Data 27
+bytes-differ ???114/TBkndRsc/Fixed2Data 18
+bytes-differ ???114/TBkndTask/Fixed2Data 63
+bytes-differ ???214/CEdl/FixedData 9
+noise-whole ???214/CEdl/Var2Data 522->504
+bytes-differ ???214/CEdl/VarMeta 1
+bytes-differ ???214/CFilter/FixedData 18
+bytes-differ ???214/CGrouping/FixedData 18
+bytes-differ ???214/CTable/FixedData 9
+bytes-differ ???214/CV_iew/FixedData 27
+bytes-differ ???214/CV_iew/Var2Data 4
+bytes-differ ???214/Props 18
+bytes-differ ?SummaryInformation 1
+noise-whole Props14 574->518
+sha256 9db9968f089a31603737b87d716d57fcb7c8bacbb583155105579ad7c0fc214a
+
+=== wave34-assign-add-second | wave34 passing retry | exit code not stored | KVP sha OK B4DDC40CEAA4 | FILE size 746 mtime 2026-11-11 05:28:22 | own-sha ok
+96 streams, 94 checked, 14 problems
+bytes-differ ???114/Props 24
+bytes-differ ???114/TBkndAssn/Fixed2Data 112
+bytes-differ ???114/TBkndAssn/Var2Data 6
+bytes-differ ???114/TBkndCal/Fixed2Data 70
+bytes-differ ???114/TBkndRsc/Fixed2Data 60
+bytes-differ ???114/TBkndTask/Fixed2Data 70
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 592->518
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 16
+bytes-differ ?SummaryInformation 2
+noise-whole Props14 580->524
+sha256 e43c64e042581311c427ac5cb9a94a196f4b09e2ff84121a68cbe7315b9c231b
+
+=== wave34-assign-add-third | wave34 passing retry | exit code not stored | KVP sha OK F7D88FE66895 | FILE size 746 mtime 2026-11-11 05:30:33 | own-sha ok
+96 streams, 94 checked, 14 problems
+bytes-differ ???114/Props 24
+bytes-differ ???114/TBkndAssn/Fixed2Data 142
+bytes-differ ???114/TBkndAssn/Var2Data 9
+bytes-differ ???114/TBkndCal/Fixed2Data 70
+bytes-differ ???114/TBkndRsc/Fixed2Data 60
+bytes-differ ???114/TBkndTask/Fixed2Data 70
+bytes-differ ???214/CEdl/FixedData 10
+noise-whole ???214/CEdl/Var2Data 590->516
+bytes-differ ???214/CFilter/FixedData 20
+bytes-differ ???214/CGrouping/FixedData 20
+bytes-differ ???214/CTable/FixedData 10
+bytes-differ ???214/CV_iew/FixedData 30
+bytes-differ ???214/CV_iew/Var2Data 3
+bytes-differ ???214/Props 16
+bytes-differ ?SummaryInformation 2
+noise-whole Props14 578->522
+sha256 d1e016dacaadcfebd5181a5a3a1f871d563e42f85310cee50dc770f462079602
+
