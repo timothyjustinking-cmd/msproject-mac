@@ -22,3 +22,23 @@ A version-1 GUID (UuidCreateSequential) is stored in RFC byte order: byte 6 >> 4
 | New Task row creation stamp | 114/TBkndTask/FixedData row (202 bytes from 48) +128, 4 bytes | 4 | the creation date-time of a row; only a row whose uid (row +0) is not in the control; an existing row's is stable between a control and its null save | trace-insert-summary.md:42 |
 | New assignment creation stamp | 114/TBkndAssn/Var2Data, the key 0x0f40027a block (4 bytes) located through VarMeta | 4 | the creation date-time of an assignment; only a block whose VarMeta uid is not in the control | trace-insert-milestone-r4.md:16-20 |
 | Font word top byte | 214/CV_iew/Var2Data font item (0x2240000c) payload +43 of each 44-byte row | 1 | uninitialised allocator byte | trace-font-item-r6.md |
+
+## Row identity of the fixed-stride streams (W36-0b.8, R36G0-9)
+
+The control mask is moved row by row onto the reference row that carries the same identity
+(`IDENT`, `row_ids`).  Decoded from all 332 committed files; no row count or layout was guessed.
+
+| Stream | Identity of a row | Layout |
+|---|---|---|
+| Task FixedData | uid word at row +0 | 48-byte header, then 202-byte rows |
+| Task Fixed2Data | uid of the Task FixedData row it follows | 3 header rows, then one 64-byte row per FixedData row (row count checked against FixedData) |
+| Assn FixedData | uid word at row +0 | 110-byte rows |
+| Assn Fixed2Data | uid of the Assn FixedData row | 48-byte rows, one per FixedData row |
+| Rsc Fixed2Data | uid word at +0 of the Rsc FixedData row | Rsc FixedData: 48-byte header, then 172-byte rows; Fixed2Data 3 header rows, then 40-byte rows |
+| Cal Fixed2Data | uid word at +8 of the Cal FixedData item, and the row's place (0..2) within it | Cal FixedData: 64 bytes of header items, then 12-byte items; Fixed2Data 12 header rows, then 3 16-byte rows per item |
+| Cons Fixed2Data | uid word at +0 of the Cons FixedData item, and the row's place (0..2) | Cons FixedData 20-byte items; Fixed2Data 3 16-byte rows per item |
+
+The Fixed2Meta/FixedMeta streams are not used: the Assn meta lists only some rows, so its item
+count is not the row count.  A stream whose Fixed2Data row count does not fit its FixedData is
+not named (no mask).  A uid that two rows carry (a deleted Task row that stays, two Rsc rows in
+two files) leaves those rows unmasked rather than guessed.

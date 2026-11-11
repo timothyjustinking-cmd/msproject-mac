@@ -703,7 +703,8 @@ try:
         nul_s = bytearray(128)
         nul_s[64 + 60] = 1                       # row 1, +60: noise in the control
         ref_len = 192                            # the reference has a third row
-        mask = g.control_mask(stride_name, ref_len, bytes(ctl_s), bytes(nul_s))
+        mask = g.control_mask(stride_name, ref_len, bytes(ctl_s), bytes(nul_s),
+                              (["a", "b"], ["a", "b", "c"]))
         check("W36-0.2 stride stream: the control's noise is masked in its own record",
               mask is not None and (64 + 60) in mask)
         check("W36-0.2 stride stream: the new row carries no control mask",
@@ -715,6 +716,94 @@ try:
               g.control_mask(stride_name, 128, bytes(ctl_s), bytes(ctl_s) + b"\0") is None)
         check("W36-0.2 same-length reference: offsets map one to one",
               g.control_mask(other, 128, bytes(ctl_s), bytes(nul_s)) == {124})
+
+        # --- W36-0b.8 (R36G0-9): a stride row is masked by its identity, not its position ----------
+        # unit: a row inserted before the control's second row moves it from row 1 to row 2
+        ctl_u = bytes(128)
+        nul_u = bytearray(128)
+        nul_u[64 + 60] = 1                       # noise in the control's row "b"
+        ids_u = (["a", "b"], ["a", "new", "b"])
+        mask = g.control_mask(stride_name, 192, ctl_u, bytes(nul_u), ids_u)
+        check("W36-0b.8 unit: the noise of row b follows it to row 2 and not row 1",
+              mask == {128 + 60}, "%r" % (mask,))
+        check("W36-0b.8 unit: no row identities and another length: refused",
+              g.control_mask(stride_name, 192, ctl_u, bytes(nul_u)) is None)
+        check("W36-0b.8 unit: undecoded reference rows: refused",
+              g.control_mask(stride_name, 192, ctl_u, bytes(nul_u), (["a", "b"], None)) is None)
+        check("W36-0b.8 unit: a row the reference lacks has no mask",
+              g.control_mask(stride_name, 128, ctl_u, bytes(nul_u), (["a", "b"], ["a", "c"])) == set())
+        check("W36-0b.8 unit: a row named twice has no mask",
+              g.control_mask(stride_name, 128, ctl_u, bytes(nul_u), (["a", "b"], ["b", "b"])) == set())
+        check("W36-0b.8 unit: same length, rows swapped: the mask follows the row",
+              g.control_mask(stride_name, 128, ctl_u, bytes(nul_u), (["a", "b"], ["b", "a"])) == {60})
+
+        # the committed middle-insert pair: row identities of the control and of the edit
+        m_ref, m_ctl, m_nul = pair("wave35-g3-insert-milestone-first")
+        MR, MC, MN = load(m_ref), load(m_ctl), load(m_nul)
+        t2 = "???114/TBkndTask/Fixed2Data"
+        cids, rids = g.row_ids(t2, MC[t2], MC), g.row_ids(t2, MR[t2], MR)
+        check("W36-0b.8 Task Fixed2Data rows are named on both sides (3 header rows + a row per uid)",
+              cids is not None and rids is not None and len(cids) == 10 and len(rids) == 11 and
+              sum(i[0] == "hdr" for i in cids) == 3 and len(set(rids)) == 11, "%r %r" % (cids, rids))
+        moved = [(r, rids.index(i)) for r, i in enumerate(cids) if i in rids and rids.index(i) != r]
+        new_rows = [r for r, i in enumerate(rids) if i not in cids]
+        check("W36-0b.8 the insert moves control rows and adds one new row", len(moved) > 0 and
+              len(new_rows) == 1, "%r %r" % (moved, new_rows))
+        win = g.noise_windows(t2, MR[t2], None, MC, MR[t2])
+        free = [k for k in range(64) if all(r * 64 + k not in win for r in range(11))]
+        check("W36-0b.8 a row byte outside every noise window exists", len(free) > 0)
+        if moved and new_rows and free:
+            r0, s0 = moved[0]
+            k0 = free[0]
+            N2 = dict(MN)
+            nb = bytearray(MN[t2])
+            nb[r0 * 64 + k0] ^= 0x5A             # the control's noise, in row r0 of the control
+            N2[t2] = bytes(nb)
+
+            def traced_with(row):
+                out = dict(MR)
+                tb = bytearray(MR[t2])
+                tb[row * 64 + k0] ^= 0x5A
+                out[t2] = bytes(tb)
+                return out
+
+            lines, problems, checked, unchecked = g.compare(traced_with(s0), MR, MC, N2)
+            check("W36-0b.8 noise in the control's row, seen in the same row of the edit, passes",
+                  problems == 0, "%r" % (lines,))
+            lines, problems, checked, unchecked = g.compare(traced_with(r0), MR, MC, N2)
+            check("W36-0b.8 the same noise at the control's POSITION in the edit (another row) fails",
+                  problems == 1 and any(t2 in ln for ln in lines), "%r" % (lines,))
+            lines, problems, checked, unchecked = g.compare(traced_with(new_rows[0]), MR, MC, N2)
+            check("W36-0b.8 the same noise in the inserted row fails (no mask for a new row)",
+                  problems == 1 and any(t2 in ln for ln in lines), "%r" % (lines,))
+
+        # row identities of the other stride streams, on the committed pairs that add a row
+        for stem, sname, grown in (("wave34-assign-add-second", "Assn/Fixed2Data", 1),
+                                   ("wave34-assign-add-second", "Assn/FixedData", 1),
+                                   ("wave30-resource-add", "Rsc/Fixed2Data", 1),
+                                   ("wave30-resource-add", "Cal/Fixed2Data", 3),
+                                   ("wave34-link-add", "Cons/Fixed2Data", 3),
+                                   ("wave35-g3-insert-milestone-first", "Task/FixedData", 1)):
+            sref, sctl, snul = pair(stem)
+            SR_, SC_ = load(sref), load(sctl)
+            full = "???114/TBknd" + sname
+            ci, ri = g.row_ids(full, SC_.get(full, b""), SC_), g.row_ids(full, SR_[full], SR_)
+            check("W36-0b.8 %s of %s: rows named, %d more rows, the control's rows all remain" %
+                  (sname, stem, grown),
+                  ci is not None and ri is not None and len(ri) == len(ci) + grown and
+                  len(set(ri)) == len(ri) and all(i in ri for i in ci), "%r %r" % (ci, ri))
+
+        # every committed file: every stride stream's rows are named (or the stream is empty)
+        undecoded = []
+        for fn in sorted(os.listdir(DATA)):
+            if not fn.endswith(".mpp"):
+                continue
+            SF = load(os.path.join(DATA, fn))
+            for sname in g.STRIDE:
+                if sname in SF and g.row_ids(sname, SF[sname], SF) is None:
+                    undecoded.append((fn, sname))
+        check("W36-0b.8 every stride stream of every committed file has named rows",
+              not undecoded, "%r" % (undecoded[:5],))
 
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)

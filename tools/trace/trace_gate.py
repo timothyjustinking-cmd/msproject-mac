@@ -12,7 +12,9 @@ CONTROL, CONTROL_NULL
              control-identical CONTROL_NULL is a FAIL named "no null", never a pass (W36-0.3).
              The bytes where these two differ are the control mask.  It is built from an equal-length control and null
              only, and is refused (line "mask-refused") when the reference's length differs
-             from the control's, except in a fixed-stride stream, which is masked per record.
+             from the control's, except in a fixed-stride stream, which is masked row by row
+             by the row's identity (its uid word), never by its position: a row inserted before
+             another does not move a mask, and a row either side lacks has no mask (W36-0b.8).
 
 A byte of the traced save may differ from the reference only where
   1. the control mask covers it, or
@@ -65,6 +67,22 @@ STRIDE = {
     "???114/TBkndRsc/Fixed2Data": (0, 40),
     "???114/TBkndCal/Fixed2Data": (0, 16),
     "???114/TBkndCons/Fixed2Data": (0, 16),
+}
+
+# Row identity of the stride streams (W36-0b.8): (FixedData stream the identity is read from, or
+# None when the stream's own row +0 is the uid; that stream's first row offset and row size;
+# header rows; rows per item; uid offset in the item).  Decoded from all 332 committed files:
+# Task Fixed2Data = 3 header rows + a row per Task FixedData row; Rsc likewise (row size 172);
+# Cal FixedData = 4 header items of 16 bytes + 12-byte items (uid at +8), 3 Fixed2Data rows per
+# item after 12 header rows; Cons FixedData = 20-byte items, 3 Fixed2Data rows per item.
+IDENT = {
+    "???114/TBkndTask/FixedData": (None, 0, 0, 0, 1, 0),
+    "???114/TBkndTask/Fixed2Data": ("???114/TBkndTask/FixedData", 48, 202, 3, 1, 0),
+    "???114/TBkndAssn/FixedData": (None, 0, 0, 0, 1, 0),
+    "???114/TBkndAssn/Fixed2Data": ("???114/TBkndAssn/FixedData", 0, 110, 0, 1, 0),
+    "???114/TBkndRsc/Fixed2Data": ("???114/TBkndRsc/FixedData", 48, 172, 3, 1, 0),
+    "???114/TBkndCal/Fixed2Data": ("???114/TBkndCal/FixedData", 64, 12, 12, 3, 8),
+    "???114/TBkndCons/Fixed2Data": ("???114/TBkndCons/FixedData", 0, 20, 0, 3, 0),
 }
 
 # Noise fields.  Each rule names fields; none names a region.  Field classes:
@@ -507,32 +525,68 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
     return offs
 
 
-def control_mask(name, ref_len, ctl, nul):
+def row_ids(name, data, streams):
+    """[identity of each row] of a fixed-stride stream, or None when the rows cannot be named
+    exactly.  An identity is the uid word of the row (FixedData) or of the FixedData item the
+    row belongs to (Fixed2Data, which has header rows and, for calendars and constraints, three
+    rows per item); a header row is named by its place.  A stream whose row count does not fit
+    its companion FixedData is not decoded (W36-0b.8 / R36G0-9)."""
+    spec = IDENT.get(name)
+    if spec is None or data is None:
+        return None
+    base, size = STRIDE[name]
+    if len(data) < base or (len(data) - base) % size:
+        return None
+    nrows = (len(data) - base) // size
+    src, fbase, fsize, hdr, per, uo = spec
+    if src is None:
+        return [("uid", _u32(data, base + r * size + uo)) for r in range(nrows)]
+    fd = (streams or {}).get(src)
+    if fd is None or len(fd) < fbase or (len(fd) - fbase) % fsize:
+        return None
+    if nrows != hdr + per * ((len(fd) - fbase) // fsize):
+        return None
+    return [("hdr", r) if r < hdr else
+            ("uid", _u32(fd, fbase + ((r - hdr) // per) * fsize + uo), (r - hdr) % per)
+            for r in range(nrows)]
+
+
+def _mask_by_id(stride, ref_len, ctl, nul, ctl_ids, ref_ids):
+    """The control/null differences, moved to the reference row that carries the same identity.
+    A row that either side lacks, or names twice, is not masked."""
+    base, size = stride
+    mask = {i for i in range(min(base, len(ctl), ref_len)) if ctl[i] != nul[i]}
+    where = {}
+    for r, ident in enumerate(ref_ids):
+        where.setdefault(ident, []).append(r)
+    ctl_count = {}
+    for ident in ctl_ids:
+        ctl_count[ident] = ctl_count.get(ident, 0) + 1
+    for r, ident in enumerate(ctl_ids):
+        rows = where.get(ident, ())
+        if len(rows) != 1 or ctl_count[ident] != 1:
+            continue
+        for k in range(size):
+            if ctl[base + r * size + k] != nul[base + r * size + k]:
+                mask.add(base + rows[0] * size + k)
+    return mask
+
+
+def control_mask(name, ref_len, ctl, nul, ids=None):
     """The offsets of the REFERENCE where the control and its null save differ, or None when the
-    mask is refused.  A mask is built only from equal-length control and null.  When the
-    reference is the same length as the control the offsets map one to one.  When it is not,
-    only a fixed-stride stream is masked, record by record (a row the control does not have
-    is not masked); any other stream gets no mask (W36-0.2 / A-4)."""
+    mask is refused.  A mask is built only from equal-length control and null.  A fixed-stride
+    stream whose rows are named on both sides (`ids` = (control row ids, reference row ids), see
+    `row_ids`) is masked row by row by identity, so an inserted row does not move a mask onto
+    another row (W36-0b.8).  Any other stream is masked one to one when the reference is the
+    control's length, and gets no mask when it is not (W36-0.2 / A-4)."""
     if ctl is None or nul is None or len(ctl) != len(nul):
         return None
+    stride = _stride(name)
+    if stride is not None and ids is not None and ids[0] is not None and ids[1] is not None:
+        return _mask_by_id(stride, ref_len, ctl, nul, ids[0], ids[1])
     if len(ctl) == ref_len:
         return {i for i in range(ref_len) if ctl[i] != nul[i]}
-    stride = _stride(name)
-    if stride is None:
-        return None
-    base, size = stride
-    mask = set()
-    for i in range(min(base, len(ctl), ref_len)):
-        if ctl[i] != nul[i]:
-            mask.add(i)
-    nrec = (len(ctl) - base) // size
-    nref = (ref_len - base) // size
-    for r in range(min(nrec, nref)):
-        for k in range(size):
-            j = base + r * size + k
-            if ctl[j] != nul[j]:
-                mask.add(j)
-    return mask
+    return None
 
 
 def compare(traced, ref, ctl, nul):
@@ -562,7 +616,8 @@ def compare(traced, ref, ctl, nul):
             continue
         checked += 1
         c, n = ctl.get(name), nul.get(name)
-        mask = control_mask(name, len(a), c, n)
+        ids = (row_ids(name, c, ctl), row_ids(name, a, ref)) if _stride(name) else None
+        mask = control_mask(name, len(a), c, n, ids)
         if mask is None and c is not None and n is not None and len(c) == len(n) and len(c) != len(a):
             lines.append("mask-refused %s control %d reference %d" % (name, len(c), len(a)))
         mask = mask or set()
