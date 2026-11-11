@@ -28,7 +28,9 @@ function vmx([string]$code,[int]$timeout=120){
     if ($h['out_meta'] -and $h['out_meta'].StartsWith("$id|")) {
       $m = $h['out_meta'].Split('|'); $o=''
       for ($k=0;$k -lt [int]$m[1];$k++){ $o += $h[('out_{0:d4}' -f $k)] }
-      $o=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($o)); $k=$o.LastIndexOf("`n#SHA "); $gh=$o.Substring($k+6); $o=$o.Substring(0,$k); $hh=[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($o))).Replace("-",""); "[len $($o.Length) sha " + $(if($hh -eq $gh){"OK"}else{"MISMATCH"}) + " $($hh.Substring(0,12))]"
+      if ($o.Length -ne [int]$m[2]) { throw "vmx reply length $($o.Length) != $($m[2]) announced in out_meta" }
+      $o=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($o)); $k=$o.LastIndexOf("`n#SHA "); $gh=$o.Substring($k+6); $o=$o.Substring(0,$k); $hh=[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($o))).Replace("-",""); if ($hh -ne $gh) { throw "vmx reply sha MISMATCH (host $($hh.Substring(0,12)), guest $($gh.Substring(0,12)))" }
+      "[len $($o.Length) sha OK $($hh.Substring(0,12))]"
       return $o
     }
   }

@@ -192,6 +192,17 @@ if(CORE_BUILD_TESTS)
         )
     endif()
 
+    # W36-0.5: the trace host scripts (vmx throws on a sha MISMATCH or a wrong reply length;
+    # "Skip for now" only in a "Sign in" dialog).  Needs PowerShell 7; without it no test.
+    find_program(PWSH_EXECUTABLE NAMES pwsh)
+    if(PWSH_EXECUTABLE)
+        add_test(
+            NAME trace_host_scripts
+            COMMAND "${PWSH_EXECUTABLE}" -NoProfile -File
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_host_skip.ps1"
+        )
+    endif()
+
     # -----------------------------------------------------------------------
     # E1 (wave 17): the differential engine/backend harness.
     #
