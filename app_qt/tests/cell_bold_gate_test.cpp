@@ -16,6 +16,9 @@
 //     queue nothing and name the refusal;
 //   * the Task Name cell of row 2 and the Start cell of row 1 each queue one
 //     edit and save a file that differs from the control (W36-1.2);
+//   * I (W36-1.3) queues Italic for the one measured cell (row 1, Task Name) and
+//     refuses row 2, the Start cell and Italic off; Bold on an Italic cell is
+//     refused, not read as a Bold toggle;
 //   * the measured cell queues exactly one edit and dirties the document;
 //   * a second click while it is pending is refused and the queue keeps one;
 //   * the real save writes it (the file differs from the control) and a reopen of
@@ -80,8 +83,8 @@ QAbstractButton* font_button(msqt::MainWindow& window, const QString& text,
     return nullptr;
 }
 
-bool click_bold(msqt::MainWindow& window) {
-    QAbstractButton* button = font_button(window, QStringLiteral("B"), nullptr);
+bool click_font(msqt::MainWindow& window, const QString& label) {
+    QAbstractButton* button = font_button(window, label, nullptr);
     if (button == nullptr || !button->isEnabled()) {
         return false;
     }
@@ -89,6 +92,10 @@ bool click_bold(msqt::MainWindow& window) {
     QApplication::processEvents();
     QApplication::processEvents();
     return true;
+}
+
+bool click_bold(msqt::MainWindow& window) {
+    return click_font(window, QStringLiteral("B"));
 }
 
 std::size_t row_of(core::sheet::SheetModel& sheet, std::uint32_t uid) {
@@ -205,10 +212,15 @@ int main(int argc, char** argv) {
                     "the live Bold button does not carry the disabled tooltip");
         gate::check(command == msqt::RibbonCommand::font_bold,
                     "Bold is wired to RibbonCommand::font_bold");
-        for (const char* other : {"I", "U"}) {
-            QAbstractButton* button = font_button(window, QString::fromLatin1(other), nullptr);
-            gate::check(button != nullptr && !button->isEnabled(),
-                        (std::string(other) + " stays disabled").c_str());
+        // W36-1.3: I is live too (the one measured Italic cell); U stays disabled.
+        msqt::RibbonCommand italic_command = msqt::RibbonCommand::none;
+        QAbstractButton* italic = font_button(window, QStringLiteral("I"), &italic_command);
+        gate::check(italic != nullptr && italic->isEnabled(), "Italic is live (W36-1.3)");
+        gate::check(italic_command == msqt::RibbonCommand::font_italic,
+                    "Italic is wired to RibbonCommand::font_italic");
+        {
+            QAbstractButton* button = font_button(window, QStringLiteral("U"), nullptr);
+            gate::check(button != nullptr && !button->isEnabled(), "U stays disabled");
         }
 
         core::sheet::SheetModel* sheet = window.sheet();
@@ -330,6 +342,82 @@ int main(int argc, char** argv) {
         }
         gate::check(read_all(saved) != read_all(copy),
                     (label + ": the saved file differs from the control").c_str());
+    }
+
+    // --- 1c. W36-1.3: Italic on the one measured cell --------------------------
+    // wave35-g3-font-italic is the only Italic pair (row 1, Task Name), so every
+    // other cell is refused, Italic off is refused, and the saved file reopens
+    // with the item present.
+    const QString italicised = out_dir + QStringLiteral("/w36-italic-saved.mpp");
+    std::filesystem::remove(italicised.toStdString(), file_error);
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        const bool opened = window.open_file(copy, &error);
+        gate::check(opened, "Italic: the control opens");
+        if (!opened) {
+            return gate::finish();
+        }
+        window.show();
+        QApplication::processEvents();
+        const QString italic_label = QStringLiteral("I");
+        gate::check(select_stored_cell(window, 2, name_field),
+                    "Italic: the Task Name cell of row 2 can be selected");
+        gate::check(click_font(window, italic_label), "Italic clicks on row 2");
+        gate::check(window.pending_edits().empty(), "Italic on row 2 queues nothing");
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "Font Italic on this row is not implemented in this port")),
+                    "the status line names the Italic row refusal");
+        gate::check(select_stored_cell(window, measured_uid, start_field),
+                    "Italic: the Start cell of row 1 can be selected");
+        gate::check(click_font(window, italic_label), "Italic clicks on the Start cell");
+        gate::check(window.pending_edits().empty(), "Italic on the Start cell queues nothing");
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "Font Italic on a cell outside the Task Name column")),
+                    "the status line names the Italic column refusal");
+        gate::check(select_stored_cell(window, measured_uid, name_field),
+                    "Italic: the measured Task Name cell can be selected");
+        gate::check(click_font(window, italic_label), "Italic clicks on the measured cell");
+        gate::check(window.pending_edits().size() == 1, "Italic queues one edit");
+        gate::check(window.document_dirty(), "the queued Italic dirties the document");
+        gate::check(window.status_left_text().contains(QStringLiteral(
+                        "queued Font Italic on the Task Name cell of task uid 1")),
+                    "the status line reports the queued Italic");
+        QString save_error;
+        const bool ok = window.save_document_path(italicised, &save_error);
+        gate::check(ok, "the Italic saves");
+        if (!ok) {
+            std::fprintf(stderr, "note: save error: %s\n", save_error.toStdString().c_str());
+            return gate::finish();
+        }
+        gate::check(read_all(italicised) != read_all(copy),
+                    "the Italic file differs from the control");
+    }
+    {
+        msqt::MainWindow window;
+        window.resize(msqt::kParityWidth, 800);
+        QString error;
+        const bool opened = window.open_file(italicised, &error);
+        gate::check(opened, "the saved Italic reopens");
+        if (!opened) {
+            return gate::finish();
+        }
+        window.show();
+        QApplication::processEvents();
+        gate::check(select_stored_cell(window, measured_uid, name_field),
+                    "the Italic cell can be selected on the reopened file");
+        gate::check(click_font(window, QStringLiteral("I")), "Italic clicks on the Italic file");
+        gate::check(window.pending_edits().empty(),
+                    "Italic on a view that stores a format item queues nothing");
+        gate::check(window.status_left_text().contains(
+                        QStringLiteral("turning Italic off is not measured")),
+                    "the status line says Italic off is not measured");
+        // Bold on the Italic cell is a different attribute on a formatted block:
+        // Bold's toggle must not read the Italic item as its own.
+        gate::check(click_bold(window), "Bold clicks on the Italic file");
+        gate::check(window.pending_edits().empty(),
+                    "Bold on a cell that carries an Italic item queues nothing");
     }
 
     // --- 2. reopen: the view now stores the cell format -----------------------

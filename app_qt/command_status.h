@@ -74,6 +74,7 @@ inline bool shell_implements(app::MenuAction action) noexcept {
         case app::MenuAction::resource_information:
         case app::MenuAction::assign_resources:
         case app::MenuAction::font_bold:
+        case app::MenuAction::font_italic:
         case app::MenuAction::define_wbs_code:
         case app::MenuAction::calculate_project:
             return true;

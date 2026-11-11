@@ -115,6 +115,9 @@ enum class RibbonCommand : std::uint8_t {
     // Name cell of the task with UniqueID 1 (the one cell Project's pair
     // measured); every other cell, and the other font controls, stay refused.
     font_bold,
+    // Wave 36 (W36-1.3): the I button italicises the one measured cell (the Task
+    // Name cell of the task with UniqueID 1); every other cell is refused.
+    font_italic,
     // Wave 26 (G5): the Project tab's dialogs.  Custom Fields keeps its own
     // MenuAction (it is also on the Gantt Chart Format tab); these are ribbon
     // commands with no menu-bar item.

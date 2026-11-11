@@ -576,7 +576,8 @@ Bytes build_item(ViewCellStyleEdit const& edit) {
     append_u32(item, kViewCellFormatItemKind);
     append_u32(item, edit.uid);
     append_u32(item, edit.field_id);
-    append_u32(item, kCellFormatFlags);
+    bool const italic = edit.attribute == ViewCellAttribute::italic;
+    append_u32(item, italic ? kItalicCellFormatFlags : kCellFormatFlags);
     append_u32(item, 0xFF000000u); /* background: automatic */
     append_u32(item, 0);
     append_u32(item, 0);
@@ -584,7 +585,7 @@ Bytes build_item(ViewCellStyleEdit const& edit) {
     append_u32(item, 0);
     append_u32(item, 0);
     append_u32(item, 1); /* pattern 1 */
-    append_u32(item, kMeasuredFontWord);
+    append_u32(item, italic ? kMeasuredItalicFontWord : kMeasuredFontWord);
     return item;
 }
 
@@ -615,6 +616,28 @@ void validate_edit(ViewCellStyleEdit const& edit, std::string const& function) {
                     ", the Start cell); every other field is unmeasured and "
                     "refused");
     }
+    if (edit.attribute != ViewCellAttribute::bold &&
+        edit.attribute != ViewCellAttribute::italic) {
+        throw Error(function + ": only Bold and Italic are measured; underline, "
+                    "strikethrough and the two colours are unmeasured and "
+                    "refused");
+    }
+    /* W36-1.3: Italic has one pair (wave35-g3-font-italic: row 1, Task Name, on),
+     * so there is no held-out Italic pair; it is written for that cell only and
+     * there is no Italic off pair at all. */
+    if (edit.attribute == ViewCellAttribute::italic) {
+        if (!edit.enabled) {
+            throw Error(function + ": turning Italic off is not measured (no "
+                        "Italic off pair)");
+        }
+        if (edit.uid != kMeasuredCellUid || edit.field_id != kMeasuredCellFieldId) {
+            throw Error(function + ": Italic on row uid " +
+                        std::to_string(edit.uid) + ", field " + hex_u32(edit.field_id) +
+                        " is not measured; only the Task Name cell of row uid " +
+                        std::to_string(kMeasuredCellUid) + " is (one Italic pair, "
+                        "no held-out Italic pair)");
+        }
+    }
     if (!edit.enabled &&
         (edit.uid != kMeasuredCellUid || edit.field_id != kMeasuredCellFieldId)) {
         throw Error(function + ": turning Bold off on row uid " +
@@ -622,11 +645,6 @@ void validate_edit(ViewCellStyleEdit const& edit, std::string const& function) {
                     " is not measured; only the Task Name cell of row uid " +
                     std::to_string(kMeasuredCellUid) + " is (no held-out Bold "
                     "off pair)");
-    }
-    if (edit.attribute != ViewCellAttribute::bold) {
-        throw Error(function + ": only Bold is measured; italic, underline, "
-                    "strikethrough and the two colours are unmeasured and "
-                    "refused");
     }
     if (edit.selection != ViewCellSelection::cell) {
         throw Error(function + ": whole-row selection stores a row-default "

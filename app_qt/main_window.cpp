@@ -2216,6 +2216,9 @@ void MainWindow::handle_action(app::MenuAction action) {
         case app::MenuAction::font_bold:
             bold_selected_cell();
             return;
+        case app::MenuAction::font_italic:
+            italic_selected_cell();
+            return;
         case app::MenuAction::define_wbs_code:
             define_wbs_code();
             return;
@@ -2515,6 +2518,9 @@ void MainWindow::handle_ribbon_command(RibbonCommand command, bool checked) {
             return;
         case RibbonCommand::font_bold:
             bold_selected_cell();
+            return;
+        case RibbonCommand::font_italic:
+            italic_selected_cell();
             return;
         case RibbonCommand::scroll_to_task:
             // W30-1.7: scrolls the sheet and pans the chart; a view command,
@@ -3415,12 +3421,21 @@ void MainWindow::assign_resources() {
 }
 
 void MainWindow::bold_selected_cell() {
+    font_selected_cell(false);
+}
+
+void MainWindow::italic_selected_cell() {
+    font_selected_cell(true);
+}
+
+void MainWindow::font_selected_cell(bool italic) {
+    const std::string font_name = italic ? "Font Italic" : "Font Bold";
     if (refuse_read_only()) {
         return;
     }
     if (!doc_.has_document() || prefs_.view != app::ViewMode::task_sheet ||
         doc_.sheet() == nullptr) {
-        set_message("Font Bold is available in the Task Sheet view", false);
+        set_message(font_name + " is available in the Task Sheet view", false);
         update_status();
         return;
     }
@@ -3434,13 +3449,16 @@ void MainWindow::bold_selected_cell() {
         update_status();
         return;
     }
-    if (refuse_beside_document_edit("Font Bold")) {
+    if (refuse_beside_document_edit(font_name)) {
         return;
     }
-    // W34-4.5: one cell only.  The measured pairs bold a single cell, so a range
+    // W34-4.5: one cell only.  The measured pairs format a single cell, so a range
     // is refused with the reason before anything is built.
     if (!(sheet.anchor() == sheet.focus())) {
-        set_message("Font Bold: " + std::string(app::bold_range_refusal()), true);
+        set_message(font_name + ": " +
+                        std::string(italic ? app::italic_range_refusal()
+                                           : app::bold_range_refusal()),
+                    true);
         update_status();
         return;
     }
@@ -3452,21 +3470,29 @@ void MainWindow::bold_selected_cell() {
     const std::uint32_t field_id = app::bold_cell_field_id(column.table_field, column.field);
     app::StructuralEdit edit;
     std::string error;
-    if (!app::make_cell_bold_edit(doc_.plan(), doc_.path(), task_uid, field_id, edit, error)) {
-        set_message("Font Bold: " + error, true);
+    const bool built =
+        italic ? app::make_cell_italic_edit(doc_.plan(), doc_.path(), task_uid, field_id,
+                                            edit, error)
+               : app::make_cell_bold_edit(doc_.plan(), doc_.path(), task_uid, field_id,
+                                          edit, error);
+    if (!built) {
+        set_message(font_name + ": " + error, true);
         update_status();
         return;
     }
     // W36-1.1: the builder decides from the file, as Project's button does: Bold
-    // on an unformatted cell, Bold off on the cell's one Bold item.
+    // on an unformatted cell, Bold off on the cell's one Bold item.  Italic is
+    // always on (W36-1.3: no Italic off pair).
     const bool bold_on = edit.cell_bold_on;
     if (!structural_.push(std::move(edit), &doc_.plan())) {
-        set_message("Font Bold: the edit was refused", true);
+        set_message(font_name + ": the edit was refused", true);
         update_status();
         return;
     }
     after_structural_change(task_uid);
-    set_message(std::string(bold_on ? "queued Font Bold on" : "queued Font Bold off") +
+    set_message(std::string(italic    ? "queued Font Italic on"
+                            : bold_on ? "queued Font Bold on"
+                                      : "queued Font Bold off") +
                     " the " + std::string(app::bold_cell_column_name(field_id)) +
                     " cell of task uid " + std::to_string(task_uid) +
                     "; File > Save writes it",

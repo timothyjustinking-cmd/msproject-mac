@@ -246,9 +246,10 @@ const std::vector<TabSpec>& tab_specs() {
         // glyph is the letter, so the label is the accessible name only.
         // W34-4.5, W36-1.2: B is enabled for the measured cells (a Task Name or
         // Start cell of a saved row); the handler refuses every other cell with
-        // the reason.  I and U stay disabled.
+        // the reason.  W36-1.3: I is enabled for the one measured Italic cell (the
+        // Task Name cell of task uid 1); U stays disabled.
         small_cmd(font, "B", RibbonCommand::font_bold, 20, 0, 2, true, true, "font.bold");
-        small(font, "I", app::MenuAction::none, 20, 0, 3, false, 1, true, "font.italic");
+        small_cmd(font, "I", RibbonCommand::font_italic, 20, 0, 3, true, true, "font.italic");
         small(font, "U", app::MenuAction::none, 20, 0, 4, false, 1, true, "font.underline");
         split(font, "highlight colour", 26, 1, 0, 1, "font.highlight");
         split(font, "font colour", 26, 1, 1, 1, "font.color");

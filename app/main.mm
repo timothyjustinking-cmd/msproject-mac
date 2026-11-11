@@ -2823,6 +2823,8 @@ BOOL run_print_view(PlanState& plan, const app::PrintJob& job, NSURL* save_url) 
 - (void)resourceInformation:(id)sender;
 - (void)assignResources:(id)sender;
 - (void)fontBold:(id)sender;
+- (void)fontItalic:(id)sender;
+- (void)fontCellItalic:(BOOL)italic;
 - (void)defineWbsCode:(id)sender;
 - (void)calculateProject:(id)sender;
 - (void)deleteTask:(id)sender;
@@ -3254,6 +3256,9 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         case app::MenuAction::font_bold:
             [self fontBold:nil];
             return;
+        case app::MenuAction::font_italic:
+            [self fontItalic:nil];
+            return;
         case app::MenuAction::define_wbs_code:
             [self defineWbsCode:nil];
             return;
@@ -3549,6 +3554,18 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
 // refuses every other row and column.  Task Sheet view only.
 - (void)fontBold:(id)sender {
     (void)sender;
+    [self fontCellItalic:NO];
+}
+
+// Font Italic (W36-1.3): the one measured cell (the Task Name cell of the task
+// with UniqueID 1); the shared builder refuses every other cell.
+- (void)fontItalic:(id)sender {
+    (void)sender;
+    [self fontCellItalic:YES];
+}
+
+- (void)fontCellItalic:(BOOL)italic {
+    const std::string font_name = italic ? "Font Italic" : "Font Bold";
     if (g_plan == nullptr) {
         return;
     }
@@ -3559,12 +3576,12 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     if (plan.sheet == nullptr || !app::view_mode_is_task(plan.view_mode)) {
-        note(plan, "Font Bold is available in the Task Sheet view", false);
+        note(plan, font_name + " is available in the Task Sheet view", false);
         [g_view setNeedsDisplay:YES];
         return;
     }
     // W35f-1.10 (R35eG2-3): the Qt shell's refusal beside a pending document edit.
-    if (const std::string reason = pending_document_edit_refusal(plan, "Font Bold");
+    if (const std::string reason = pending_document_edit_refusal(plan, font_name);
         !reason.empty()) {
         note(plan, reason, true);
         [g_view setNeedsDisplay:YES];
@@ -3580,7 +3597,10 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
         return;
     }
     if (!(plan.sheet->anchor() == plan.sheet->focus())) {
-        note(plan, "Font Bold: " + std::string(app::bold_range_refusal()), true);
+        note(plan, font_name + ": " +
+                       std::string(italic ? app::italic_range_refusal()
+                                          : app::bold_range_refusal()),
+             true);
         [g_view setNeedsDisplay:YES];
         return;
     }
@@ -3592,21 +3612,29 @@ static void refresh_menu_items(NSMenu* menu, const app::MenuState& state) {
     const std::uint32_t field_id = app::bold_cell_field_id(column.table_field, column.field);
     app::StructuralEdit edit;
     std::string error;
-    if (!app::make_cell_bold_edit(plan.base, plan.path, task_uid, field_id, edit, error)) {
-        note(plan, "Font Bold: " + error, true);
+    const bool built =
+        italic ? app::make_cell_italic_edit(plan.base, plan.path, task_uid, field_id, edit,
+                                            error)
+               : app::make_cell_bold_edit(plan.base, plan.path, task_uid, field_id, edit,
+                                          error);
+    if (!built) {
+        note(plan, font_name + ": " + error, true);
         [g_view setNeedsDisplay:YES];
         return;
     }
     // W36-1.1: the builder decides from the file, as Project's button does: Bold
-    // on an unformatted cell, Bold off on the cell's one Bold item.
+    // on an unformatted cell, Bold off on the cell's one Bold item.  Italic is
+    // always on (W36-1.3: no Italic off pair).
     const bool bold_on = edit.cell_bold_on;
     if (!plan.edits.push(std::move(edit), &plan.base)) {
-        note(plan, "Font Bold: the edit was refused", true);
+        note(plan, font_name + ": the edit was refused", true);
         [g_view setNeedsDisplay:YES];
         return;
     }
     apply_structural_change(plan);
-    note(plan, std::string(bold_on ? "queued Font Bold on" : "queued Font Bold off") +
+    note(plan, std::string(italic    ? "queued Font Italic on"
+                           : bold_on ? "queued Font Bold on"
+                                     : "queued Font Bold off") +
                    " the " + std::string(app::bold_cell_column_name(field_id)) +
                    " cell of task uid " + std::to_string(task_uid) +
                    "; Save writes it",

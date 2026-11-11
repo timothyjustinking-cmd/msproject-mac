@@ -506,6 +506,10 @@ class MainWindow final : public QMainWindow {
     // W34-4.5: Task tab > Font > Bold on the selected Task Name cell (the one
     // measured cell); the builder owns every refusal.
     void bold_selected_cell();
+    // W36-1.3: Task tab > Font > Italic on the one measured cell (the Task Name
+    // cell of the task with UniqueID 1); both share font_selected_cell.
+    void italic_selected_cell();
+    void font_selected_cell(bool italic);
     // W34-4.6: Project > Properties > WBS > Define Code... queues the one
     // measured code definition; the builder owns every refusal.
     void define_wbs_code();

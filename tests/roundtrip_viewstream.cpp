@@ -592,16 +592,29 @@ struct BoldCellPair {
     std::uint32_t row;
     std::uint32_t field;
     std::uint8_t project_top;
+    ViewCellAttribute attribute;
+    std::uint32_t flags;      /* payload +8: the attribute's mask in its byte 3 */
+    std::uint32_t font_word;  /* payload +40 without the top byte */
 };
 
 constexpr std::size_t kItemFontTopAt = kInsertAt + 12 + 43;
 constexpr std::uint32_t kStartFieldId = 0x0B400505u;
 
+/* W36-1.3: Italic on the one measured cell (wave35-g3-font-italic: row 1, Task
+ * Name, flags 0x02000003, mask +10 = 0x200, font word 0x04, top byte 0x6b).  It
+ * is the ONLY Italic pair, so there is no held-out Italic pair and the writer is
+ * limited to this shape (the refusals below); the same comparison as the Bold
+ * pairs, the same exact-field mask of the top byte. */
 void test_bold_cell_pairs(TestContext& t) {
-    std::array<BoldCellPair, 3> const pairs{{
-        {"wave35-g3-font-bold-row2", 2, kMeasuredFieldId, 0x6b},
-        {"wave35-g3-font-bold-start", 1, kStartFieldId, 0x00},
-        {"wave35-g3-font-bold-range", 2, kMeasuredFieldId, 0x00}}};
+    std::array<BoldCellPair, 4> const pairs{{
+        {"wave35-g3-font-bold-row2", 2, kMeasuredFieldId, 0x6b, ViewCellAttribute::bold,
+         0x01000003u, 0x00000001u},
+        {"wave35-g3-font-bold-start", 1, kStartFieldId, 0x00, ViewCellAttribute::bold,
+         0x01000003u, 0x00000001u},
+        {"wave35-g3-font-bold-range", 2, kMeasuredFieldId, 0x00, ViewCellAttribute::bold,
+         0x01000003u, 0x00000001u},
+        {"wave35-g3-font-italic", 1, kMeasuredFieldId, 0x6b, ViewCellAttribute::italic,
+         0x02000003u, 0x00000004u}}};
     for (BoldCellPair const& pair : pairs) {
         std::string const stem = pair.stem;
         std::string const label = "bold cell " + stem;
@@ -616,6 +629,7 @@ void test_bold_cell_pairs(TestContext& t) {
         ViewCellStyleEdit edit = measured_edit();
         edit.uid = pair.row;
         edit.field_id = pair.field;
+        edit.attribute = pair.attribute;
         std::string const out = out_path("w36-bold-" + stem + ".mpp");
         ViewCellStyleWrite const written =
             mppwrite::save_view_cell_style(doc, {edit}, out);
@@ -638,6 +652,10 @@ void test_bold_cell_pairs(TestContext& t) {
                     label + ": payload +0 is the row");
             t.equal(u32_at(*var2, kInsertAt + 16), pair.field,
                     label + ": payload +4 is the field key");
+            t.equal(u32_at(*var2, kInsertAt + 12 + 8), pair.flags,
+                    label + ": payload +8 is the attribute's flags word");
+            t.equal(u32_at(*var2, kInsertAt + 12 + 40) & 0x00FFFFFFu, pair.font_word,
+                    label + ": the font word below the top byte is the attribute's bit");
         }
         t.equal(port_var2[kItemFontTopAt], 0x90, label + ": the port pins the top byte 0x90");
         t.equal(project_var2[kItemFontTopAt], pair.project_top,
@@ -739,8 +757,27 @@ void test_edit_refusals(TestContext& t) {
                 "Bold off on row " + std::to_string(cell.first) + ", field " +
                     std::to_string(cell.second) + " refused");
     }
-    std::array<std::pair<ViewCellAttribute, char const*>, 5> const siblings{{
-        {ViewCellAttribute::italic, "italic"},
+    /* W36-1.3: Italic ON has one measured shape, the Task Name cell of row 1 (the
+     * only Italic pair, no held-out one); Italic OFF has none. */
+    for (std::pair<std::uint32_t, std::uint32_t> const cell :
+         {std::pair<std::uint32_t, std::uint32_t>{2u, kMeasuredFieldId},
+          std::pair<std::uint32_t, std::uint32_t>{1u, kStartFieldId}}) {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.attribute = ViewCellAttribute::italic;
+        edit.uid = cell.first;
+        edit.field_id = cell.second;
+        refuses(control, {edit}, "only the Task Name cell of row uid 1",
+                "Italic on row " + std::to_string(cell.first) + ", field " +
+                    std::to_string(cell.second) + " refused");
+    }
+    {
+        ViewCellStyleEdit edit = measured_edit();
+        edit.attribute = ViewCellAttribute::italic;
+        edit.enabled = false;
+        refuses(control, {edit}, "turning Italic off is not measured",
+                "Italic off refused");
+    }
+    std::array<std::pair<ViewCellAttribute, char const*>, 4> const siblings{{
         {ViewCellAttribute::underline, "underline"},
         {ViewCellAttribute::strikethrough, "strikethrough"},
         {ViewCellAttribute::highlight_colour, "highlight colour"},
@@ -748,7 +785,7 @@ void test_edit_refusals(TestContext& t) {
     for (auto const& sibling : siblings) {
         ViewCellStyleEdit edit = measured_edit();
         edit.attribute = sibling.first;
-        refuses(control, {edit}, "only Bold is measured",
+        refuses(control, {edit}, "only Bold and Italic are measured",
                 std::string(sibling.second) + " refused");
     }
     {
@@ -888,8 +925,9 @@ void test_dry_run(TestContext& t) {
     }
     {
         ViewCellStyleEdit edit = measured_edit();
-        edit.attribute = ViewCellAttribute::italic;
-        refuses(control, {edit}, "only Bold is measured", "dry run: italic refused");
+        edit.attribute = ViewCellAttribute::underline;
+        refuses(control, {edit}, "only Bold and Italic are measured",
+                "dry run: underline refused");
     }
     refuses(control, {}, "exactly one cell-format item", "dry run: zero edits refused");
     refuses(doc_from_data("wave31-resource-sheet.mpp"), edits,

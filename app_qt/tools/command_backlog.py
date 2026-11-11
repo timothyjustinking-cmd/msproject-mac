@@ -96,6 +96,9 @@ IMPLEMENTED_RIBBON_COMMANDS = {
     # W34-4.5: the Font group's Bold bolds the one Task Name cell Project's pair
     # measured (the other font controls stay disabled).
     "font_bold",
+    # W36-1.3: the Font group's Italic italicises the one Task Name cell
+    # Project's pair measured (Underline and the colours stay disabled).
+    "font_italic",
     # W34-4.6: the WBS split's Define Code... item queues the one WBS code
     # definition Project's pair measured (Renumber... stays disabled).
     "wbs_menu",
@@ -198,10 +201,17 @@ RIBBON_GAPS = {
         "dialog fields are refused as not implemented in this port",
     # W34-4.5: Font Bold on the one measured cell.
     "font_bold":
+        "gap: the Task Name and Start cells of a stored task row (Project's "
+        "wave30-textstyle and wave35 cell pairs), alone in the save; a view "
+        "that already stores a cell format, Bold off outside the Task Name "
+        "cell of row 1 and the other font attributes are refused as not "
+        "implemented in this port",
+    # W36-1.3: Font Italic on the one measured cell.
+    "font_italic":
         "gap: the Task Name cell of the task with UniqueID 1 only (Project's "
-        "wave30-textstyle pair), alone in the save; every other cell, a view "
-        "that already stores a cell format, Bold off and the other font "
-        "attributes are refused as not implemented in this port",
+        "wave35-g3-font-italic pair, no held-out pair), alone in the save; every "
+        "other cell, a view that already stores a cell format, Italic off and "
+        "the other font attributes are refused as not implemented in this port",
     # W34-4.6: Define Code... for the measured shape only.
     "wbs_menu":
         "gap: Define Code... writes the prefix W with ordered two-digit numbers "

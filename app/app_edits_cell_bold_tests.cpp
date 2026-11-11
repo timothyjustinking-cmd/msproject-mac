@@ -165,6 +165,7 @@ struct BoldPair {
     std::uint32_t field;
     std::uint32_t project_top;
     std::size_t effects;
+    bool italic = false;  /* W36-1.3: the pair is Italic (flags 0x02000003, font word 0x04) */
 };
 
 /* The item the view's main block gains: Var2Data 42,576 + 4 + 42,692 = 85,272,
@@ -276,26 +277,37 @@ void check_pair(const BoldPair& spec) {
     check(!before.found, label + ": the control has no cell format for the cell");
     const CellEntry project_cell = read_cell(result_path.string(), task_uid, field);
     check(project_cell.found, label + ": Project's save has the cell format entry");
-    /* The font word is Bold's 0x01 under the session's leftover top byte. */
-    check_size(project_cell.font_word & 0x00FFFFFFu, kMeasuredFontWord & 0x00FFFFFFu,
-               label + ": Project's font word is Bold's (top byte aside)");
+    /* The font word is the attribute's bit (Bold 0x01, Italic 0x04) under the
+     * session's leftover top byte. */
+    const std::uint32_t attribute_font_word = spec.italic ? 0x00000004u : kMeasuredFontWord;
+    const std::uint32_t attribute_flags = spec.italic ? 0x02000003u : 0x01000003u;
+    check_size(project_cell.font_word & 0x00FFFFFFu, attribute_font_word & 0x00FFFFFFu,
+               label + ": Project's font word is the attribute's (top byte aside)");
+    check_size(project_cell.flags, attribute_flags,
+               label + ": Project's flags word is the attribute's mask");
     check_size(project_cell.font_word >> 24, spec.project_top,
                label + ": Project's font word top byte is the session's leftover");
 
     /* --- make_cell_bold_edit ---------------------------------------------- */
     app::StructuralEdit edit;
     std::string edit_error;
-    const bool built = app::make_cell_bold_edit(plan, control_path.string(), task_uid, field,
-                                                edit, edit_error);
-    check(built, label + ": make_cell_bold_edit accepts the measured cell");
+    const bool built =
+        spec.italic ? app::make_cell_italic_edit(plan, control_path.string(), task_uid, field,
+                                                 edit, edit_error)
+                    : app::make_cell_bold_edit(plan, control_path.string(), task_uid, field,
+                                               edit, edit_error);
+    check(built, label + (spec.italic ? ": make_cell_italic_edit accepts the measured cell"
+                                      : ": make_cell_bold_edit accepts the measured cell"));
     if (!built) {
         std::printf("EDIT ERROR: %s\n", edit_error.c_str());
         return;
     }
-    check(edit.kind == app::StructuralKind::bold_cell, label + ": the built edit has the kind");
+    check(edit.kind == (spec.italic ? app::StructuralKind::italic_cell
+                                    : app::StructuralKind::bold_cell),
+          label + ": the built edit has the kind");
     check_size(edit.uid, task_uid, label + ": the edit names the row");
     check_size(edit.field_id, field, label + ": the edit names the cell's field");
-    check(edit.cell_bold_on, label + ": an unformatted cell builds Bold ON");
+    check(edit.cell_bold_on, label + ": an unformatted cell builds the attribute ON");
 
     /* --- push + display + undo/redo --------------------------------------- */
     app::StructuralEdits edits;
@@ -404,6 +416,8 @@ void check_pair(const BoldPair& spec) {
     check_size(after.flags, project_cell.flags, label + ": entry flags equal Project's");
     check_size(after.font_word & 0x00FFFFFFu, project_cell.font_word & 0x00FFFFFFu,
                label + ": entry font word equals Project's (top byte aside)");
+    check_size(after.font_word & 0x00FFFFFFu, attribute_font_word & 0x00FFFFFFu,
+               label + ": the port's entry carries the attribute's font bit");
     check_size(after.font_word >> 24, 0x90, label + ": the port's entry top byte is the pinned 0x90");
     check_size(after.pattern, project_cell.pattern, label + ": entry pattern equals Project's");
     check(after.has_background == project_cell.has_background,
@@ -828,6 +842,59 @@ void check_refusals() {
         check(!std::filesystem::exists(out.string() + ".w51-structural-tmp"),
               "the refused save leaves no intermediate file");
     }
+
+    /* W36-1.3: Italic has one pair (row 1, Task Name, an unformatted view), so
+     * every other shape is refused: another row, another column, an unsaved task,
+     * a view that already carries a format item (Italic off and a second change
+     * are unmeasured), and a hand-built edit for another cell. */
+    {
+        auto italic_refused = [&](const app::PlanInput& from, const std::string& file,
+                                  std::uint32_t task, std::uint32_t field, const char* needle,
+                                  const std::string& what) {
+            app::StructuralEdit edit;
+            std::string error;
+            const bool built = app::make_cell_italic_edit(from, file, task, field, edit, error);
+            check(!built, what);
+            if (built) {
+                return;
+            }
+            check(error.find(needle) != std::string::npos,
+                  what + ": the reason names \"" + needle + "\" (got \"" + error + "\")");
+            check(edit.kind == app::StructuralKind::insert_task && edit.uid == 0 &&
+                      edit.field_id == 0,
+                  what + ": the refused edit is left default-constructed");
+        };
+        italic_refused(plan, source, 4242, kNameField, "not on a saved task",
+                       "Italic on an unknown task");
+        italic_refused(plan, source, kTaskUid, kStartField, "outside the Task Name column",
+                       "Italic on the Start cell");
+        italic_refused(plan, source, other_task, kNameField, "UniqueID 1",
+                       "Italic on another row's Task Name cell");
+        italic_refused(formatted_plan, formatted_path.string(), kTaskUid, kNameField,
+                       "turning Italic off is not measured",
+                       "Italic on a view that already carries a format item");
+        /* Bold on an Italic file is a different attribute on a formatted block: the
+         * Bold toggle must not read the Italic item as its own Bold item. */
+        {
+            const std::filesystem::path italic_file =
+                data_path("wave35-g3-font-italic.mpp");
+            fixture::require_committed(italic_file);
+            expect_refused(load_plan(italic_file), italic_file.string(), kTaskUid, kNameField,
+                           "already carries a cell format item",
+                           "Bold on the cell Project italicised");
+        }
+        app::StructuralEdit hand;
+        hand.kind = app::StructuralKind::italic_cell;
+        hand.uid = other_task;
+        hand.field_id = kNameField;
+        app::StructuralEdits edits;
+        check(!edits.push(hand, &plan), "push() refuses an Italic edit for another row");
+        hand.uid = kTaskUid;
+        hand.field_id = kStartField;
+        check(!edits.push(hand, &plan), "push() refuses an Italic edit for the Start cell");
+        hand.field_id = kNameField;
+        check(edits.push(hand, &plan), "push() accepts the measured Italic cell");
+    }
 }
 
 }  // namespace
@@ -835,7 +902,7 @@ void check_refusals() {
 int main() {
     /* The effect counts of the three new pairs are the measured ones (printed as
      * "declared effect bytes" by each run); textstyle's is the wave 34 figure. */
-    const std::array<BoldPair, 4> pairs{{
+    const std::array<BoldPair, 5> pairs{{
         {"cell-bold", kControl, kNull, kProject, kTaskUid, kNameField, 0x90, kPairEffects},
         {"cell-bold-row2", "wave35-g3-font-bold-row2-control.mpp",
          "wave35-g3-font-bold-row2-control-null.mpp", "wave35-g3-font-bold-row2.mpp", 2,
@@ -845,7 +912,12 @@ int main() {
          kStartField, 0x00, 6608},
         {"cell-bold-range", "wave35-g3-font-bold-range-control.mpp",
          "wave35-g3-font-bold-range-control-null.mpp", "wave35-g3-font-bold-range.mpp", 2,
-         kNameField, 0x00, 6607}}};
+         kNameField, 0x00, 6607},
+        /* W36-1.3: the only Italic pair (row 1, Task Name, top byte 0x6b); the effect
+         * count is the measured one. */
+        {"cell-italic", "wave35-g3-font-italic-control.mpp",
+         "wave35-g3-font-italic-control-null.mpp", "wave35-g3-font-italic.mpp", 1,
+         kNameField, 0x6b, 6607, true}}};
     for (const BoldPair& pair : pairs) {
         check_pair(pair);
     }
@@ -858,6 +930,10 @@ int main() {
                   text.find("single cell") != std::string::npos &&
                   text.find("is not implemented in this port") != std::string::npos,
               "the shared Font Bold range refusal names the cause and the measured pair");
+        const std::string italic_text(app::italic_range_refusal());
+        check(italic_text.find("Font Italic on more than one cell") != std::string::npos &&
+                  italic_text.find("is not implemented in this port") != std::string::npos,
+              "the shared Font Italic range refusal names the cause");
     }
     std::printf("app_edits_cell_bold_tests: %d checks passed\n", g_checks - g_failures);
     if (g_failures != 0) {

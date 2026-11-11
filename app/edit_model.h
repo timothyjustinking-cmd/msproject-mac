@@ -210,6 +210,11 @@ enum class StructuralKind : std::uint8_t {
     // own display is unchanged by the queued edit; like the kinds above it is
     // EXCLUSIVE.
     show_level = 21,
+    // Wave 36 (W36-1.3): Font Italic on the one measured cell (row uid 1, Task
+    // Name; wave35-g3-font-italic, the only Italic pair, so no held-out pair),
+    // written by the same save_view_cell_style with the Italic attribute.  Italic
+    // OFF has no pair and is refused.  Exclusive like bold_cell.
+    italic_cell = 22,
 };
 
 // One task's computed progress in an update_actuals edit.  `actual_ticks` is
@@ -620,6 +625,16 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
                          std::uint32_t task_uid, std::uint32_t field_id,
                          StructuralEdit& out, std::string& error);
 
+// Builds a ready-to-push italic_cell edit for ONE cell (W36-1.3).  Italic has one
+// pair, wave35-g3-font-italic (the Task Name cell of the task with UniqueID 1, an
+// unformatted view), so only that cell is built; every other cell is refused with
+// the "is not implemented in this port" text.  A view that already carries a cell
+// format item is refused (Italic off and a second change are unmeasured).
+// `out` is default-constructed on refusal.
+bool make_cell_italic_edit(const PlanInput& plan, std::string_view source_path,
+                           std::uint32_t task_uid, std::uint32_t field_id,
+                           StructuralEdit& out, std::string& error);
+
 // Wave 35 (W35-4.1): what both shells say, and look up, around the Font Bold and
 // Assign Resources builders, kept here so the Qt and macOS shells cannot drift.
 //
@@ -629,6 +644,11 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
 inline std::string_view bold_range_refusal() noexcept {
     return "Font Bold on more than one cell is not implemented in this port: the measured "
            "Project pair bolds a single cell";
+}
+// W36-1.3: the same for Font Italic ("Font Italic: " prefix).
+inline std::string_view italic_range_refusal() noexcept {
+    return "Font Italic on more than one cell is not implemented in this port: the "
+           "measured Project pair italicises a single cell";
 }
 
 // The resource of the task's one real assignment (resource_uid != 0), or 0 when

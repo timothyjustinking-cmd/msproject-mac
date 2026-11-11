@@ -13,8 +13,8 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Task | Clipboard | Cut | implemented | session refusal: a range cut is refused while a sort or filter changes the row order; clear the sort and filter first (a single cell still cuts) |
 | Task | Clipboard | Copy | implemented | session refusal: a range copy is refused while a sort or filter changes the row order; clear the sort and filter first (a single cell still copies) |
 | Task | Clipboard | Format Painter | disabled | future: not implemented in this port |
-| Task | Font | B | implemented | gap: the Task Name cell of the task with UniqueID 1 only (Project's wave30-textstyle pair), alone in the save; every other cell, a view that already stores a cell format, Bold off and the other font attributes are refused as not implemented in this port |
-| Task | Font | I | disabled | future: not implemented in this port |
+| Task | Font | B | implemented | gap: the Task Name and Start cells of a stored task row (Project's wave30-textstyle and wave35 cell pairs), alone in the save; a view that already stores a cell format, Bold off outside the Task Name cell of row 1 and the other font attributes are refused as not implemented in this port |
+| Task | Font | I | implemented | gap: the Task Name cell of the task with UniqueID 1 only (Project's wave35-g3-font-italic pair, no held-out pair), alone in the save; every other cell, a view that already stores a cell format, Italic off and the other font attributes are refused as not implemented in this port |
 | Task | Font | U | disabled | future: not implemented in this port |
 | Task | Font | highlight colour | disabled | future: not implemented in this port |
 | Task | Font | font colour | disabled | future: not implemented in this port |
@@ -153,7 +153,8 @@ Every row whose status is `disabled` is greyed in the Qt shell with the tooltip 
 | Edit | Custom Field Formula... | implemented |  |
 | Edit | Resource Information... | implemented | gap: the name only, and only to a longer printable-ASCII name of a resource with no assignments, alone in the save; every other field and shape is refused (Notes stays disabled: its payload embeds the saving machine's RichEdit generator string, which this port cannot reproduce) |
 | Edit | Assign Resources... | implemented | gap: one work resource at 100 % Max. Units on an unstarted leaf task that holds no assignment yet, and the removal of that one assignment, alone in the save; further assignments, units, work and the other dialog fields are refused as not implemented in this port |
-| Edit | Font Bold | implemented | gap: the Task Name cell of the task with UniqueID 1 only (Project's wave30-textstyle pair), alone in the save; every other cell, a view that already stores a cell format, Bold off and the other font attributes are refused as not implemented in this port |
+| Edit | Font Bold | implemented | gap: the Task Name and Start cells of a stored task row (Project's wave30-textstyle and wave35 cell pairs), alone in the save; a view that already stores a cell format, Bold off outside the Task Name cell of row 1 and the other font attributes are refused as not implemented in this port |
+| Edit | Font Italic | implemented | gap: the Task Name cell of the task with UniqueID 1 only (Project's wave35-g3-font-italic pair, no held-out pair), alone in the save; every other cell, a view that already stores a cell format, Italic off and the other font attributes are refused as not implemented in this port |
 | Edit | Define WBS Code | implemented | gap: Define Code... writes the prefix W with ordered two-digit numbers on a project of exactly three flat tasks that stores no WBS text, alone in the save; every other count, outline, prefix, separator or length, a redefinition, and Renumber... are refused as not implemented in this port (no Define Code dialog fields are built) |
 | Edit | Calculate Project | implemented | gap: a pending recalculation of the project row and exactly two unlinked, automatically scheduled leaf tasks with no constraint, progress or task calendar, alone in the save; a link, a lag, a constraint, a summary, another task count and a file that is not pending are refused as not implemented in this port |
 | View | Gantt Chart | implemented |  |
@@ -194,8 +195,8 @@ Edits that are not command rows, with the reason the shell refuses them (operato
 
 ## Summary
 
-* ribbon commands: 114 (63 disabled)
-* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 52 enabled / 62 disabled command controls. The table above reports 63 disabled because it counts a split by its menu items; the pin counts the control.
+* ribbon commands: 114 (62 disabled)
+* pin truth (`app_qt/ribbon_pin.tsv`, typed from the reference captures): 53 enabled / 61 disabled command controls. The table above reports 62 disabled because it counts a split by its menu items; the pin counts the control.
 * the difference (1): 1 split whose button is live while every menu item is disabled: Project > Schedule > Set Baseline
-* menu commands: 56 (6 disabled)
+* menu commands: 57 (6 disabled)
 * implementation source: `shell_implements()` in `app_qt/command_status.h`; keep it in step with `MainWindow::handle_action()`.

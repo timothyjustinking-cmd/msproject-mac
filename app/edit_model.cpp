@@ -111,6 +111,7 @@ bool is_exclusive_kind(StructuralKind kind) noexcept {
            kind == StructuralKind::assign_resource ||
            kind == StructuralKind::unassign_resource ||
            kind == StructuralKind::bold_cell ||
+           kind == StructuralKind::italic_cell ||
            kind == StructuralKind::define_wbs_code ||
            kind == StructuralKind::calculate_project ||
            kind == StructuralKind::sort_view ||
@@ -3192,6 +3193,36 @@ mppwrite::ViewCellStyleEdit cell_bold_view_edit(std::uint32_t task_uid,
     return view_edit;
 }
 
+// W36-1.3: the plan-side half of the Font Italic rule.  Italic has ONE pair
+// (wave35-g3-font-italic: the Task Name cell of the task with UniqueID 1), so
+// there is no held-out Italic pair and only that cell is built; the writer
+// enforces the same shape.  Returns the reason, or an empty string.
+std::string cell_italic_plan_refusal(const PlanInput& plan, std::uint32_t task_uid,
+                                     std::uint32_t field_id) {
+    const TaskRow* task = task_row_for_uid(plan.tasks, task_uid);
+    if (task == nullptr || task->file_row == 0) {
+        return "the cell is not on a saved task of the open plan";
+    }
+    if (field_id != kBoldMeasuredFieldId) {
+        return "Font Italic on a cell outside the Task Name column is not implemented "
+               "in this port: the one measured Project pair italicises a Task Name cell";
+    }
+    if (task_uid != kBoldMeasuredTaskUid) {
+        return "Font Italic on this row is not implemented in this port: the one "
+               "measured Project pair italicises the Task Name cell of the task with "
+               "UniqueID 1, and a second pair has not been measured";
+    }
+    return {};
+}
+
+mppwrite::ViewCellStyleEdit cell_italic_view_edit(std::uint32_t task_uid,
+                                                  std::uint32_t field_id) {
+    mppwrite::ViewCellStyleEdit view_edit =
+        cell_bold_view_edit(task_uid, field_id, true);
+    view_edit.attribute = mppwrite::ViewCellAttribute::italic;
+    return view_edit;
+}
+
 }  // namespace
 
 bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
@@ -3246,6 +3277,45 @@ bool make_cell_bold_edit(const PlanInput& plan, std::string_view source_path,
     out.uid = task_uid;
     out.field_id = field_id;
     out.cell_bold_on = bold_on;
+    return true;
+}
+
+bool make_cell_italic_edit(const PlanInput& plan, std::string_view source_path,
+                           std::uint32_t task_uid, std::uint32_t field_id,
+                           StructuralEdit& out, std::string& error) {
+    out = StructuralEdit{};
+    error.clear();
+    if (std::string reason = cell_italic_plan_refusal(plan, task_uid, field_id);
+        !reason.empty()) {
+        error = std::move(reason);
+        return false;
+    }
+    mppwrite::CfbDocument document;
+    try {
+        document = mppwrite::CfbDocument::from_file(std::string(source_path));
+    } catch (const std::exception& open_error) {
+        error = std::string("the project file could not be read (") +
+                open_error.what() + ")";
+        return false;
+    }
+    // The writer's dry run validates the applied view's streams against the FILE,
+    // as for Bold.  Italic OFF has no pair, so a cell that already carries a cell
+    // format item (an Italic item, or any other) is refused with the writer's
+    // reason and the fact that turning Italic off is not measured.
+    try {
+        (void)mppwrite::save_view_cell_style(
+            document, {cell_italic_view_edit(task_uid, field_id)}, std::string(), true);
+    } catch (const std::exception& refusal) {
+        std::string reason = refusal.what();
+        if (reason.find("already carries a cell format item") != std::string::npos) {
+            reason += " (turning Italic off is not measured: no Italic off pair)";
+        }
+        error = "Font Italic is not implemented in this port for this project: " + reason;
+        return false;
+    }
+    out.kind = StructuralKind::italic_cell;
+    out.uid = task_uid;
+    out.field_id = field_id;
     return true;
 }
 
@@ -4536,6 +4606,16 @@ bool StructuralEdits::push(StructuralEdit edit, const PlanInput* plan,
             edit.dependants = 0;
             break;
         }
+        case StructuralKind::italic_cell: {
+            // W36-1.3: the plan-side half, as for bold_cell; Italic is always ON.
+            if (plan == nullptr || edit.uid == 0 || edit.field_id == 0 ||
+                !cell_italic_plan_refusal(*plan, edit.uid, edit.field_id).empty()) {
+                return false;
+            }
+            edit.anchor_uid = 0;
+            edit.dependants = 0;
+            break;
+        }
         case StructuralKind::define_wbs_code: {
             // W34-4.6: the plan-side half.  The file-side half (the writer's dry
             // run) ran in make_wbs_code_edit and runs again in the writer;
@@ -5671,33 +5751,38 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         }
     }
 
-    // W34-4.5: Font Bold on one cell is exclusive the same way.
+    // W34-4.5: Font Bold on one cell is exclusive the same way (W36-1.3: and so is
+    // Font Italic, the same writer and the same shape of pair).
     const StructuralEdit* bold_edit = nullptr;
     for (const StructuralEdit& edit : edits.applied()) {
-        if (edit.kind == StructuralKind::bold_cell) {
+        if (edit.kind == StructuralKind::bold_cell ||
+            edit.kind == StructuralKind::italic_cell) {
             bold_edit = &edit;
         }
     }
     if (bold_edit != nullptr) {
+        const bool italic_edit = bold_edit->kind == StructuralKind::italic_cell;
+        const std::string font_edit = italic_edit ? "a Font Italic edit" : "a Font Bold edit";
+        const std::string font_done = italic_edit ? "italicised" : "bolded";
         if (edits.applied().size() != 1) {
             result.error =
-                "a Font Bold edit must be the only edit in a save; another edit "
-                "is queued with it, and the measured Project pair is one cell "
-                "bolded on an otherwise untouched save";
+                font_edit + " must be the only edit in a save; another edit "
+                "is queued with it, and the measured Project pair is one cell " +
+                font_done + " on an otherwise untouched save";
             return result;
         }
         if (!writable.empty()) {
             result.error =
-                "a Font Bold edit cannot be combined with a start-date edit; the "
-                "measured Project pair is one cell bolded on an otherwise "
-                "untouched save";
+                font_edit + " cannot be combined with a start-date edit; the "
+                "measured Project pair is one cell " + font_done +
+                " on an otherwise untouched save";
             return result;
         }
         if (document_edits.any()) {  // W34b-1.3 (RC-R3, R34G4-8)
             result.error =
-                "a Font Bold edit cannot be combined with a table format or "
+                font_edit + " cannot be combined with a table format or "
                 "custom-field formula edit; the measured Project pair is one "
-                "cell bolded on an otherwise untouched save";
+                "cell " + font_done + " on an otherwise untouched save";
             return result;
         }
     }
@@ -6652,9 +6737,12 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
         // the view shape the edit was built from, then the writer re-validates
         // and writes.  A refusal is an exception, reported as the save error.
         if (bold_edit != nullptr) {
+            const bool italic_edit = bold_edit->kind == StructuralKind::italic_cell;
             const std::vector<mppwrite::ViewCellStyleEdit> view_edits{
-                cell_bold_view_edit(bold_edit->uid, bold_edit->field_id,
-                                    bold_edit->cell_bold_on)};
+                italic_edit
+                    ? cell_italic_view_edit(bold_edit->uid, bold_edit->field_id)
+                    : cell_bold_view_edit(bold_edit->uid, bold_edit->field_id,
+                                          bold_edit->cell_bold_on)};
             (void)mppwrite::save_view_cell_style(document, view_edits, std::string(),
                                                  true);
             const mppwrite::ViewCellStyleWrite written = mppwrite::save_view_cell_style(
@@ -6663,8 +6751,9 @@ StructuralSaveResult save_structural_edits(const StructuralEdits& edits,
             result.notes.push_back(
                 "cell (task uid " + std::to_string(written.uid) + ", field " +
                 std::to_string(written.field_id) +
-                (bold_edit->cell_bold_on ? ") set to bold (view block "
-                                         : ") turned off bold (view block ") +
+                (italic_edit ? ") set to italic (view block "
+                             : bold_edit->cell_bold_on ? ") set to bold (view block "
+                                                       : ") turned off bold (view block ") +
                 std::to_string(written.block_payload_before) + " -> " +
                 std::to_string(written.block_payload_after) + " bytes)");
         }

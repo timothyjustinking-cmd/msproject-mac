@@ -515,7 +515,8 @@ void test_enablement() {
     {
         const MenuAction wave35[] = {
             MenuAction::resource_information, MenuAction::assign_resources,
-            MenuAction::font_bold, MenuAction::define_wbs_code, MenuAction::calculate_project,
+            MenuAction::font_bold, MenuAction::font_italic, MenuAction::define_wbs_code,
+            MenuAction::calculate_project,
         };
         for (const MenuAction action : wave35) {
             check(app::menu_item_supported(action), "a wave-35 command is supported");

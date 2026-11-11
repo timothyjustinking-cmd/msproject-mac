@@ -103,6 +103,8 @@ enum class MenuAction : std::uint8_t {
     resource_information,
     assign_resources,
     font_bold,
+    // Wave 36 (W36-1.3): the Task tab's I button, for the one measured Italic cell.
+    font_italic,
     define_wbs_code,
     calculate_project,
 };

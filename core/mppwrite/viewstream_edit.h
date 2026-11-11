@@ -63,8 +63,14 @@
  * pair measures end to end, with the null save separating noise from the edit,
  * and every other shape refused up front):
  *
- *   attribute        Bold set   refused (italic, underline, strikethrough,
- *                               highlight colour, font colour)
+ *   attribute        Bold set   refused (underline, strikethrough, highlight
+ *                  Italic set  colour, font colour).  W36-1.3: Italic ON is
+ *                               measured by ONE pair (wave35-g3-font-italic: row 1,
+ *                               Task Name; flags 0x02000003, mask +10 = 0x200,
+ *                               font word 0x04, top byte pinned 0x90 like Bold's),
+ *                               so there is no held-out Italic pair and Italic is
+ *                               written for that cell only; Italic OFF has no
+ *                               pair and is refused.
  *   selection        cell       refused (whole row)
  *   view             uid 2      refused (the other views are unmeasured)
  *   row              any row    refused (the project summary row, uid 0, and the
@@ -104,7 +110,8 @@
  * test in tests/roundtrip_viewstream.cpp):
  *   - a count other than one, an empty or unusable output path, uid 0,
  *     the all-ones row, field id 0, a field id other than Task Name or Start,
- *     an attribute other than Bold, Bold off on any cell but Task Name of row 1,
+ *     an attribute other than Bold and Italic, Italic on any cell but Task Name
+ *     of row 1, Italic off, Bold off on any cell but Task Name of row 1,
  *     Bold off without the one measured Bold item, a whole-row selection,
  *     a view uid other than the measured 2;
  *   - a missing 214/CV_iew/VarMeta, Var2Data or 214/Props stream; a VarMeta
@@ -162,6 +169,10 @@ inline constexpr std::size_t kViewItemHeaderSize = 12;
 inline constexpr std::size_t kCellFormatEntrySize = 44;
 inline constexpr std::uint32_t kCellFormatFlags = 0x01000003u;
 inline constexpr std::uint32_t kMeasuredFontWord = 0x90000001u;
+/* W36-1.3: the Italic item (wave35-g3-font-italic): the flags word's byte 3 is
+ * the attribute mask 0x02 (payload +10 = 0x0200) and the font word's bit 0x04. */
+inline constexpr std::uint32_t kItalicCellFormatFlags = 0x02000003u;
+inline constexpr std::uint32_t kMeasuredItalicFontWord = 0x90000004u;
 /* The pair's applied view: the CV_iew row whose main block Project grew. */
 inline constexpr std::uint32_t kMeasuredViewUid = 2u;
 /* The pair's formatted cell: the Task Name cell (field id 0x0b40000e) of the
@@ -174,7 +185,8 @@ inline constexpr std::uint32_t kMeasuredCellFieldId = 0x0B40000Eu;
  * fields; every other field is unmeasured and refused. */
 inline constexpr std::uint32_t kMeasuredStartFieldId = 0x0B400505u;
 
-/* The Font group's attributes.  Only Bold is measured; the rest are refused. */
+/* The Font group's attributes.  Bold and (W36-1.3) Italic are measured; the rest
+ * are refused. */
 enum class ViewCellAttribute : std::uint8_t {
     bold = 0,
     italic = 1,

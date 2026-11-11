@@ -132,7 +132,8 @@ targeted pass for W34-2.1 did not either:
 The word is therefore NOT decoded, and the writer claims no bit. It accepts the
 measured word exactly (`0x90000001`) and only for Bold (set): the capability
 matrix in `core/mppwrite/viewstream_edit.h` enables that one append and
-refuses italic, underline, strikethrough, both colours, Bold-off, whole-row
+refuses (as written in wave 35; W36-1.1 to 1.3 extended Bold-off, Bold on other
+cells and Italic, below) underline, strikethrough, both colours, whole-row
 selection, every view uid but the measured 2, and the project summary row
 (uid 0). A future pair that varies exactly one of those factors is what would
 extend it.
@@ -187,7 +188,8 @@ What this settles:
   record, "no append can match" and "the enabled Bold on is unchanged", are both
   true under this rule and are not two positions.)
 - **Italic** is the same structure with flags `0x02000003` and a font word whose
-  low byte is `0x04`; **Bold off** shows the flags byte is a per-attribute
+  low byte is `0x04` (the W36-1.3 bullet below enables it for one cell);
+  **Bold off** shows the flags byte is a per-attribute
   mask.  Underline, size, name and colour were applied through `Font32Ex`, which
   writes a different entry (zero colour words, pattern 0, flags `0x06` or `0x04`
   and a font word whose low byte is also noise-like: `0xca`, `0xd8`, `0xd8`,
@@ -249,6 +251,25 @@ What this settles:
   other column.  The app also refuses a task whose ID differs from its UniqueID:
   every pair has the two equal, so none says which one the view stores, and a
   collapsed, sorted or filtered view could separate them.
+- **Italic on the Task Name cell of row 1 (W36-1.3).**  The same append with
+  flags `0x02000003` (entry +8), attribute mask `0x200` (+10) and font word
+  `0x04` (+40).  (a) the layout is `trace-font-item-r6.md`'s; (b) there is ONE
+  Italic pair, `wave35-g3-font-italic` (row 1, Task Name, on), so there is no
+  held-out Italic pair: the rule was fitted to it and nothing else tests it.
+  Under the lift rule the writer therefore stays limited to that one measured
+  shape: Italic on, row uid 1, Task Name, one cell, a view that stores no cell
+  format.  Italic on any other row or column, Italic off, a second change and
+  Italic combined with another attribute are refused ("only the Task Name cell
+  of row uid 1"; "turning Italic off is not measured"; a view that already
+  carries a cell format is refused as for Bold).  (c) `roundtrip_viewstream`
+  and `app_edits_cell_bold` (pair `cell-italic`) save the control through the
+  real writer and compare every stream with Project's save under its null save:
+  6607 effect bytes, no mismatch outside the font word's top byte (+43, Project
+  stored `0x6b`, the port pins `0x90`), masked by exact field.  Wired:
+  `MenuAction::font_italic` (Edit > Font Italic, no shortcut, because Cmd+I is
+  Insert Task) and the ribbon's I button, in both shells (`app/main.mm` is
+  gated by CI only).  4(e), the COM read-back of the cell's `Font.Italic`, is
+  the coordinator's and is not claimed by these tests.  U stays disabled.
 - **Block digest.**  A control saved by another Project session differs from the
   wave-30 control at payload offset 42,678 (`0x18` -> `0x26`) and nowhere else
   in the block.  The byte is **not per-save noise** (W35b-3.5, R35G3-10): it is

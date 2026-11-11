@@ -111,6 +111,8 @@ std::vector<MenuSpec> build_menu_specs() {
              false, true),
         item(MenuAction::assign_resources, "Assign Resources..."),
         item(MenuAction::font_bold, "Font Bold", "b"),
+        // W36-1.3: no shortcut; Command+I is Insert Task here.
+        item(MenuAction::font_italic, "Font Italic"),
         item(MenuAction::define_wbs_code, "Define WBS Code"),
         item(MenuAction::calculate_project, "Calculate Project"),
     };
@@ -244,6 +246,7 @@ const std::vector<MenuAction>& all_menu_actions() {
         MenuAction::resource_information,
         MenuAction::assign_resources,
         MenuAction::font_bold,
+        MenuAction::font_italic,
         MenuAction::define_wbs_code,
         MenuAction::calculate_project,
     };
@@ -396,7 +399,9 @@ bool menu_item_enabled(MenuAction action, const MenuState& state) noexcept {
             return state.has_document && state.resource_sheet_view && !state.editing;
         case MenuAction::assign_resources:
         case MenuAction::font_bold:
-            // Task Sheet commands on the selected task (Font Bold: its one cell).
+        case MenuAction::font_italic:
+            // Task Sheet commands on the selected task (Font Bold, Font Italic: its
+            // one cell).
             return state.has_document && state.task_view && state.has_selection &&
                    !state.editing;
         case MenuAction::define_wbs_code:
@@ -461,6 +466,7 @@ const char* menu_action_name(MenuAction action) noexcept {
         case MenuAction::resource_information: return "resource_information";
         case MenuAction::assign_resources: return "assign_resources";
         case MenuAction::font_bold: return "font_bold";
+        case MenuAction::font_italic: return "font_italic";
         case MenuAction::define_wbs_code: return "define_wbs_code";
         case MenuAction::calculate_project: return "calculate_project";
     }
