@@ -448,9 +448,8 @@ def _meta_blocks(meta):
     """[(uid, offset, key)] of a VarMeta stream."""
     if meta is None or len(meta) < 24:
         return []
-    count = struct.unpack_from("<I", meta, 8)[0]
-    return [struct.unpack_from("<III", meta, 24 + 12 * k) for k in range(count)
-            if 24 + 12 * k + 12 <= len(meta)]
+    count = min(struct.unpack_from("<I", meta, 8)[0], (len(meta) - 24) // 12)   # a flipped count
+    return [struct.unpack_from("<III", meta, 24 + 12 * k) for k in range(count)]   # must not loop 2^32
 
 
 def noise_windows(name, data, meta=None, ctl=None, other=None):

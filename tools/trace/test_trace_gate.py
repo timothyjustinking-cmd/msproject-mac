@@ -255,51 +255,178 @@ try:
             check("W36-0b.2 %s: the no-op edit equals its control outside the noise" % stem,
                   problems == 0, "%r" % (lines,))
 
-        CANON_FLIP = {"???214/CEdl/Var2Data": 12, "???214/CEdl/VarMeta": 8,
-                      "???214/Props": 0, "Props14": 8, "?SummaryInformation": 0}
-        tested = 0
-        skipped = []
-        for name in sorted(R):
-            data = R[name]
-            if not data:
-                skipped.append(name + " (empty)")
-                continue
-            mask = g.control_mask(name, len(data), C.get(name), N.get(name)) or set()
-            win = g.noise_windows(name, data, R.get(name[:-len("Var2Data")] + "VarMeta")
-                                     if name.endswith("Var2Data") else None, C)
-            free = [i for i in range(len(data)) if i not in mask and i not in win]
-            if name in g.CANON:
-                # a parsed stream: flip a header byte that precedes every noise field, so the
-                # raw and canonical offsets agree (item 7 flips every offset outside the fields)
-                at = CANON_FLIP[name]
-                if at in mask or at in win:
-                    skipped.append(name + " (no free bytes)")
+        # --- W36-0b.7 (R36G0-8): a flip at EVERY offset outside the named noise fields fails -----------
+        # The named fields are written out here from the evidence note (FIELDS rows 12 to 24), not
+        # read back from the gate, so a window that grows past its field, or covers a row, a record
+        # or a stream, is a difference between the two.  Then every offset outside the named fields
+        # of every stream of three pairs is flipped (all at once per stream; the gate counts each
+        # one, so "bytes-differ N" must be exactly the number flipped).
+        ROW_SIZE = {"???114/TBkndAssn/Fixed2Data": 48, "???114/TBkndTask/Fixed2Data": 64,
+                    "???114/TBkndRsc/Fixed2Data": 40, "???114/TBkndCal/Fixed2Data": 16,
+                    "???114/TBkndCons/Fixed2Data": 16}
+        ROW_GUIDS = {"???114/TBkndAssn/Fixed2Data": (0, 16), "???114/TBkndTask/Fixed2Data": (0, 24),
+                     "???114/TBkndRsc/Fixed2Data": (0, 24), "???114/TBkndCal/Fixed2Data": (0,),
+                     "???114/TBkndCons/Fixed2Data": (0,)}
+        ABS_GUIDS = {"???214/CEdl/FixedData": (144,), "???214/CFilter/FixedData": (214, 444),
+                     "???214/CGrouping/FixedData": (214, 444), "???214/CTable/FixedData": (214,),
+                     "???214/CV_iew/FixedData": (122, 260, 398)}
+        PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2)
+
+        def zero_or_v1(raw):
+            return len(raw) == 16 and (not any(raw) or (raw[6] >> 4 == 1 and raw[8] >> 6 == 2))
+
+        def records(data, base):
+            pos, out = base, []
+            while pos + 12 <= len(data):
+                length, rid = struct.unpack_from("<II", data, pos)
+                out.append((pos + 12, length, rid))
+                pos += 12 + length + (length & 1)
+            return out
+
+        def blocks(meta):
+            if not meta or len(meta) < 24:
+                return []
+            return [struct.unpack_from("<III", meta, 24 + 12 * k)
+                    for k in range(struct.unpack_from("<I", meta, 8)[0])]
+
+        def task_uids(blob):
+            return {struct.unpack_from("<I", blob, 48 + 202 * r)[0]
+                    for r in range(max(0, (len(blob or b"") - 48) // 202))}
+
+        def spec_windows(name, data, meta, ctl):
+            """The offsets of the named noise fields of one stream, by the evidence note."""
+            out = set()
+            for row in range(len(data) // ROW_SIZE[name] if name in ROW_SIZE else 0):
+                for lo in ROW_GUIDS[name]:
+                    at = row * ROW_SIZE[name] + lo
+                    if zero_or_v1(data[at:at + 16]):
+                        out.update(range(at, at + 16))
+            for at in ABS_GUIDS.get(name, ()):
+                if zero_or_v1(data[at:at + 16]):
+                    out.update(range(at, at + 16))
+            if name == "???114/Props":
+                for at, length, rid in records(data, 16):
+                    if rid in PROPS_WORDS and length == 4:
+                        out.update(range(at, at + 4))
+                    if rid in PROPS_GUIDS and zero_or_v1(data[at:at + length]):
+                        out.update(range(at, at + 16))
+            if name == "???214/Props":
+                for at, length, rid in records(data, 16):
+                    if rid == 0x03400001 and length >= 76:
+                        out.update(at + 2 * i for i in range(38) if i not in (0, 9, 14, 19, 24, 37))
+            if name == "???114/TBkndTask/FixedData":
+                known = task_uids(ctl.get(name))
+                for row in range(max(0, (len(data) - 48) // 202)):
+                    at = 48 + 202 * row
+                    if struct.unpack_from("<I", data, at)[0] not in known:
+                        out.update(range(at + 128, at + 132))
+            if name == "???114/TBkndAssn/Var2Data":
+                known = {uid for uid, _, _ in blocks(ctl.get("???114/TBkndAssn/VarMeta"))}
+                for uid, off, key in blocks(meta):
+                    if key == 0x0F40027A and off != 0xFFFFFFFF and uid not in known:
+                        out.update(range(off + 4, off + 8))
+            if name == "???214/CV_iew/Var2Data":
+                out.update(g.font_item_garbage(data, meta))
+            return out
+
+        def window_audit(stem, only=None):
+            """Problems found in the gate's windows of one pair, by name; the empty list is clean."""
+            rp, cp, np_ = pair(stem)
+            RS, CS = load(rp), load(cp)
+            canon_noise = g.canonical(RS, with_noise=True)[1]
+            found = []
+            flipped_streams = 0
+            for name in sorted(RS):
+                data = RS[name]
+                if not data or (only and name not in only):
                     continue
-                free = [at]
-            elif not free:
-                # every byte is mask or a named GUID field: break the version nibble of one GUID
-                whole = [s for s in sorted(win) if all(s + k in win for k in range(16))
-                         and s + 6 not in mask and g._is_v1_guid(data[s:s + 16])]
-                if not whole:
-                    skipped.append(name + " (no free bytes)")
+                meta = RS.get(g.VAR_META.get(name))
+                got = g.noise_windows(name, data, meta, CS, data)
+                want = spec_windows(name, data, meta, CS)
+                if got != want:
+                    found.append("%s: the windows are %d bytes, the named fields %d (%d extra, %d "
+                                 "missing)" % (name, len(got), len(want), len(got - want),
+                                               len(want - got)))
                     continue
-                free = [whole[0] + 6]
-            else:
-                free = free[:1]
-            mutated = dict(R)
-            b = bytearray(data)
-            for i in free:
-                b[i] ^= 0xFF
-            mutated[name] = bytes(b)
-            lines, problems, checked, unchecked = g.compare(mutated, R, C, N)
-            hit = any(name in ln for ln in lines)
-            check("W36-0.4 flip in %s fails" % name, problems >= 1 and hit and checked > 0,
-                  "%r" % (lines,))
-            tested += 1
-        # only an empty stream may go unflipped (a stream with no byte outside the mask and
-        # windows would be a gate that checks nothing there)
-        check("W36-0.4 every non-empty stream was flipped (%d streams)" % tested,
-              tested > 0 and all(s.endswith("(empty)") for s in skipped), "%r" % (skipped,))
+                skip = want | canon_noise.get(name, set())
+                flip = [i for i in range(len(data)) if i not in skip]
+                if not flip and ROW_SIZE.get(name) != 16:
+                    # only a 16-byte row that is one GUID (Cal, Cons Fixed2Data) is all field
+                    found.append("%s: the noise covers the whole stream" % name)
+                    continue
+                if flip:
+                    mutated = dict(RS)
+                    blob = bytearray(data)
+                    for i in flip:
+                        blob[i] ^= 0xFF
+                    mutated[name] = bytes(blob)
+                    lines, problems, checked, unchecked = g.compare(mutated, RS, CS, dict(CS))
+                    mine = [ln for ln in lines if name in ln]
+                    if name in g.CANON:
+                        # a flip that breaks the framing leaves the stream raw: the gate reports a
+                        # size change, or at least the flipped bytes (the placeholders add a few)
+                        ok = any(ln.startswith("size-differs") or (
+                            ln.startswith("bytes-differ") and int(ln.split()[-1]) >= len(flip))
+                            for ln in mine)
+                    else:
+                        ok = ("bytes-differ %s %d" % (name, len(flip))) in lines
+                    if not ok:
+                        found.append("%s: %d offsets outside the named fields were flipped, the "
+                                     "gate says %r" % (name, len(flip), mine or "PASS"))
+                # a GUID field is noise only as a version-1 GUID: break byte 6 of each
+                starts = [row * ROW_SIZE[name] + lo for row in range(len(data) // ROW_SIZE[name])
+                          for lo in ROW_GUIDS[name]] if name in ROW_SIZE else []
+                starts += list(ABS_GUIDS.get(name, ()))
+                starts = [s for s in starts if zero_or_v1(data[s:s + 16])]
+                if starts:
+                    mutated = dict(RS)
+                    blob = bytearray(data)
+                    for s in starts:
+                        blob[s + 6] ^= 0xFF
+                    mutated[name] = bytes(blob)
+                    lines, problems, checked, unchecked = g.compare(mutated, RS, CS, dict(CS))
+                    if ("bytes-differ %s %d" % (name, len(starts))) not in lines:
+                        found.append("%s: byte 6 of %d GUIDs changed, the gate says %r" %
+                                     (name, len(starts), [ln for ln in lines if name in ln] or "PASS"))
+                flipped_streams += 1
+            return found, flipped_streams
+
+        for stem in ("wave30-calculate", "wave34-assign-add-second",
+                     "wave35-g3-insert-milestone-first"):
+            found, flipped_streams = window_audit(stem)
+            check("W36-0b.7 %s: every offset outside the named fields fails, in %d streams" %
+                  (stem, flipped_streams), not found and flipped_streams > 50, "%r" % (found,))
+
+        # the audit sees a window that is more than a named field: planted into the gate, each of
+        # these is a window the old one-byte flip test could not see (it flipped the first free byte)
+        def planted(name, extra):
+            real = g.noise_windows
+
+            def plant(n, data, meta=None, ctl=None, other=None):
+                out = real(n, data, meta, ctl, other)
+                return out | extra(data) if n == name else out
+            return plant
+
+        stem7 = "wave34-assign-add-second"
+        for label, name, extra in (
+                ("the whole stream but its first byte", "???114/TBkndTask/Var2Data",
+                 lambda d: set(range(1, len(d)))),
+                ("the whole stream", "???114/TBkndTask/FixedData", lambda d: set(range(len(d)))),
+                ("every row but 4 bytes", "???114/TBkndAssn/Fixed2Data",
+                 lambda d: {i for i in range(len(d)) if i % 48 not in (7, 8, 9, 10)}),
+                ("one whole record", "???114/Props", lambda d: set(range(16, 16 + 12 + 128))),
+                ("one byte of a stream that has no noise", "???114/TBkndRsc/FixedData",
+                 lambda d: {5}),
+                ("everything after byte 100", "???214/CTable/Var2Data",
+                 lambda d: set(range(100, len(d))))):
+            real = g.noise_windows
+            g.noise_windows = planted(name, extra)
+            try:
+                found, _ = window_audit(stem7, only={name})
+            finally:
+                g.noise_windows = real
+            check("W36-0b.7 a planted window over %s (%s) is found" % (name, label),
+                  found != [], "%r" % (found,))
 
         # a stream missing from the traced save, and an extra one, are problems
         gone = dict(R)
