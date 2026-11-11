@@ -19,9 +19,10 @@ Keep this file current at every wave close; it is the only file a new session mu
   shorten it).  **No Critical or High is open.**  The queue:
   * **Mediums:** R35eG1-1 (fixed in source by W35f-0.1 `fd457b4`), R35eG2-1 (W35f-0.2 `08b83f9`),
     R35eG1-3 (W35f-0.3 `1a2436e`) and R35eG1-2 (W35f-0.4, these records) are fixed in the builder's
-    tree (G0) and await the coordinator's mutations and review.
+    tree (G0) and were reviewed by `wave35f-verification/coord-gates-g0.md`.
   * **Lows:** R35eG0-1 to -3, R35eG1-4 to -6, R35eG2-2 to -10, R35eW-1 to -4 (G1 of wave 35f:
-    shell, AppKit, Calculate seams and records).  Still open until G1 and the review.
+    shell, AppKit, Calculate seams and records) are fixed and were reviewed by
+    `wave35f-verification/coord-gates-g1.md`; open from those reviews: R35fG0-* and R35fG1-*.
   * **Partly fixed, not closed:**
     * R35dG2-1: Fill Down's Calculate guard has no test route (wave 35e `ae4782a`).
     * R35cG0-2 (the plan reads Start word +104 only) and R35cG0-4 (the plan has no Props digest),

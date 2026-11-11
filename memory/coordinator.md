@@ -1,19 +1,20 @@
-# memory — coordinator (2026-11-10, wave 35f G0 in progress on branch `wave35f`; waves 34 to 35e merged)
+# memory — coordinator (2026-11-10, wave 35f closed, G0 and G1 reviewed; waves 34 to 35e merged)
 
 **Entry point:** `docs/START-HERE.md`.  Wave gate:
 `docs/handoff/wave35-complete.md` (G0-G4 and CLOSE appended; `WAVE-35-COMPLETE`); reviews in
 `docs/handoff/wave35-verification/`.
 History: `memory/archive/coordinator-through-wave20-full.md`.
 
-## Wave 35f state (in progress on `wave35f`, cut from `main` at `47665e1`, NOT pushed) — 10 November 2026
+## Wave 35f state (closed on `wave35f`, cut from `main` at `47665e1`, NOT pushed) — 10 November 2026
 
 Fix-only wave; brief `docs/handoff/wave35f-brief.md`, record `docs/handoff/wave35f-complete.md`.
 Waves 34 to 35e are merged into `main` (`5e1c8ea`, CI green on all seven jobs at `c0c81e5`, 4(e)
 passes), and **no Critical or High is open**.  It works the queue in
 `docs/handoff/wave35e-verification/coord-gates-close.md`, which this file does not shorten:
 **Mediums** R35eG1-1 (fixed in source by W35f-0.1 `fd457b4`), R35eG2-1 (W35f-0.2 `08b83f9`),
-R35eG1-3 (W35f-0.3 `1a2436e`), R35eG1-2 (W35f-0.4, the records), awaiting the coordinator's
-review; **Lows** R35eG0-1 to -3, R35eG1-4 to -6, R35eG2-2 to -10, R35eW-1 to -4 (G1, open).
+R35eG1-3 (W35f-0.3 `1a2436e`), R35eG1-2 (W35f-0.4, the records), reviewed by
+`coord-gates-g0.md`; **Lows** R35eG0-1 to -3, R35eG1-4 to -6, R35eG2-2 to -10, R35eW-1 to -4 (G1,
+fixed, reviewed by `coord-gates-g1.md`); open from those reviews: R35fG0-* and R35fG1-*.
 **Partly fixed, not closed:** R35dG2-1 (Fill Down's guard has no test route), R35cG0-2 and
 R35cG0-4 (plan side), R35cW-4 (remainders R35dW-1, closed by W35e-0.1, and R35dW-5, the AppKit
 refusal, fixed in source with `macos-appkit` as its gate), and the four wave 35b ids R35bW-1
