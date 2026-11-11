@@ -256,9 +256,6 @@ try:
             check("W36-0b.2 %s: the no-op edit equals its control outside the noise" % stem,
                   problems == 0, "%r" % (lines,))
 
-        def _nrec(mod, stream, blob):
-            return mod.noise_windows(stream, blob)[1]
-
         CANON_FLIP = {"???214/CEdl/Var2Data": 12, "???214/CEdl/VarMeta": 8,
                       "???214/Props": 0, "Props14": 8, "?SummaryInformation": 0}
         tested = 0
@@ -270,7 +267,7 @@ try:
                 continue
             mask = g.control_mask(name, len(data), C.get(name), N.get(name)) or set()
             win, _ = g.noise_windows(name, data, R.get(name[:-len("Var2Data")] + "VarMeta")
-                                     if name.endswith("Var2Data") else None)
+                                     if name.endswith("Var2Data") else None, C)
             free = [i for i in range(len(data)) if i not in mask and i not in win]
             if name in g.CANON:
                 # a parsed stream: flip a header byte that precedes every noise field, so the
@@ -281,13 +278,13 @@ try:
                     continue
                 free = [at]
             elif not free:
-                # every byte is mask or window: flip one more window byte than the ceiling allows
-                over = [i for i in sorted(win) if i not in mask and i < len(data)]
-                count = g.ceiling_for(name, _nrec(g, name, data)) + 1
-                free = over[:count]
-                if len(free) < count:
+                # every byte is mask or a named GUID field: break the version nibble of one GUID
+                whole = [s for s in sorted(win) if all(s + k in win for k in range(16))
+                         and s + 6 not in mask and g._is_v1_guid(data[s:s + 16])]
+                if not whole:
                     skipped.append(name + " (no free bytes)")
                     continue
+                free = [whole[0] + 6]
             else:
                 free = free[:1]
             mutated = dict(R)
@@ -317,19 +314,140 @@ try:
         check("W36-0.4 an extra stream fails", problems == 1 and
               any(ln.startswith("only-in-traced") for ln in lines), "%r" % (lines,))
 
-        # noise windows hold within the ceiling and fail beyond it
-        name = "???114/TBkndAssn/Fixed2Data"
-        for count, want in ((8, 0), (200, 1)):
-            mutated = dict(R)
-            b = bytearray(R[name])
-            idx = [i for i in range(len(b)) if i % 48 < 32 and i not in
-                   (g.control_mask(name, len(b), C.get(name), N.get(name)) or set())][:count]
-            for i in idx:
-                b[i] ^= 0xFF
-            mutated[name] = bytes(b)
-            lines, problems, checked, unchecked = g.compare(mutated, R, C, N)
-            check("W36-0.1 Assn Fixed2Data GUID window: %d bytes -> %d problem(s)" % (len(idx), want),
-                  problems == want, "%r" % (lines,))
+        # --- W36-0b.4 (R36G0-4): every mask names a field -------------------------------------------
+        # The control mask is taken away (the control equals the reference, its null is a copy), so
+        # only the named noise fields excuse a difference.  A fresh version-1 GUID, or a new save
+        # word, in a named field is noise; one data byte next to it, a GUID that is not version 1,
+        # a per-file identity record, and a stamp of a row the control already has are not.
+        def v1(n):
+            return bytes([n & 255, 0x11, 0x22, 0x33, 0x44, 0x55, 0x11, 0xF1, 0xB9, 0x5B, 0x00, 0x15,
+                          0x5D, 1, 2, (n >> 8) & 255])
+
+        def v4(n):
+            return bytes([n & 255, 0x11, 0x22, 0x33, 0x44, 0x55, 0x41, 0xF1, 0xB9, 0x5B, 0x00, 0x15,
+                          0x5D, 1, 2, (n >> 8) & 255])
+
+        def put(streams_, name_, edits):
+            out = dict(streams_)
+            blob = bytearray(out[name_])
+            for at, raw in edits:
+                blob[at:at + len(raw)] = raw
+            out[name_] = bytes(blob)
+            return out
+
+        def verdict(mutated, ref_, ctl_=None, name_=None):
+            ctl_ = ref_ if ctl_ is None else ctl_
+            lines_, problems_, checked_, unchecked_ = g.compare(mutated, ref_, ctl_, dict(ctl_))
+            return problems_, lines_
+
+        a_ref, a_ctl, a_nul = pair("wave34-assign-add-second")
+        AR, AC = load(a_ref), load(a_ctl)
+        guid_fields = 0
+        for sname, rule in sorted(g.NOISE.items()):
+            if sname not in AR:
+                continue
+            offsets = []
+            if "guid_record" in rule:
+                base, size = g.STRIDE[sname]
+                offsets = [base + r * size + lo for r in range((len(AR[sname]) - base) // size)
+                           for lo in rule["guid_record"]]
+            offsets += [at for at in rule.get("guid", ())]
+            offsets = [at for at in offsets if g._is_v1_guid(AR[sname][at:at + 16])]
+            if not offsets:
+                continue
+            guid_fields += len(offsets)
+            # the first and the last GUID of the stream, each with a fresh time_low byte and a
+            # fresh last byte (W36-0b.5 lifts the ceilings and changes every field of every row)
+            for which in (offsets[0], offsets[-1]):
+                raw = AR[sname][which:which + 16]
+                fresh = put(AR, sname, [(which, bytes([raw[0] ^ 0x5A])),
+                                        (which + 15, bytes([raw[15] ^ 0x5A]))])
+                problems, lines = verdict(fresh, AR)
+                check("W36-0b.4 %s: a fresh version-1 GUID at +%d is noise" % (sname, which),
+                      problems == 0, "%r" % (lines,))
+            bad = put(AR, sname, [(offsets[0], v4(7))])
+            problems, lines = verdict(bad, AR)
+            check("W36-0b.4 %s: a GUID that is not version 1 fails" % sname,
+                  problems >= 1 and any(sname in ln for ln in lines), "%r" % (lines,))
+            for at in (offsets[0] + 16, offsets[0] - 1):
+                if 0 <= at < len(AR[sname]) and not any(o <= at < o + 16 for o in offsets):
+                    edit = put(AR, sname, [(at, bytes([AR[sname][at] ^ 1]))])
+                    problems, lines = verdict(edit, AR)
+                    check("W36-0b.4 %s: a data byte at +%d next to a GUID fails" % (sname, at),
+                          problems >= 1 and any(sname in ln for ln in lines), "%r" % (lines,))
+        check("W36-0b.4 the GUID classes found fields to test (%d)" % guid_fields, guid_fields > 20)
+
+        # the Assn Fixed2Data +32 window and the Task Fixed2Data +42/+46 bytes are data
+        for sname, offs in (("???114/TBkndAssn/Fixed2Data", (32, 40, 42)),
+                            ("???114/TBkndTask/Fixed2Data", (42, 46, 49))):
+            for at in offs:
+                row = put(AR, sname, [(at, bytes([AR[sname][at] ^ 1]))])
+                problems, lines = verdict(row, AR)
+                check("W36-0b.4 %s row 0 +%d is data: a flipped byte fails" % (sname, at),
+                      problems >= 1 and any(sname in ln for ln in lines), "%r" % (lines,))
+
+        # 114/Props: the save words and GUIDs are noise; the per-file identity is not
+        props_n = "???114/Props"
+        recs = {rid: (pos + 12, length) for pos, length, rid, kind in
+                g.frame_records(AR[props_n], 16)}
+        for rid, cls in sorted(g.NOISE[props_n]["props"].items()):
+            at, length = recs[rid]
+            new = bytes([AR[props_n][at] ^ 0x55]) * 4 if cls == "word" else v1(99)
+            problems, lines = verdict(put(AR, props_n, [(at, new)]), AR)
+            check("W36-0b.4 114/Props record %#x (%s) changed is noise" % (rid, cls),
+                  problems == 0, "%r" % (lines,))
+        for rid in (0x02401394, 0x02400003):
+            at, length = recs[rid]
+            problems, lines = verdict(put(AR, props_n, [(at, bytes([AR[props_n][at] ^ 1]))]), AR)
+            check("W36-0b.4 114/Props record %#x is not noise: a flipped byte fails" % rid,
+                  problems >= 1 and props_n in "".join(lines), "%r" % (lines,))
+        # the view GUID string: the 32 hex digits are noise, the braces and high bytes are data
+        vp = "???214/Props"
+        at, length = {rid: (pos + 12, length) for pos, length, rid, kind in
+                      g.frame_records(AR[vp], 16)}[0x03400001]
+        digit = at + 2 * 1
+        problems, lines = verdict(put(AR, vp, [(digit, b"7" if AR[vp][digit:digit + 1] != b"7"
+                                                else b"8")]), AR)
+        check("W36-0b.4 214/Props view GUID string: one hex digit changed is noise",
+              problems == 0, "%r" % (lines,))
+        for where, off in (("the opening brace", at), ("a digit's high byte", at + 2 * 1 + 1),
+                           ("the first dash", at + 2 * 9), ("the byte after the string", at + 76)):
+            problems, lines = verdict(put(AR, vp, [(off, bytes([AR[vp][off] ^ 1]))]), AR)
+            check("W36-0b.4 214/Props view GUID string: %s is data, a flipped byte fails" % where,
+                  problems >= 1 and vp in "".join(lines), "%r" % (lines,))
+
+        # creation stamps: only a row or block the control does not have
+        task_n = "???114/TBkndTask/FixedData"
+        base, size = g.STRIDE[task_n]
+        rows = (len(AR[task_n]) - base) // size
+        last = base + (rows - 1) * size
+        short = dict(AR)
+        short[task_n] = AR[task_n][:last]                      # a control without the last row
+        problems, lines = verdict(put(AR, task_n, [(last + 128, b"\x01\x02\x03\x04")]), AR, short)
+        check("W36-0b.4 Task FixedData: the creation stamp of a row the control lacks is noise",
+              problems == 0, "%r" % (lines,))
+        problems, lines = verdict(put(AR, task_n, [(last + 132, b"\x01")]), AR, short)
+        check("W36-0b.4 Task FixedData: the byte after the stamp is data and fails",
+              problems >= 1, "%r" % (lines,))
+        problems, lines = verdict(put(AR, task_n, [(base + size + 128, b"\x01\x02\x03\x04")]),
+                                  AR, short)
+        check("W36-0b.4 Task FixedData: the stamp of a row the control has fails",
+              problems >= 1 and task_n in "".join(lines), "%r" % (lines,))
+        var_n, meta_n2 = "???114/TBkndAssn/Var2Data", "???114/TBkndAssn/VarMeta"
+        known = {uid for uid, _, _ in g._meta_blocks(AC[meta_n2])}
+        stamps = [(uid, off) for uid, off, key in g._meta_blocks(AR[meta_n2])
+                  if key == 0x0F40027A]
+        fresh_s = [off + 4 for uid, off in stamps if uid not in known]
+        old_s = [off + 4 for uid, off in stamps if uid in known]
+        check("W36-0b.4 the Assn Var2Data case has a new block and an old one",
+              fresh_s and old_s, "%r %r" % (fresh_s, old_s))
+        problems, lines = verdict(put(AR, var_n, [(fresh_s[0] + 1, b"\xbb\xcc\xdd")]), AR, AC)
+        check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control lacks is noise",
+              problems == 0, "%r" % (lines,))
+        problems, lines = verdict(put(AR, var_n, [(old_s[0], b"\xaa\xbb\xcc\xdd")]), AR, AC)
+        check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control has fails",
+              problems >= 1 and var_n in "".join(lines), "%r" % (lines,))
+
 
         # a gate that checked nothing is not a pass
         lines, problems, checked, unchecked = g.compare({}, {}, C, N)

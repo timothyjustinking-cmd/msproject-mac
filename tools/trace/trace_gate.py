@@ -34,6 +34,7 @@ the screen can be checked.  Exit 0 means PASS (no problems), 1 FAIL.
 """
 
 import hashlib
+import re
 import struct
 import sys
 
@@ -65,37 +66,46 @@ STRIDE = {
     "???114/TBkndCons/Fixed2Data": (0, 16),
 }
 
-# Noise windows.  Every rule is {"windows": [...], "ceiling": N} where the ceiling is the most
-# bytes the null run showed outside the control mask (trace-null.md, the 14 problem lines), and
-# a stride stream's ceiling is that number per `rows` records, scaled up for a longer stream.
-#   record windows  (lo, hi) in-record offsets of a stride stream
-#   byte windows    (lo, hi) absolute stream offsets
-#   props windows   {record id: (lo, hi) payload offsets} for a Props stream
-#   tail windows    (lo, hi) offsets from the first byte after the Props record area
+# Noise fields.  Each rule names fields; none names a region.  Field classes:
+#   guid_record  in-record offsets of 16-byte GUIDs of a stride stream
+#   guid         absolute offsets of 16-byte GUIDs
+#   props        {record id: class} payload fields of a Props stream: "word" (4 bytes), "guid" (16
+#                bytes), "guidstr" (the 32 hex digits of a UTF-16 GUID string)
+#   new_row      (lo, hi) in-record bytes of a Task FixedData row whose uid is not in the control
+#   varkey       {key: (lo, hi)} bytes of the Var2Data block of that key, for a block whose uid
+#                is not in the control's VarMeta
+# A GUID is masked only when both sides hold a version-1 GUID or all zero.  Every row cites its
+# line of spec/writers/evidence/trace-gate-fields-g0b.md (FIELDS) for the decoded field.
+# `ceiling` is the most bytes the null run showed outside the control mask (trace-null.md, the
+# 14 problem lines); a stride stream's ceiling is that number per `rows` records.
+FIELDS = "spec/writers/evidence/trace-gate-fields-g0b.md"
 NOISE = {
-    # UuidCreateSequential GUIDs (trace-insert-milestone-r4.md 1b-1) and the per-record stamps.
-    "???114/TBkndAssn/Fixed2Data": {"record": [(0, 32), (32, 42)], "ceiling": 40, "rows": 2},
-    "???114/TBkndTask/Fixed2Data": {"record": [(0, 10), (24, 34), (42, 50)], "ceiling": 50, "rows": 6},
-    "???114/TBkndRsc/Fixed2Data": {"record": [(0, 10), (24, 34)], "ceiling": 20, "rows": 1},
-    "???114/TBkndCal/Fixed2Data": {"record": [(0, 10)], "ceiling": 10, "rows": 18},
-    "???114/TBkndCons/Fixed2Data": {"record": [(0, 16)], "ceiling": 30, "rows": 3},
-    # Creation date-time stamp of a new row (trace-insert-milestone-r4.md 1b-2; insert-summary
-    # "+984" = record +128 of the 202-byte rows that start at 48).
-    "???114/TBkndTask/FixedData": {"record": [(128, 132)], "ceiling": 3, "rows": 1},
-    # Per-save and per-file Props records (trace-props-framing.md section 1).
-    "???114/Props": {"props": {0x02400007: (0, 4), 0x024013b1: (0, 4), 0x02400029: (0, 16),
-                            0x024013c2: (0, 16), 0x02401394: (0, 16)}, "ceiling": 24},
-    # The view GUID string record, as seen in the null saves.  (The typed record 0x00010007, the
-    # length of 214/CEdl/Var2Data, is canonicalised with that stream's other size words.)
-    "???214/Props": {"props": {0x03400001: (0, 80)}, "ceiling": 17},
-    # View-stream save stamps (null run: CEdl 10 + 1, CFilter 20, CGrouping 20, CTable 10,
-    # CV_iew 30 + 4, all at the offsets the committed control/null pairs show).
-    "???214/CEdl/FixedData": {"byte": [(144, 154)], "ceiling": 10},
-    "???214/CFilter/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
-    "???214/CGrouping/FixedData": {"byte": [(214, 224), (444, 454)], "ceiling": 20},
-    "???214/CTable/FixedData": {"byte": [(214, 224)], "ceiling": 10},
-    "???214/CV_iew/FixedData": {"byte": [(122, 132), (260, 270), (398, 408)], "ceiling": 30},
-    # The assignment creation stamp is a var block located through VarMeta.
+    # FIELDS:12  Assn Fixed2Data GUIDs at +0 and +16 (+32 is data)
+    "???114/TBkndAssn/Fixed2Data": {"guid_record": (0, 16), "ceiling": 40, "rows": 2},
+    # FIELDS:13  Task Fixed2Data GUIDs at +0 and +24
+    "???114/TBkndTask/Fixed2Data": {"guid_record": (0, 24), "ceiling": 50, "rows": 6},
+    # FIELDS:14  Rsc Fixed2Data GUIDs at +0 and +24
+    "???114/TBkndRsc/Fixed2Data": {"guid_record": (0, 24), "ceiling": 20, "rows": 1},
+    # FIELDS:15  Cal Fixed2Data GUID at +0
+    "???114/TBkndCal/Fixed2Data": {"guid_record": (0,), "ceiling": 10, "rows": 18},
+    # FIELDS:16  Cons Fixed2Data GUID at +0
+    "???114/TBkndCons/Fixed2Data": {"guid_record": (0,), "ceiling": 30, "rows": 3},
+    # FIELDS:22  creation stamp of a new Task row (record +128, 4 bytes)
+    "???114/TBkndTask/FixedData": {"new_row": (128, 132), "ceiling": 3, "rows": 1},
+    # FIELDS:18-19  the per-save words and GUIDs; 0x02401394 is per-file identity, not noise
+    # (FIELDS:20), so it is not listed
+    "???114/Props": {"props": {0x02400007: "word", 0x024013B1: "word", 0x02400029: "guid",
+                               0x024013C2: "guid"}, "ceiling": 24},
+    # FIELDS:21  the view GUID string.  (The typed record 0x00010007, the length of
+    # 214/CEdl/Var2Data, is canonicalised with that stream's other size words.)
+    "???214/Props": {"props": {0x03400001: "guidstr"}, "ceiling": 17},
+    # FIELDS:17  view stamps: version-1 GUIDs saved with the view
+    "???214/CEdl/FixedData": {"guid": (144,), "ceiling": 10},
+    "???214/CFilter/FixedData": {"guid": (214, 444), "ceiling": 20},
+    "???214/CGrouping/FixedData": {"guid": (214, 444), "ceiling": 20},
+    "???214/CTable/FixedData": {"guid": (214,), "ceiling": 10},
+    "???214/CV_iew/FixedData": {"guid": (122, 260, 398), "ceiling": 30},
+    # FIELDS:23  the assignment creation stamp is a var block located through VarMeta
     "???114/TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}, "ceiling": 3},
 }
 
@@ -369,19 +379,6 @@ def canonical(streams, with_noise=False):
     return (out, noise) if with_noise else out
 
 
-def props_records(data):
-    """The (offset, length, id) of each framed record and the first byte after the record area:
-    a 16-byte header, then u32 length, u32 id (byte 2 == 0x40), u32 kind, payload (props_edit.cpp)."""
-    pos = 16
-    out = []
-    while pos + 12 <= len(data):
-        length, rid = struct.unpack_from("<II", data, pos)
-        if (rid & 0x00FF0000) != 0x00400000 or length > len(data) - pos - 12:
-            break
-        out.append((pos, length, rid))
-        pos += 12 + length
-    return out, pos
-
 
 def font_item_garbage(data, meta):
     """Offsets of payload +43 of every row of every font item in the bag blocks of a
@@ -411,9 +408,56 @@ def font_item_garbage(data, meta):
     return out
 
 
-def noise_windows(name, data, meta=None):
-    """The noise-window offsets of one stream's bytes -> (set of offsets, per-stream ceiling
-    scale, record count).  `meta` is the companion VarMeta bytes for a Var2Data stream."""
+def _is_v1_guid(raw):
+    """A version-1 (time-based) GUID in RFC byte order: byte 6 >> 4 == 1, byte 8 >> 6 == 2."""
+    return len(raw) == 16 and raw[6] >> 4 == 1 and raw[8] >> 6 == 2
+
+
+def _guid_ok(raw):
+    return len(raw) == 16 and (raw == bytes(16) or _is_v1_guid(raw))
+
+
+GUIDSTR = re.compile(r"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
+                     r"[0-9A-Fa-f]{12}\}")
+
+
+def _guidstr_digits(payload):
+    """The payload offsets of the low bytes of the 32 hex digits of a UTF-16 GUID string that
+    starts at payload +0, or [] when the payload does not hold one."""
+    if len(payload) < 76:
+        return []
+    try:
+        text = payload[:76].decode("utf-16le")
+    except UnicodeDecodeError:
+        return []
+    if not GUIDSTR.fullmatch(text):
+        return []
+    return [2 * i for i in range(38) if i not in (0, 9, 14, 19, 24, 37)]
+
+
+def _task_uids(data):
+    """The uid word (row +0) of every row of a Task FixedData stream."""
+    base, size = STRIDE["???114/TBkndTask/FixedData"]
+    if data is None:
+        return set()
+    return {_u32(data, base + r * size) for r in range((len(data) - base) // size)}
+
+
+def _meta_blocks(meta):
+    """[(uid, offset, key)] of a VarMeta stream."""
+    if meta is None or len(meta) < 24:
+        return []
+    count = struct.unpack_from("<I", meta, 8)[0]
+    return [struct.unpack_from("<III", meta, 24 + 12 * k) for k in range(count)
+            if 24 + 12 * k + 12 <= len(meta)]
+
+
+def noise_windows(name, data, meta=None, ctl=None, other=None):
+    """The offsets of the named noise fields of one stream's bytes -> (set of offsets, record
+    count).  `meta` is the companion VarMeta of a Var2Data stream, `ctl` the control's streams
+    (a field that only a new row carries is masked only for a row the control lacks) and `other`
+    the other side's bytes of the same stream (a GUID is masked only when both sides hold a
+    version-1 GUID or zeros)."""
     rule = _noise_rule(name)
     offs = set()
     nrec = 0
@@ -421,32 +465,45 @@ def noise_windows(name, data, meta=None):
         offs.update(font_item_garbage(data, meta))
     if rule is None:
         return offs, nrec
+    ctl = ctl or {}
+    other = data if other is None else other
     stride = _stride(name)
-    if "record" in rule and stride:
+    if stride:
         base, size = stride
         nrec = max(0, (len(data) - base) // size)
         for r in range(nrec):
-            for lo, hi in rule["record"]:
-                offs.update(range(base + r * size + lo, min(base + r * size + hi, len(data))))
-    if "byte" in rule:
-        for lo, hi in rule["byte"]:
-            offs.update(range(lo, min(hi, len(data))))
+            row = base + r * size
+            for lo in rule.get("guid_record", ()):
+                if _guid_ok(data[row + lo:row + lo + 16]) and _guid_ok(other[row + lo:row + lo + 16]):
+                    offs.update(range(row + lo, row + lo + 16))
+        if "new_row" in rule:
+            known = _task_uids(ctl.get(name))
+            lo, hi = rule["new_row"]
+            for r in range(nrec):
+                row = base + r * size
+                if _u32(data, row) not in known and \
+                        (row + 4 > len(other) or _u32(other, row) not in known):
+                    offs.update(range(row + lo, row + hi))
+    for at in rule.get("guid", ()):
+        if _guid_ok(data[at:at + 16]) and _guid_ok(other[at:at + 16]):
+            offs.update(range(at, at + 16))
     if "props" in rule:
-        recs, tail = props_records(data)
-        for pos, length, rid in recs:
-            if rid in rule["props"]:
-                lo, hi = rule["props"][rid]
-                offs.update(range(pos + 12 + lo, pos + 12 + min(hi, length)))
-        for lo, hi in rule.get("tail", []):
-            offs.update(range(tail + lo, min(tail + hi, len(data))))
-    if "varkey" in rule and meta is not None and len(meta) >= 24:
-        count = struct.unpack_from("<I", meta, 8)[0]
-        for k in range(count):
-            at = 24 + 12 * k
-            if at + 12 > len(meta):
-                break
-            _, off, key = struct.unpack_from("<III", meta, at)
-            if key in rule["varkey"] and off != 0xFFFFFFFF:
+        for pos, length, rid, kind in frame_records(data, 16) or []:
+            cls = rule["props"].get(rid)
+            at = pos + 12
+            if cls == "word" and length == 4:
+                offs.update(range(at, at + 4))
+            elif cls == "guid" and length == 16 and _guid_ok(data[at:at + 16]) and \
+                    _guid_ok(other[at:at + 16]):
+                offs.update(range(at, at + 16))
+            elif cls == "guidstr":
+                digits = _guidstr_digits(data[at:at + length])
+                if digits and digits == _guidstr_digits(other[at:at + length]):
+                    offs.update(at + d for d in digits)
+    if "varkey" in rule:
+        known = {uid for uid, _, _ in _meta_blocks(ctl.get(VAR_META[name]))}
+        for uid, off, key in _meta_blocks(meta):
+            if key in rule["varkey"] and off != 0xFFFFFFFF and uid not in known:
                 lo, hi = rule["varkey"][key]
                 offs.update(range(off + 4 + lo, min(off + 4 + hi, len(data))))
     return offs, nrec
@@ -525,8 +582,8 @@ def compare(traced, ref, ctl, nul):
         meta_a = meta_b = None
         if name in VAR_META:
             meta_a, meta_b = ref.get(VAR_META[name]), traced.get(VAR_META[name])
-        win, nrec = noise_windows(name, a, meta_a)
-        wb, nrb = noise_windows(name, b, meta_b)
+        win, nrec = noise_windows(name, a, meta_a, ctl, b)
+        wb, nrb = noise_windows(name, b, meta_b, ctl, a)
         win |= wb
         nrec = max(nrec, nrb)
         diff = [i for i in range(len(a)) if a[i] != b[i] and i not in mask]
