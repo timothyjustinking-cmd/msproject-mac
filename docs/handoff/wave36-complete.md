@@ -67,7 +67,7 @@ Items, one finding or item id per commit, in order:
 | item | commit | what |
 |---|---|---|
 | W36-1.1 | `baab011` | Bold off is wired: `make_cell_bold_edit` builds the writer's Bold off when the view's one item is the measured Bold item (a toggle, as Project's button is); both shells queue it |
-| W36-1.2 | `95e8195` | Bold on any stored task row and on the Start column; held-out pairs `wave35-g3-font-bold-row2` and `-start`; 6607 / 6608 effect bytes, no mismatch outside the font word's top byte, masked by exact field |
+| W36-1.2 | `95e8195` | Bold on the Task Name cell of rows 1 and 2 and the Start cell of row 1; 6607 / 6608 effect bytes, no mismatch outside the font word's top byte, masked by exact field.  **Corrected by W36-1b.1 (R36G1-1):** this row first said Bold was enabled on "any stored task row" with "held-out pairs `wave35-g3-font-bold-row2` and `-start`".  That was wrong: each pair fixed the structure at its own cell, so none predicts another cell and (b) is not met for the row or field rule.  The writer and the app now accept exactly those three cells (`5cb0f36`) |
 | W36-1.3 | `893684f` | Italic for the one measured cell (row uid 1, Task Name, on); `font_italic` in both shells (Edit > Font Italic, no shortcut: Cmd+I is Insert Task) and the ribbon's I; 6607 effect bytes; **no held-out Italic pair, so (b) is not met and the writer stays limited to that one shape**; the pin and the backlog regenerated |
 | W36-1.4 | `64a185e` | the 4(e) read-back plan, below: **planned, not run** (the builder uses no COM) |
 | W36-1.5 (D-2) | `1fa7338` | `wave35-g3-font-bold-range` relabelled in `view-stream-214.md` and its evidence note as a one-row Bold, not a range; the fixture is untouched |
