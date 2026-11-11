@@ -271,3 +271,82 @@ None.  Every G0b item is fixed.
 * **`python -I` still cannot import `olefile`** here (user site-packages), so the trace tests run without `-I`; they read only committed files.
 
 WAVE-36-G0b-COMPLETE
+
+## G1b: the font writer's row and field rule, narrowed to what was measured
+
+Brief `docs/handoff/wave36-brief.md` section 2 (G1b); findings R36G1-1 to -7 of the G1 review (`docs/handoff/wave36-verification/review-g1.md`).  Items, one finding id per commit, in order:
+
+| item | id | commit | what |
+|---|---|---|---|
+| W36-1b.1 | R36G1-1 | `5cb0f36`, `e749d81` | Bold ON is limited to the three cells a committed pair measures: Task Name of rows 1 and 2 and Start of row 1 (`bold_on_cell_is_measured`); every other cell is refused with "is not a measured cell"; the spec, the writer's header and the tests no longer claim a held-out pair for a row/field rule; `e749d81` corrects the G1 table's W36-1.2 row in place |
+| W36-1b.2 | R36G1-2 | `166734a` | records only: the G1 "Found, not fixed" line on the joint cell (row 2, Start) is struck through and corrected; the writer and the app refuse it |
+| W36-1b.3 | R36G1-3 | `a0f3d32` | `save_view_cell_style` checks that the row's uid is in the opened file's Task table (`require_task_row`, through `TaskTable::from_document`) before it writes; a row that is not there throws and writes nothing |
+| W36-1b.4 | R36G1-6 | `f87f271` | the Qt gate covers B and I with Undo and Redo against Save, and a read-only file (the status line gives the read-only reason) |
+| W36-1b.5 | R36G1-7 | `3cc5a9d` | a second font click before Save says why it was refused: `app::queued_font_edit_refusal` names the queued edit and says to Undo it first; both shells call it |
+| W36-1b | R36G1-4 | `f803924` | records only: Method A of the 4(e) plan enumerates `Application.ActiveCell` and the `Cell` interface, before Method B; whether `Cell` has a Bold or Italic getter in Project 2021 is recorded as unverified |
+| W36-1b | R36G1-5 | open | the writer of the Props14 marker byte is not named in the traces; see Deferred |
+
+**What the writer accepts now.**  Bold ON: (Task Name, row 1), (Task Name, row 2), (Start, row 1), each matching its own committed pair, and only for a row
+whose uid is in the opened file's Task table.  Bold OFF: (row 1, Task Name).  Italic: (row 1, Task Name), on.  Everything else is refused before any
+byte is written.  There is no held-out pair for a row/field rule, and the spec says so.  The round-7 shapes second-cell, second-change, bold-italic,
+range2 and underline-toolbar are each recorded "not lifted: needs <fact>" in `spec/writers/view-stream-214.md`.
+
+**Gate line.**  Group run at `f803924` (the last source-changing commit; `e749d81` changes records only), logs `build/w36/f803924-W36-G1b-group-*`:
+
+| gate | result |
+|---|---|
+| core build (`build/w35g-close-fresh`, Release) | exit 0 |
+| core `ctest -E plan_recalc -j4` | **66/67**: `trace_gate_guards` fails; every other test passes (cause below; `build/w36/f803924-W36-G1b-group-core-ctest.log`, rerun alone in `build/w36/f803924-W36-G1b-trace_gate_guards-rerun.log`) |
+| `MPP_NO_CORPUS=1 plan_recalc` | 1/1 |
+| M2 recalc `--compare` | exit 0; 332/332, 268/268, 64/64 fields |
+| `check_fixtures` | exit 0 |
+| app tree (`build/w35g-close-fresh-app`) ctest | 34/34 |
+| Qt tree (`build/w35g-close-fresh-qt`) ctest | 52/52 |
+
+`trace_gate_guards` fails with `FileNotFoundError tests/data/wave23-flags-control.mpp`: commit `3193808` added ten `*-control-null.mpp` fixtures whose control is not
+`<stem>-control.mpp`, and `5939f6d` merged them into `wave36` after G0b's 67/67.  None of the G1b commits touches `tools/` or `tests/data`.  It is G0b's tool
+and is not fixed here (Found, not fixed).  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0, `scan_client_names` 0, the
+`client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each commit carries both trailers.  The builder used no COM, did not touch the VM
+or `build/trace-2021/`, edited no committed fixture, and pushed nothing.  Per-item logs are in `docs/handoff/wave36-verification/gates-g1b.md`.
+
+### Guards seen red
+
+Each red ran on the parent commit's code with the new tests; the green is the same tests on the new code.  Logs are `build/w36/<parent>-W36-1b.N-{red,green}-*`.
+
+| item | red | green |
+|---|---|---|
+| 1b.1 | core `viewstream`: 15 to 16 FAIL lines, for example `FAIL: Bold on row 3, field 188743694 refused: no exception was thrown`; app `cell_bold`: 6 failures, for example `FAIL: Bold on the joint cell (row 2, Start)` | core `viewstream` 1/1, app `cell_bold` 1/1, Qt 2/2; the two session2 `EXPECTED FAIL` lines remain by design |
+| 1b.2 | records only; no red | scans clean |
+| 1b.3 | 9 FAIL lines, for example `Bold on a row the Task table does not hold refused: no exception was thrown`, three `document changed` and an `an output file was written` | core `viewstream` 1/1, core `view|style|bold|font` 8/8, app `cell_bold|view|edit` 17/17 |
+| 1b.4 | two mutations of `app_qt/main_window.cpp` (the Undo handler's `structural_.undo()` replaced by a no-op; the read-only guard bypassed): 26 FAIL lines, 24 of them Undo/Redo, and `FAIL: read-only B/I: the status line gives the read-only reason` | Qt `cell_bold|qt_fat_slack` 2/2 |
+| 1b.5 | app, `queued_font_edit_refusal` stubbed to return nothing: `FAIL: a queued Bold gives the Undo-first reason`, `a queued Bold off is named as Bold off`, `a queued Italic gives the Undo-first reason` (3 FAILURE(S)); Qt, the shell change backed out: four FAIL lines (`a second Bold click says to Undo the queued Bold first`, `Italic over a queued Bold ...`, `a second Italic click ...`, `Bold over a queued Italic ...`) | app `cell_bold|edit` 15/15, Qt 2/2 |
+| R36G1-4 | records only; no red | scans clean |
+
+### Deferred
+
+* **R36G1-5 (the Props14 marker byte's writer) stays open, as a record line.**  The writer is `write_edit_marker` in `core/mppwrite/viewstream_edit.cpp`, shared with
+  earlier waves.  `trace-bold.md` treats Props14 as whole-stream noise, and neither `trace-bold-r4.md` nor `trace-font-item-r6.md` names the instruction that writes
+  the marker byte, so clause (a) of the lift rule rests on the pairs for that one byte, not on a trace.  The pairs match it field by field on the one-session
+  saves; on the reopened session2 pair Project keeps 0 where the port writes 1 (offset 402), a named `KnownGap` expected failure in
+  `tests/roundtrip_viewstream.cpp`.  The builder has not looked for a trace outside those three files that names it; naming the writer needs a trace, and the
+  trace VM is outside this group.
+
+### Found, not fixed
+
+* **`trace_gate_guards` fails on `wave36`** since the merge at `5939f6d`: the ten `*-control-null.mpp` fixtures of `3193808` have controls the test's `<stem>-control.mpp`
+  rule does not find.  It needs a pair-to-control map (as `NULLS` in `scripts/oracle_r7_nulls.py` has) in `tools/trace/test_trace_gate.py`.  The ten pairs are not
+  covered by the gate until then.  This is G0b's tool; flagged to the coordinator.
+* **Session2's two named gaps have no rule**: `214/CEdl/Var2Data` grows 38 bytes on Project's reopened save (first difference at 392; port 0x00, Project 0x1a), and the
+  Props14 marker (402; port 0x01, Project 0x00).  Both are `KnownGap` expected failures, not masked.
+* **No held-out pair exists for the row/field rule.**  The three measured Bold cells each match their own pair; nothing predicts a fourth.  The Bold OFF, Italic and
+  `not lifted: needs <fact>` shapes (second-cell, second-change, bold-italic, range2, underline-toolbar) stay refused.
+* **4(e) has not run**, and the `Cell` Bold/Italic getter in Project 2021 is unverified (R36G1-4 records it; the coordinator runs the read-back).
+* **`app/main.mm` (`fontCellItalic:`) is changed but not built here**: macOS is CI-gated.  The change is the same few lines as the Qt shell's, calling the shared
+  `queued_font_edit_refusal`; the app-tree test covers the function, and the first CI run covers the shell.
+* **Save with an empty queue writes no file** (status line "nothing to save").  The 1b.4 test asserts exactly that after Undo; the G1 reviewer expected a
+  byte-equal file.  Product behaviour, not changed here.
+* **The Task-table check (1b.3) takes "uid in FixedData rows 1.." as existing.**  It has not been run against a file with deleted-slot rows; a deleted row that keeps its uid
+  would count as present.
+* **`python -I` still cannot import `olefile`** here (user site-packages); the scripts that need it run without `-I` and read only committed files.
+
+WAVE-36-G1b-COMPLETE
