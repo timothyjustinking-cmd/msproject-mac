@@ -199,12 +199,10 @@ int main(int argc, char** argv) {
         return gate::finish();
     }
     const QString copy = out_dir + QStringLiteral("/w35-task-mode-combo.mpp");
-    const QString target = out_dir + QStringLiteral("/w35-task-mode-combo-saved.mpp");
     std::error_code file_error;
     std::filesystem::copy_file(fixture.toStdString(), copy.toStdString(),
                                std::filesystem::copy_options::overwrite_existing, file_error);
     gate::check(!file_error, "the control copy is written under the build tree");
-    std::filesystem::remove(target.toStdString(), file_error);
     if (file_error) {
         return gate::finish();
     }
@@ -273,7 +271,8 @@ int main(int argc, char** argv) {
 
         const CustomFieldsRun edited = run_custom_fields(window, true);
         gate::check(edited.dialog_seen, "Custom Fields opens again beside a queued mode edit");
-        gate::check(!edited.input_seen, "Formula... beside a queued mode edit opens no input dialog");
+        gate::check(!edited.input_seen,
+                    "Formula... beside a queued mode edit opens no input dialog");
         gate::check(window.pending_edits().size() == 1,
                     "a refused formula leaves the mode edit queued once");
         gate::check(window.status_left_text().contains(QStringLiteral(

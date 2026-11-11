@@ -877,7 +877,8 @@ int main(int argc, char** argv) {
         // Both cleared paths: the dialog's [Clear] and the plain clear.
         for (int path = 0; path < 2; ++path) {
             const std::string label = path == 0 ? "cleared (dialog path)" : "cleared (plain path)";
-            gate::check(window.open_file(six, &error), "the six-task fixture reopens (redo then clear)");
+            gate::check(window.open_file(six, &error),
+                        "the six-task fixture reopens (redo then clear)");
             QApplication::processEvents();
             QAction* undo_c = gate::find_action(window, app::MenuAction::undo);
             QAction* redo_c = gate::find_action(window, app::MenuAction::redo);
@@ -890,7 +891,8 @@ int main(int argc, char** argv) {
             undo_c->trigger();
             QApplication::processEvents();
             gate::check(window.pending_edits().empty() && redo_c->isEnabled(),
-                        ("redo then " + label + ": Undo withdraws Level 1 onto the redo list").c_str());
+                        ("redo then " + label + ": Undo withdraws Level 1 onto the redo list")
+                            .c_str());
             if (path == 0) {
                 window.apply_sort_choice(core::view::SortDefinition{}, "", true);
             } else {
@@ -924,7 +926,8 @@ int main(int argc, char** argv) {
         QApplication::processEvents();
         window.apply_outline_level(1);
         QApplication::processEvents();
-        gate::check(window.pending_edits().empty(), "read-only: a Level under a Sort queues nothing");
+        gate::check(window.pending_edits().empty(),
+                    "read-only: a Level under a Sort queues nothing");
         gate::check(status_contains(window, "outline: level 1 (session only; saved by Project with "
                                             "unreferenced sectors"),
                     "read-only: the Level's note is the read-only reason");

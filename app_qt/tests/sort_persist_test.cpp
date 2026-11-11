@@ -329,7 +329,8 @@ int main(int argc, char** argv) {
         }
         window.apply_sort_choice(core::view::SortDefinition{}, "", true);
         QApplication::processEvents();
-        gate::check(window.pending_edits().empty(), "the Custom Field Formula case: sort withdrawn");
+        gate::check(window.pending_edits().empty(),
+                    "the Custom Field Formula case: sort withdrawn");
     }
 
     // W35f-1.8 (R35eW-1): Sort is exclusive in the save, which refuses it beside a table / date
@@ -338,7 +339,8 @@ int main(int argc, char** argv) {
         window.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
                                  "Name descending", false);
         QApplication::processEvents();
-        gate::check(queued_sort(window) != nullptr, "Name descending is queued for the format case");
+        gate::check(queued_sort(window) != nullptr,
+                    "Name descending is queued for the format case");
         gate::check(!queue_date_format(window, 5),
                     "Table / Date Format does not open beside a queued sort");
         gate::check(queued_sort(window) != nullptr, "the queued sort stays queued");
@@ -357,14 +359,16 @@ int main(int argc, char** argv) {
         msqt::MainWindow other;
         other.resize(msqt::kWindowWidth, msqt::kWindowHeight);
         QString other_error;
-        gate::check(other.open_file(fixture, &other_error), "the fixture loads for the format-first case");
+        gate::check(other.open_file(fixture, &other_error),
+                    "the fixture loads for the format-first case");
         other.show();
         QApplication::processEvents();
         gate::check(queue_date_format(other, 5), "the date format is queued first");
         other.apply_sort_choice(one_key_sort("Name", false, "Name descending"),
                                 "Name descending", false);
         QApplication::processEvents();
-        gate::check(other.pending_edits().empty(), "a sort beside a pending date format queues nothing");
+        gate::check(other.pending_edits().empty(),
+                    "a sort beside a pending date format queues nothing");
         gate::check(status_contains(other,
                                     "session only; the file keeps its order (a table / date "
                                     "format or custom-field formula edit is pending"),
