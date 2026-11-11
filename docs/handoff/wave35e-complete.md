@@ -37,7 +37,7 @@ Builder record: `wave35e-verification/gates-g1.md`. Commits: `39c8e37` (1.1), `1
 
 | Item | Finding | Status |
 |---|---|---|
-| 1.1 | R35dG1-1 | fixed `39c8e37`; (a) a Level 1 or deeper is refused while a session Sort is shown (since W35f-0.1 only its QUEUE is refused and the Level is shown for the session), (b) a sort choice ends a Show Level on the redo list; both tested in `qt_outline_persist` on the six-task outline, and (a) on the five-task file by an Undo of a queued Sort in `qt_sort_persist` (W35f-0.3) |
+| 1.1 | R35dG1-1 | fixed `39c8e37`; (a) a Level 1 or deeper is refused while a session Sort is shown (since W35f-0.1 only its QUEUE is refused and the Level is shown for the session), (b) a sort choice ends a Show Level on the redo list; both tested in `qt_outline_persist` on the six-task outline, and (a) on the five-task file by an Undo of a queued Sort in `qt_sort_persist` (W35f-0.3), and (b) on the five-task file by a Level 1, Ctrl+Z, Start sort, Ctrl+Y in `qt_sort_persist` (W35g-0.2) |
 | 1.2 | R35dG1-2, with R35dW-4 | fixed `1da3997`; `calculate.md`'s Scope paragraph corrected (the Notes and Text1 removals, the percent-complete and indent and outdent saves, and the pin as the last check) |
 | 1.3 | R35dG1-3, R35dW-2, R35dW-3 | fixed `02f1900`; the open queue is in START-HERE, `memory/coordinator.md` and `plan-waves27-30.md` from `wave35d-verification/coord-gates-close.md`; R35cG1-2, R35cG1-4, R35cW-1, R35cG0-3 and R35cW-4 read "partly fixed"; R35cW-CI1 and R35cW-CI2 read "fixed in source; CI is its gate"; the Show Level sentence is corrected |
 | 1.4 | R35dG0-2 | fixed `f244d02`; 0.5's record reads "partly fixed: Task Information partial apply", closed by W35e-0.1 `b8ee455` |

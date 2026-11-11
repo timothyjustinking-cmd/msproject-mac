@@ -570,6 +570,41 @@ int main(int argc, char** argv) {
         }
     }
 
+    // W35g-0.2 (R35fG0-1): the five-task route of bypass (b) of W35e-1.1.  Only a single Name key
+    // queues here, so a Start sort stays session only: Level 1 (a measured shape), Ctrl+Z, a Start
+    // sort, Ctrl+Y must not re-queue the Level under the Start-sorted rows.  (qt_outline_persist
+    // drives the same guard on the six-task outline.)
+    {
+        QAction* undo = gate::find_action(window, app::MenuAction::undo);
+        QAction* redo = gate::find_action(window, app::MenuAction::redo);
+        gate::check(undo != nullptr && redo != nullptr, "Level-first: Undo and Redo are actions");
+        if (undo != nullptr && redo != nullptr) {
+            window.apply_outline_level(1);
+            QApplication::processEvents();
+            const std::vector<app::StructuralEdit>& applied = window.pending_edits().applied();
+            gate::check(applied.size() == 1 &&
+                            applied.front().kind == app::StructuralKind::show_level,
+                        "Level-first: Level 1 queues one show_level edit on the five-task file");
+            undo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && redo->isEnabled(),
+                        "Level-first: Undo withdraws the Level onto the redo list");
+            window.apply_sort_choice(one_key_sort("Start", false, "Start descending"),
+                                     "Start descending", false);
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty() && window.sort_active(),
+                        "Level-first: the Start sort stays session only");
+            gate::check(!redo->isEnabled(),
+                        "Level-first: a session Start sort ends the Level on the redo list");
+            redo->trigger();
+            QApplication::processEvents();
+            gate::check(window.pending_edits().empty(),
+                        "Level-first: Ctrl+Y queues no Level under the Start-sorted rows");
+            window.apply_sort_choice(core::view::SortDefinition{}, "", true);
+            QApplication::processEvents();
+        }
+    }
+
     // Unmeasured shapes stay session only, each with its own reason.
     struct Refused {
         const char* field;
