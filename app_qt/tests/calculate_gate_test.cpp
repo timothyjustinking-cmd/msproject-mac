@@ -484,6 +484,15 @@ int main(int argc, char** argv) {
             if (action == nullptr || !action->isEnabled()) {
                 continue;
             }
+            // W35g-1.3 (R35fG0-7): a sentinel status first (All Subtasks sets "outline: all
+            // subtasks" and queues nothing), so the previous row's refusal, which has the same
+            // text for the formula and Custom Fields rows, cannot satisfy this row's needle.
+            window.apply_outline_level(0);
+            QApplication::processEvents();
+            const QString sentinel = window.status_left_text();
+            gate::check(sentinel.contains(QStringLiteral("outline: all subtasks")) &&
+                            !sentinel.contains(QString::fromLatin1(surface.needle)),
+                        (label + ": the sentinel status replaces the previous refusal").c_str());
             bool dialog_opened = false;
             QTimer::singleShot(0, [&dialog_opened]() {
                 if (QWidget* modal = QApplication::activeModalWidget()) {
