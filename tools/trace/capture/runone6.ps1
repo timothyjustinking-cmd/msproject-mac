@@ -11,7 +11,9 @@ if (-not (Test-Path "C:\trace\work\$t.mpp")) { "$t NOSAVE" | Out-File "C:\trace\
 $ctl = $i + $nm.Ctl + '.mpp'
 $nul = if ($nm.Null) { $i + $nm.Null + '.mpp' } else { $ctl }
 & C:\trace\python\python.exe C:\trace\tools\trace_gate.py "C:\trace\work\$t.mpp" ($i + $nm.Ref + '.mpp') $ctl $nul | Out-File "C:\trace\out\$t.gate.txt" -Encoding ascii
+$gx = $LASTEXITCODE   # the gate's exit code: 0 is PASS, anything else is not (W36-0.1)
+"$t gate exit $gx" | Out-File "C:\trace\out\$t.gate.exit.txt" -Encoding ascii
 $rawMB = [math]::Round((Get-ChildItem "$rr\$t" -Filter *.run | Measure-Object Length -Sum).Sum / 1MB)
 Get-ChildItem "$rr\$t" -Filter *.run | ForEach-Object { compact /c /i $_.FullName | Out-Null }   # NTFS compression, about 1.8 to 1
 $h = (Get-FileHash "C:\trace\work\$t.mpp").Hash
-("{0} saved {1} size {2} run MB {3}" -f $t, (($h -split '(.{8})' | ? { $_ }) -join ' '), (Get-Item "C:\trace\work\$t.mpp").Length, $rawMB) | Out-File "C:\trace\out\$t.saved.txt" -Encoding ascii
+("{0} saved {1} size {2} run MB {3} gate exit {4}" -f $t, (($h -split '(.{8})' | ? { $_ }) -join ' '), (Get-Item "C:\trace\work\$t.mpp").Length, $rawMB, $gx) | Out-File "C:\trace\out\$t.saved.txt" -Encoding ascii
