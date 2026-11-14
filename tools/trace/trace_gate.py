@@ -373,6 +373,68 @@ def _canon_view_props(data, streams):
     return bytes(out), noise, derived
 
 
+# The rich text of a note (Task, Assignment and Resource): a Var2Data block [length][RTF text and NUL]
+# located through the VarMeta entry (uid, offset, key) with the key below.  The text is data; two
+# numbers of the header are the machine's and not the document's: `\deflang<n>`, the language id
+# (1033 in the host saves, 2057 in the VM's) and the build of `{\*\generator Riched20 16.0.<build>}`
+# (20430 and 20527 among the committed saves) (W36-0f.3, DOSSIER "rich-text lang id and generator
+# build").  Each is replaced by zeros of its own width, so a different width is a size difference.
+NOTE_KEYS = {
+    "???114/TBkndTask/Var2Data": ("???114/TBkndTask/VarMeta", 0x0B40000F),
+    "???114/TBkndAssn/Var2Data": ("???114/TBkndAssn/VarMeta", 0x0F400047),
+    "???114/TBkndRsc/Var2Data": ("???114/TBkndRsc/VarMeta", 0x0C400014),
+}
+_RTF_LANG = re.compile(rb"\\deflang([1-9][0-9]{0,4})(?![0-9])")
+_RTF_BUILD = re.compile(rb"\{\\\*\\generator Riched20 16\.0\.([1-9][0-9]{0,4})\}")
+
+
+def _note_fields(block):
+    """[(field, lo, hi)] of the machine numbers in the header of an RTF block: the text before the
+    first `\\pard`, so never the note's own text.  The language id is a decimal of 1 to 65535, the
+    build one of 1 to 5 digits."""
+    if not block.startswith(b"{\\rtf1") or b"\\pard" not in block:
+        return []
+    head = block[:block.index(b"\\pard")]
+    out = []
+    m = _RTF_LANG.search(head)
+    if m and int(m.group(1)) <= 0xFFFF:
+        out.append(("lang", m.start(1), m.end(1)))
+    m = _RTF_BUILD.search(head)
+    if m:
+        out.append(("build", m.start(1), m.end(1)))
+    return out
+
+
+def _canon_note_var2(name):
+    meta_name, note_key = NOTE_KEYS[name]
+
+    def canon(data, streams):
+        meta = streams.get(meta_name)
+        if meta is None or len(meta) < 24:
+            return data, set(), set()
+        out = bytearray(data)
+        noise = set()
+        derived = set()
+        done = set()
+        for k in range(_u32(meta, 8)):
+            at = 24 + 12 * k
+            if at + 12 > len(meta):
+                break
+            uid, off, key = struct.unpack_from("<III", meta, at)
+            if key != note_key or off == 0xFFFFFFFF or off in done or off + 4 > len(data):
+                continue
+            done.add(off)
+            end = off + 4 + _u32(data, off)
+            if end > len(data):
+                continue
+            for field, lo, hi in _note_fields(data[off + 4:end]):
+                out[off + 4 + lo:off + 4 + hi] = b"0" * (hi - lo)
+                noise.update(range(off + 4 + lo, off + 4 + hi))
+                derived.add("note %d %s" % (uid, field))
+        return bytes(out), noise, derived
+    return canon
+
+
 def _tail_entries(tail):
     """The Props14 tail [count][entries] as [(id, name bytes)], or None.  An entry is [id][byte
     length][UTF-16 name]: the second word is the name's length, 30 for the 15-character name of the
@@ -577,6 +639,8 @@ CANON = {
     PROPS14: _canon_props14,
     SUMMARY: _canon_summary,
 }
+for _name in NOTE_KEYS:
+    CANON[_name] = _canon_note_var2(_name)
 
 
 def canonical_all(streams):

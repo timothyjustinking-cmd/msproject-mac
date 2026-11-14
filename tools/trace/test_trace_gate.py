@@ -293,7 +293,12 @@ try:
             return all(c >= " " and c != "\x7f" for c in s)
 
         CANON_STREAMS = ("???214/CEdl/Var2Data", "???214/CEdl/VarMeta", "???214/Props", "Props14",
-                         "?SummaryInformation")
+                         "?SummaryInformation", "???114/TBkndTask/Var2Data", "???114/TBkndAssn/Var2Data",
+                         "???114/TBkndRsc/Var2Data")
+        # W36-0f.3: the note rich text, the Var2Data block of this key in each of the three streams
+        NOTE_SPEC = {"???114/TBkndTask/Var2Data": ("???114/TBkndTask/VarMeta", 0x0B40000F),
+                     "???114/TBkndAssn/Var2Data": ("???114/TBkndAssn/VarMeta", 0x0F400047),
+                     "???114/TBkndRsc/Var2Data": ("???114/TBkndRsc/VarMeta", 0x0C400014)}
 
         def padded(at, length):
             return range(at, at + length + (length & 1))
@@ -362,6 +367,31 @@ try:
                 for m, e in names:
                     if e > m + 8 and text_ok(tail[m + 8:e]):
                         out.update(range(end + m + 4, end + e))     # the length word and the name
+            elif name in NOTE_SPEC:
+                meta_, key_ = NOTE_SPEC[name]
+                seen_ = set()
+                for uid_, off_, k_ in blocks(streams_.get(meta_)):
+                    if k_ != key_ or off_ == 0xFFFFFFFF or off_ in seen_ or off_ + 4 > len(data):
+                        continue
+                    seen_.add(off_)
+                    end_ = off_ + 4 + struct.unpack_from("<I", data, off_)[0]
+                    blk_ = data[off_ + 4:min(end_, len(data))]
+                    if end_ > len(data) or not blk_.startswith(b"{\\rtf1") or blk_.find(b"\\pard") < 0:
+                        continue
+                    head_ = blk_[:blk_.find(b"\\pard")]
+                    for token_, limit_ in ((b"\\deflang", 65535), (b"{\\*\\generator Riched20 16.0.", 99999)):
+                        at_ = head_.find(token_)
+                        if at_ < 0:
+                            continue
+                        lo_ = at_ + len(token_)
+                        hi_ = lo_
+                        while hi_ < len(head_) and 48 <= head_[hi_] <= 57:
+                            hi_ += 1
+                        ok_ = 1 <= hi_ - lo_ <= 5 and head_[lo_] != 48 and int(head_[lo_:hi_]) <= limit_
+                        if token_.startswith(b"{") and head_[hi_:hi_ + 1] != b"}":
+                            ok_ = False
+                        if ok_:
+                            out.update(range(off_ + 4 + lo_, off_ + 4 + hi_))
             elif name == "?SummaryInformation":
                 sec = _u(data[44:])
                 count = struct.unpack_from("<I", data, sec + 4)[0]
@@ -1313,6 +1343,148 @@ try:
         check("W36-0f.2 the canonical form of the slot table is its uids only",
               g.canonical_all(R)[0][cedl_n][slot_rec[0]:slot_rec[0] + 12 + 4 * len(slot_uids)] ==
               struct.pack("<III", 4 * len(slot_uids), 0x26400024, 1) + slot_pl[:4 * len(slot_uids)])
+
+        # --- W36-0f.3: the note rich text's language id and generator build -------------------------------
+        # The Var2Data block of a note (key 0x0b40000f of a Task, 0x0f400047 of an Assn, 0x0c400014 of a
+        # Rsc) is `{\rtf1...\deflang<n>{\fonttbl...}{\*\generator Riched20 16.0.<build>}...\pard<text>`.
+        # The language id (1033 in the host saves, 2057 in the VM's) and the build (20430 and 20527 among
+        # the committed saves) are the machine's (DOSSIER, "rich-text lang id and generator build"); the
+        # text and everything else are compared.  Each number is masked in the header only, as a decimal
+        # of 1 to 5 digits (the language id up to 65535), in zeros of its own width.
+        note_cases = (("Task", "wave30-notes", "???114/TBkndTask", 0x0B40000F),
+                      ("Assn", "wave36-r7-note-assignment", "???114/TBkndAssn", 0x0F400047),
+                      ("Rsc", "wave30-resource-notes", "???114/TBkndRsc", 0x0C400014))
+
+        def note_block(streams_, stream_, key_):
+            """(offset of the length word, the RTF bytes) of the first note block of `key_`."""
+            for uid_, off_, k_ in blocks(streams_[stream_ + "/VarMeta"]):
+                if k_ == key_ and off_ != 0xFFFFFFFF:
+                    n_ = struct.unpack_from("<I", streams_[stream_ + "/Var2Data"], off_)[0]
+                    return off_, streams_[stream_ + "/Var2Data"][off_ + 4:off_ + 4 + n_]
+            raise AssertionError("no note block")
+
+        def note_with(streams_, stream_, key_, edit, rekey=None):
+            """The streams with the note block passed through `edit` (the length word follows; a longer
+            block moves what comes after it, which no block parsed here depends on) and, with `rekey`,
+            the VarMeta key of that block set to `rekey`."""
+            off_, blk_ = note_block(streams_, stream_, key_)
+            new_ = edit(blk_)
+            out_ = dict(streams_)
+            v_ = streams_[stream_ + "/Var2Data"]
+            out_[stream_ + "/Var2Data"] = v_[:off_] + struct.pack("<I", len(new_)) + new_ + v_[off_ + 4 + len(blk_):]
+            if rekey is not None:
+                m_ = bytearray(streams_[stream_ + "/VarMeta"])
+                for k in range(struct.unpack_from("<I", m_, 8)[0]):
+                    if struct.unpack_from("<I", m_, 24 + 12 * k + 8)[0] == key_:
+                        struct.pack_into("<I", m_, 24 + 12 * k + 8, rekey)
+                out_[stream_ + "/VarMeta"] = bytes(m_)
+            return out_
+
+        def note_verdict(label, traced_, ref_, ctl_, nul_, stream_, want_fail):
+            lines_, problems_, checked_, unchecked_ = g.compare(traced_, ref_, ctl_, nul_)
+            check("W36-0f.3 %s %s" % (label, "fails" if want_fail else "is noise"),
+                  (problems_ >= 1 and any(stream_ + "/Var2Data" in ln for ln in lines_)) if want_fail
+                  else problems_ == 0, "%r" % (lines_,))
+
+        def swap_in(blk_, old_, new_):
+            assert blk_.count(old_) == 1, old_
+            return blk_.replace(old_, new_)
+
+        for label_, stem_, stream_, key_ in note_cases:
+            r_path, c_path, n_path = pair(stem_)
+            NR, NC, NN = load(r_path), load(c_path), load(n_path)
+            off_, blk_ = note_block(NR, stream_, key_)
+            check("W36-0f.3 %s: the committed note is RTF with a language id and a generator build" % label_,
+                  blk_.startswith(b"{\\rtf1") and b"\\deflang1033" in blk_ and b"Riched20 16.0.20" in blk_,
+                  "%r" % (blk_[:80],))
+            build_ = re.search(rb"Riched20 16\.0\.(\d+)\}", blk_).group(1)
+            other_build = b"20430" if build_ != b"20430" else b"20527"
+            vm_lang = lambda b: swap_in(b, b"\\deflang1033", b"\\deflang2057")
+            new_build = lambda b: swap_in(b, b"16.0." + build_ + b"}", b"16.0." + other_build + b"}")
+            # the machine numbers differ: noise, whichever side holds which
+            for what, edit in (("the VM's language id 2057", vm_lang), ("another build", new_build),
+                               ("both", lambda b: new_build(vm_lang(b)))):
+                edited = note_with(NR, stream_, key_, edit)
+                note_verdict("%s: %s in the traced save" % (label_, what), edited, NR, NC, NN, stream_, False)
+                note_verdict("%s: %s in the reference save" % (label_, what), NR, edited, NC, NN, stream_, False)
+            # a number that is not a language id or a build is data
+            bad = (("a language id of 0000", lambda b: swap_in(b, b"\\deflang1033", b"\\deflang0000")),
+                   ("a language id of 10x3", lambda b: swap_in(b, b"\\deflang1033", b"\\deflang10x3")),
+                   ("a build of 0000x", lambda b: swap_in(b, b"16.0." + build_ + b"}", b"16.0.0000x}")),
+                   ("a build with a leading 0", lambda b: swap_in(b, b"16.0." + build_ + b"}", b"16.0.0" + build_[1:] + b"}")),
+                   ("another major version", lambda b: swap_in(b, b"16.0." + build_ + b"}", b"15.0." + build_ + b"}")),
+                   ("another minor version", lambda b: swap_in(b, b"16.0." + build_ + b"}", b"16.1." + build_ + b"}")),
+                   ("another generator", lambda b: swap_in(b, b"Riched20 16.0.", b"Riched21 16.0.")),
+                   ("another code page", lambda b: swap_in(b, b"ansicpg1252", b"ansicpg1251")),
+                   ("another font", lambda b: swap_in(b, b"Segoe UI", b"Segoe XX")),
+                   ("another font size", lambda b: swap_in(b, b"\\fs20", b"\\fs21")))
+            for what, edit in bad:
+                edited = note_with(NR, stream_, key_, edit)
+                note_verdict("%s: %s" % (label_, what), edited, NR, NC, NN, stream_, True)
+                note_verdict("%s: %s, reference" % (label_, what), NR, edited, NC, NN, stream_, True)
+            # a changed character of the note's text is data, with the machine fields equal or masked
+            text_at = blk_.index(b"\\pard")
+            for pos in (text_at + 12, len(blk_) - 8):
+                def flip(b, pos=pos):
+                    return b[:pos] + bytes([b[pos] ^ 0x01]) + b[pos + 1:]
+                note_verdict("%s: a changed character of the note at +%d" % (label_, pos),
+                             note_with(NR, stream_, key_, flip), NR, NC, NN, stream_, True)
+                note_verdict("%s: a changed character and the VM's language id" % label_,
+                             note_with(NR, stream_, key_, lambda b: flip(vm_lang(b))), NR, NC, NN, stream_, True)
+            # the same words inside the note's own text are not the header's: only the header is masked
+            body_len = len(blk_) - text_at
+            for what, body_a, body_b in (("a language id", b"\\pard \\deflang1033 x", b"\\pard \\deflang1034 x"),
+                                         ("a generator build", b"\\pard {\\*\\generator Riched20 16.0.20430}",
+                                          b"\\pard {\\*\\generator Riched20 16.0.20527}")):
+                assert len(body_a) <= body_len and len(body_a) == len(body_b), (what, body_len)
+                edit_a = lambda b, x=body_a: b[:text_at] + x + b" " * (body_len - len(x))
+                edit_b = lambda b, x=body_b: b[:text_at] + x + b" " * (body_len - len(x))
+                note_verdict("%s: %s inside the note text" % (label_, what),
+                             note_with(NR, stream_, key_, edit_a), note_with(NR, stream_, key_, edit_b),
+                             NC, NN, stream_, True)
+            # with no such word in the header, the same word in the text is still the text
+            no_lang = lambda b: swap_in(b, b"\\deflang1033", b"\\deflanx1033")
+            no_gen = lambda b: swap_in(b, b"Riched20 16.0.", b"Riched20 16.1.")
+            for what, hdr, body_a, body_b in (("a language id", no_lang, b"\\pard \\deflang1033 x", b"\\pard \\deflang1034 x"),
+                                              ("a generator build", no_gen, b"\\pard {\\*\\generator Riched20 16.0.20430}",
+                                               b"\\pard {\\*\\generator Riched20 16.0.20527}")):
+                edit_a = lambda b, x=body_a, h=hdr: h(b)[:text_at] + x + b" " * (body_len - len(x))
+                edit_b = lambda b, x=body_b, h=hdr: h(b)[:text_at] + x + b" " * (body_len - len(x))
+                note_verdict("%s: %s in the text of a note with none in its header" % (label_, what),
+                             note_with(NR, stream_, key_, edit_a), note_with(NR, stream_, key_, edit_b),
+                             NC, NN, stream_, True)
+            # a build is masked only after the generator `Riched20 16.0.`: another version's is data
+            for ver in (b"15.0.", b"16.1."):
+                def at_ver(b, ver=ver):
+                    return swap_in(b, b"16.0." + build_ + b"}", ver + build_ + b"}")
+                def at_ver_other(b, ver=ver):
+                    return swap_in(b, b"16.0." + build_ + b"}", ver + other_build + b"}")
+                note_verdict("%s: builds of %s differ" % (label_, ver.decode()),
+                             note_with(NR, stream_, key_, at_ver), note_with(NR, stream_, key_, at_ver_other),
+                             NC, NN, stream_, True)
+            # a block that is not a note block (another key) is not read
+            note_verdict("%s: a language id in a block of another key" % label_,
+                         note_with(NR, stream_, key_, vm_lang, rekey=0x0B4000F0),
+                         note_with(NR, stream_, key_, lambda b: b, rekey=0x0B4000F0), NC, NN, stream_, True)
+            # the header is read as an RTF header only: another RTF version, no paragraph to end it, and a
+            # build of six digits are not masked, on both sides
+            for what, base_edit in (("another RTF version", lambda b: swap_in(b, b"{\\rtf1", b"{\\rtf2")),
+                                    ("no paragraph", lambda b: swap_in(b, b"\\pard", b"\\pxrd"))):
+                note_verdict("%s: %s with the VM's language id" % (label_, what),
+                             note_with(NR, stream_, key_, lambda b: vm_lang(base_edit(b))),
+                             note_with(NR, stream_, key_, base_edit), NC, NN, stream_, True)
+            note_verdict("%s: builds of six digits" % label_,
+                         note_with(NR, stream_, key_, lambda b: swap_in(b, b"16.0." + build_ + b"}", b"16.0.204300}")),
+                         note_with(NR, stream_, key_, lambda b: swap_in(b, b"16.0." + build_ + b"}", b"16.0.205270}")),
+                         NC, NN, stream_, True)
+            # a language id of five digits is read up to 65535; a width change is a size difference
+            def lang(value):
+                return lambda b: swap_in(b, b"\\deflang1033", b"\\deflang%d" % value)
+            for hi, lo, want in ((65535, 65534, False), (65536, 65537, True), (99999, 99998, True),
+                                 (10330, 1033, True)):
+                note_verdict("%s: language ids of %d and %d" % (label_, hi, lo),
+                             note_with(NR, stream_, key_, lang(hi)), note_with(NR, stream_, key_, lang(lo)),
+                             NC, NN, stream_, want)
 
         def put(streams_, name_, edits):
             out = dict(streams_)
