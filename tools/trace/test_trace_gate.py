@@ -1699,6 +1699,27 @@ try:
         check("W36-0d.3 a different version-1 GUID string is noise and passes", problems_ == 0,
               "%r" % (lines_,))
 
+        # --- W36-0d.4 (R36G0c-4): a string slot is a string only by its type word ----------------------
+        # Author, LastAuthor and RevNumber are noise only in a VT_LPSTR slot.  The slot of the pair, with
+        # its type word set to VT_LPWSTR (0x1f) or to 0 and nothing else changed, is not a string slot:
+        # its bytes stay raw and the difference fails.  (The same slot with the type word kept is noise.)
+        for pid, label in ((4, "Author"), (8, "LastAuthor"), (9, "RevNumber")):
+            slot_ = bytearray(dict(si_slots(R[SI])[2])[pid])
+            check("W36-0d.4 the reference %s slot is a VT_LPSTR (type 0x1e)" % label,
+                  struct.unpack_from("<I", slot_, 0)[0] == 0x1E)
+            for tname, tword in (("0x1f", 0x1F), ("0", 0)):
+                bad_ = bytearray(slot_)
+                struct.pack_into("<I", bad_, 0, tword)
+                for which, (tr, rf) in (("traced", (swapped(R, SI, si_build(R[SI], {pid: bytes(bad_)})), R)),
+                                        ("reference", (R, swapped(R, SI, si_build(R[SI], {pid: bytes(bad_)}))))):
+                    problems_, lines_ = verdict(tr, rf)
+                    check("W36-0d.4 %s with its type word %s in the %s save fails" % (label, tname, which),
+                          problems_ >= 1 and any(SI in ln for ln in lines_), "%r" % (lines_,))
+            same_ = swapped(R, SI, si_build(R[SI], {pid: bytes(slot_)}))
+            problems_, lines_ = verdict(same_, R)
+            check("W36-0d.4 %s with its type word kept is the pair's own stream and passes" % label,
+                  problems_ == 0, "%r" % (lines_,))
+
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
         check("W36-0.3 compare with no null: one problem 'no null'",
