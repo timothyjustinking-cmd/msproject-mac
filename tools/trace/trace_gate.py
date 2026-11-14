@@ -47,6 +47,7 @@ import hashlib
 import re
 import struct
 import sys
+import unicodedata
 import uuid
 
 try:
@@ -220,7 +221,8 @@ def _u32(data, at):
 
 
 def _text_ok(payload):
-    """A decoded path or user name: UTF-16LE of printable characters, at most one trailing NUL."""
+    """A decoded path or user name: UTF-16LE text with no character of a Unicode C category
+    (controls, C1 included; format; surrogate; private use; unassigned), at most one trailing NUL."""
     if len(payload) % 2 or len(payload) > 2048:
         return False
     try:
@@ -229,7 +231,7 @@ def _text_ok(payload):
         return False
     if text.endswith("\0"):
         text = text[:-1]
-    return all(ch >= " " and ch != "\x7f" for ch in text)
+    return all(unicodedata.category(ch)[0] != "C" for ch in text)
 
 
 def frame_records(data, base):

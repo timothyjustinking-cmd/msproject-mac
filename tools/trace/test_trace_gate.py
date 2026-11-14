@@ -2037,6 +2037,24 @@ try:
                 problems_, lines_ = verdict(swapped(R, SI, si_build(R[SI], {pid: slot_})), R)
                 check("W36-0d.6 %s with %s is noise" % (label, what), problems_ == 0, "%r" % (lines_,))
 
+        # --- W36-0d.9 (R36G0c-8): the text test rejects every Unicode C category --------------------
+        # U+0085 (a C1 control), U+200E (format), U+E000 (private use) and U+0378 (unassigned) were
+        # "printable" (>= U+0020 and not U+007F): a path of twenty of them passed as noise.
+        for what, ch_ in (("a C1 control (U+0085)", "\u0085"), ("a format character (U+200E)", "\u200e"),
+                          ("a private-use character (U+E000)", "\ue000"), ("an unassigned one (U+0378)", "\u0378")):
+            junk_ = (ch_ * 20).encode("utf-16le")
+            for label_, name_, at_ in (("CEdl path record", cedl, p_at), ("Props14 path record", P14, p14_path)):
+                for which in ("traced", "reference"):
+                    badf = put(R, name_, [(at_, junk_)])
+                    tr, rf = (badf, R) if which == "traced" else (R, badf)
+                    problems_, lines_ = verdict(tr, rf)
+                    check("W36-0d.9 %s of 20 x %s in the %s save fails" % (label_, what, which),
+                          problems_ >= 1 and any(name_ in ln for ln in lines_), "%r" % (lines_,))
+        check("W36-0d.9 _text_ok takes an accented name, CJK text and a trailing NUL",
+              all(g._text_ok(t.encode("utf-16le")) for t in ("Ren\u00e9", "\u540d\u524d\0", "C:\\w30\\a-b!\0")))
+        check("W36-0d.9 _text_ok refuses a C1 control, a format character, private use and an unassigned one",
+              not any(g._text_ok(t.encode("utf-16le")) for t in ("a\u0085b", "a\u200eb", "a\ue000b", "a\u0378b")))
+
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
         check("W36-0.3 compare with no null: one problem 'no null'",

@@ -193,6 +193,10 @@ GUARDS = [
      [('    if length < 1 or body[-1:] != b"\\0":', "    if False:")]),
     ("lpstr-text-control", "R36G0c-6", "a string may hold control characters",
      [('    return all(ch >= " " and ch != "\\x7f" for ch in text.rstrip("\\0"))', "    return True")]),
+    # --- W36-0d.9: the text test takes no character of a C category ----------------------------------
+    ("text-c-category", "R36G0c-8", "_text_ok takes any character from U+0020 but U+007F (C1, private use...)",
+     [('    return all(unicodedata.category(ch)[0] != "C" for ch in text)',
+       '    return all(ch >= " " and ch != "\\x7f" for ch in text)')]),
     # --- W36-0d.7: the OPEN pins --------------------------------------------------------------------
     ("control-mask-count", "R36G0c-7", "the printed control-mask byte count is one too many",
      [('            lines.append("control-mask %s %d" % (name, len(masked)))',
