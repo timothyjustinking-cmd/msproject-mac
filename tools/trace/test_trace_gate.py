@@ -274,10 +274,6 @@ try:
             return [struct.unpack_from("<III", meta, 24 + 12 * k)
                     for k in range(struct.unpack_from("<I", meta, 8)[0])]
 
-        def task_uids(blob):
-            return {struct.unpack_from("<I", blob, 48 + 202 * r)[0]
-                    for r in range(max(0, (len(blob or b"") - 48) // 202))}
-
         # --- W36-0c.6 (R36G0b-6): the noise of the parsed streams and the font rows, written here -----
         # From the rows of trace-gate-fields-g0b.md and the test's own parse of the bag and of the
         # property records; nothing below calls the gate's canonical forms or font parser.
@@ -944,6 +940,7 @@ try:
         GUID_ROWS = {"???214/CTable/FixedData": (214, 230), "???214/CV_iew/FixedData": (122, 138)}
         PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2, 0x024013BD)
         PROPS_SLOTS = (0x02401395, 0x02401396, 0x02401397, 0x0240139F)   # W36-0f.4.4
+        STAMP_BLOCKS = (("???114/TBkndAssn/Var2Data", 0x0F40027A), ("???114/TBkndRsc/Var2Data", 0x0C4002D6))
 
         def spec_windows(name, data, meta, ctl):
             """The offsets of the named noise fields of one stream, by the evidence note."""
@@ -976,16 +973,16 @@ try:
                     if rid == 0x03400001 and length >= 76:
                         out.update(at + 2 * i for i in range(38) if i not in (0, 9, 14, 19, 24, 37))
             if name == "???114/TBkndTask/FixedData":
-                known = task_uids(ctl.get(name))
-                for row in range(max(0, (len(data) - 48) // 202)):
+                for row in range(max(0, (len(data) - 48) // 202)):   # W36-0f.4.7: every row, inside the span
                     at = 48 + 202 * row
-                    if struct.unpack_from("<I", data, at)[0] not in known:
+                    if 0x3D141482 <= struct.unpack_from("<I", data, at + 128)[0] <= 0x3D28352A:
                         out.update(range(at + 128, at + 132))
-            if name == "???114/TBkndAssn/Var2Data":
-                known = {uid for uid, _, _ in blocks(ctl.get("???114/TBkndAssn/VarMeta"))}
-                for uid, off, key in blocks(meta):
-                    if key == 0x0F40027A and off != 0xFFFFFFFF and uid not in known:
-                        out.update(range(off + 4, off + 8))
+            for var_name, stamp_key in STAMP_BLOCKS:
+                if name == var_name:
+                    for uid, off, key in blocks(meta):
+                        if key == stamp_key and off != 0xFFFFFFFF and \
+                                0x3D141482 <= struct.unpack_from("<I", data, off + 4)[0] <= 0x3D28352A:
+                            out.update(range(off + 4, off + 8))
             if name == "???214/CV_iew/Var2Data":
                 out.update(bag_font_bytes(data, meta))
             return out
@@ -1930,19 +1927,25 @@ try:
         problems, lines = verdict(put(AR, task_n, [(last + 132, b"\x01")]), AR, short)
         check("W36-0b.4 Task FixedData: the byte after the stamp is data and fails",
               problems >= 1, "%r" % (lines,))
-        problems, lines = verdict(put(AR, task_n, [(base + size + 128, in_span)]), AR, short)
-        check("W36-0b.4 Task FixedData: the stamp of a row the control has fails",
-              problems >= 1 and task_n in "".join(lines), "%r" % (lines,))
-        # W36-0e.2: with the span a stamp outside it fails on its own, so the guard that a row the
-        # control has (on either side) is not new is held by exact counts of the bytes that differ:
-        # the stamp's four bytes count as data when the traced row, or the reference's, is the control's
+        # W36-0f.4.7: the creation stamp is noise in a row the control has too (the VM writes a later one
+        # into a row the control and the reference share: DOSSIER, "Task row creation stamp (+128)"), as a
+        # stamp inside the span on both sides; the uid byte beside it still counts
         stamp_at = base + size + 128
+        problems, lines = verdict(put(AR, task_n, [(stamp_at, in_span)]), AR, short)
+        check("W36-0f.4.7 Task FixedData: the stamp of a row the control has is noise inside the span",
+              problems == 0 and AR[task_n][stamp_at:stamp_at + 4] != in_span, "%r" % (lines,))
+        for vname, val in (("zero", 0), ("all ones", 0xFFFFFFFF), ("one", 1), ("0x7fffffff", 0x7FFFFFFF),
+                           ("one over the span's top", 0x3D28352B), ("one under the span's bottom", 0x3D141481)):
+            for which in ("traced", "reference"):
+                bad_ = put(AR, task_n, [(stamp_at, struct.pack("<I", val))])
+                problems, lines = verdict(*((bad_, AR) if which == "traced" else (AR, bad_)), AC)
+                check("W36-0f.4.7 Task FixedData: a stamp of %s in the %s row fails" % (vname, which),
+                      lines == ["bytes-differ %s %d" % (task_n, sum(a != b for a, b in zip(bad_[task_n], AR[task_n])))],
+                      "%r" % (lines,))
         edited = put(AR, task_n, [(stamp_at, in_span), (base + size, bytes([AR[task_n][base + size] ^ 0x40]))])
-        ndiff = sum(a != b for a, b in zip(edited[task_n], AR[task_n]))
         problems, lines = verdict(edited, AR, short)
-        check("W36-0e.2 Task FixedData: the traced row is new but the reference's is the control's, so the "
-              "stamp counts: %d bytes differ" % ndiff,
-              lines == ["bytes-differ %s %d" % (task_n, ndiff)] and ndiff >= 2, "%r" % (lines,))
+        check("W36-0f.4.7 Task FixedData: the stamp is noise and the uid byte beside it is data: 1 byte differs",
+              lines == ["bytes-differ %s 1" % task_n], "%r" % (lines,))
         var_n, meta_n2 = "???114/TBkndAssn/Var2Data", "???114/TBkndAssn/VarMeta"
         known = {uid for uid, _, _ in g._meta_blocks(AC[meta_n2])}
         stamps = [(uid, off) for uid, off, key in g._meta_blocks(AR[meta_n2])
@@ -1955,8 +1958,29 @@ try:
         check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control lacks is noise",
               problems == 0, "%r" % (lines,))
         problems, lines = verdict(put(AR, var_n, [(old_s[0], in_span)]), AR, AC)
-        check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control has fails",
-              problems >= 1 and var_n in "".join(lines), "%r" % (lines,))
+        check("W36-0f.4.7 Assn Var2Data: the stamp of an assignment the control has is noise inside the span",
+              problems == 0 and AR[var_n][old_s[0]:old_s[0] + 4] != in_span, "%r" % (lines,))
+        rsc_n, rsc_meta = "???114/TBkndRsc/Var2Data", "???114/TBkndRsc/VarMeta"
+        for stamp_name, stamp_meta, stamp_key in ((var_n, meta_n2, 0x0F40027A), (rsc_n, rsc_meta, 0x0C4002D6)):
+            at_s = [off + 4 for uid, off, key in g._meta_blocks(AR[stamp_meta])
+                    if key == stamp_key and off != 0xFFFFFFFF]
+            check("W36-0f.4.7 the pair has a stamp block of key %#x in %s" % (stamp_key, stamp_name),
+                  len(at_s) >= 1, "%r" % (at_s,))
+            if not at_s:
+                continue
+            problems, lines = verdict(put(AR, stamp_name, [(at_s[0], in_span)]), AR, AC)
+            check("W36-0f.4.7 %s: the stamp of key %#x inside the span is noise" % (stamp_name, stamp_key),
+                  problems == 0 and AR[stamp_name][at_s[0]:at_s[0] + 4] != in_span, "%r" % (lines,))
+            for vname, val in (("zero", 0), ("all ones", 0xFFFFFFFF), ("one over the span's top", 0x3D28352B),
+                               ("one under the span's bottom", 0x3D141481)):
+                for which in ("traced", "reference"):
+                    bad_ = put(AR, stamp_name, [(at_s[0], struct.pack("<I", val))])
+                    problems, lines = verdict(*((bad_, AR) if which == "traced" else (AR, bad_)), AC)
+                    check("W36-0f.4.7 %s: a stamp of %s in the %s block fails" % (stamp_name, vname, which),
+                          problems >= 1 and stamp_name in "".join(lines), "%r" % (lines,))
+            problems, lines = verdict(put(AR, stamp_name, [(at_s[0] + 4, b"\x01")]), AR, AC)
+            check("W36-0f.4.7 %s: the byte after the stamp is data and fails" % stamp_name,
+                  problems >= 1 and stamp_name in "".join(lines), "%r" % (lines,))
 
         # --- W36-0b.5 (R36G0-5): there is no ceiling on how many noise fields change -------------
         # A traced save in which EVERY named noise field of EVERY row has changed (every GUID is a
@@ -1999,17 +2023,18 @@ try:
                         if d // 2 in (17, 20):      # the version and variant digits are data (W36-0d.3)
                             continue
                         want(sname, at + d, b"7" if data[at + d:at + d + 1] != b"7" else b"8")
-            if "new_row" in rule:
+            if "row_stamp" in rule:   # every row (W36-0f.4.7), the stamp moved to another one inside the span
                 base, size = g.STRIDE[sname]
-                known_uids = g._task_uids(AC.get(sname))
-                lo, hi = rule["new_row"]
+                lo, hi = rule["row_stamp"]
                 for r in range((len(data) - base) // size):
                     row = base + r * size
-                    if g._u32(data, row) not in known_uids:
-                        want(sname, row + lo, struct.pack("<I", 0x3D200000 + r))
-        for uid, off, key in g._meta_blocks(AR[meta_n2]):
-            if key == 0x0F40027A and off != 0xFFFFFFFF and uid not in known:
-                want(var_n, off + 4, struct.pack("<I", 0x3D210000 + uid % 4096))
+                    want(sname, row + lo, struct.pack("<I", 0x3D200000 + r))
+        for stamp_name, stamp_meta, stamp_key in (
+                (var_n, meta_n2, 0x0F40027A),
+                ("???114/TBkndRsc/Var2Data", "???114/TBkndRsc/VarMeta", 0x0C4002D6)):
+            for uid, off, key in g._meta_blocks(AR[stamp_meta]):
+                if key == stamp_key and off != 0xFFFFFFFF:
+                    want(stamp_name, off + 4, struct.pack("<I", 0x3D210000 + uid % 4096))
         cview = "???214/CV_iew/Var2Data"
         for at in bag_font_bytes(AR[cview], AR["???214/CV_iew/VarMeta"]):
             want(cview, at, bytes([AR[cview][at] ^ 0xFF]))
@@ -3437,7 +3462,6 @@ try:
         expect("row_ids of the pair's own Fixed2Data names every row",
                len(calls("row_ids", g.row_ids, t_fixed2, R[t_fixed2], R) or []),
                len(R[t_fixed2]) // g.STRIDE[t_fixed2][1])
-        expect("_task_uids of no stream is empty", calls("_task_uids", g._task_uids, None), set())
         expect("_meta_blocks of no stream is empty", calls("_meta_blocks", g._meta_blocks, None), [])
         expect("_meta_blocks of 10 bytes is empty", calls("_meta_blocks", g._meta_blocks, bytes(10)), [])
 
