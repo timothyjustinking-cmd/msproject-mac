@@ -1753,6 +1753,72 @@ try:
                   (problems_ >= 1 and any(P14 in ln for ln in lines_)) if expect == "fails"
                   else problems_ == 0, "%r" % (lines_,))
 
+        # --- W36-0d.6 (R36G0c-6): a masked noise field must hold a value a save writes -------------------
+        # A creation stamp and a save word are noise as a 32-bit value that is not 0 and not all-ones;
+        # LastSave as a FILETIME after 2000-01-01 and not all-ones; Author, LastAuthor and RevNumber as a
+        # Windows-1252 text that ends in its NUL, with no control character.  The value bounds and the
+        # committed range they come from are in spec/writers/evidence/trace-gate-fields-g0b.md.  The font
+        # word's top byte has no bound (8 distinct values in the committed saves, no pattern).
+        zero4, ones4 = bytes(4), b"\xff" * 4
+        for label, stream_, at_, ref_, ctl_ in (
+                ("Task FixedData new-row stamp", task_n, last + 128, AR, short),
+                ("Assn Var2Data new-block stamp", var_n, fresh_s[0], AR, AC)):
+            for vname, bad_ in (("0", zero4), ("0xffffffff", ones4)):
+                for which in ("traced", "reference"):
+                    badf = put(ref_, stream_, [(at_, bad_)])
+                    tr, rf = (badf, ref_) if which == "traced" else (ref_, badf)
+                    problems_, lines_ = verdict(tr, rf, ctl_)
+                    check("W36-0d.6 %s of %s in the %s save fails" % (label, vname, which),
+                          problems_ >= 1 and any(stream_ in ln for ln in lines_), "%r" % (lines_,))
+            badf = put(ref_, stream_, [(at_, zero4)])
+            problems_, lines_ = verdict(badf, badf, ctl_)
+            check("W36-0d.6 %s of 0 on both sides is equality and passes" % label,
+                  problems_ == 0, "%r" % (lines_,))
+        for rid in sorted(g.NOISE[props114]["props"]):
+            hits = [(pos, length) for pos, length, r_ in records(R[props114], 16) if r_ == rid]
+            if not hits or hits[0][1] != 4:
+                continue
+            for vname, bad_ in (("0", zero4), ("0xffffffff", ones4)):
+                for which in ("traced", "reference"):
+                    badf = put(R, props114, [(hits[0][0], bad_)])
+                    tr, rf = (badf, R) if which == "traced" else (R, badf)
+                    problems_, lines_ = verdict(tr, rf)
+                    check("W36-0d.6 114/Props save word %#x of %s in the %s save fails" %
+                          (rid, vname, which),
+                          problems_ >= 1 and any(props114 in ln for ln in lines_), "%r" % (lines_,))
+        saved_slot = si_have[13]
+        later = struct.pack("<I", 0x40) + struct.pack("<Q", 0x01DD8000_00000000)
+        check("W36-0d.6 a LastSave of another date after 2000 is noise",
+              verdict(swapped(R, SI, si_build(R[SI], {13: later})), R)[0] == 0)
+        for vname, ft_ in (("0", 0), ("0xffffffffffffffff", 0xFFFFFFFFFFFFFFFF),
+                           ("a date before 2000", 0x01BF53EB256D4000 - 1)):
+            slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
+            for which in ("traced", "reference"):
+                badf = swapped(R, SI, si_build(R[SI], {13: slot_}))
+                tr, rf = (badf, R) if which == "traced" else (R, badf)
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0d.6 LastSave of %s in the %s save fails" % (vname, which),
+                      problems_ >= 1 and any(SI in ln for ln in lines_), "%r" % (lines_,))
+        no_nul = struct.pack("<II", 0x1E, 3) + b"abc\0"
+        for pid, label in ((4, "Author"), (8, "LastAuthor"), (9, "RevNumber")):
+            for what, slot_ in (("a control byte 0x01", lpstr("a\x01b")),
+                                ("a DEL byte", lpstr("a\x7fb")),
+                                ("a byte undefined in Windows-1252 (0x81)",
+                                 struct.pack("<II", 0x1E, 4) + b"a\x81b\0"),
+                                ("a length of 0", struct.pack("<II", 0x1E, 0)),
+                                ("no terminating NUL", no_nul)):
+                for which in ("traced", "reference"):
+                    badf = swapped(R, SI, si_build(R[SI], {pid: slot_}))
+                    tr, rf = (badf, R) if which == "traced" else (R, badf)
+                    problems_, lines_ = verdict(tr, rf)
+                    check("W36-0d.6 %s with %s in the %s save fails" % (label, what, which),
+                          problems_ >= 1 and any(SI in ln for ln in lines_), "%r" % (lines_,))
+            for what, slot_ in (("an accented name", struct.pack("<II", 0x1E, 5) + b"Ren\xe9\0\0\0\0"),
+                                ("33 bytes of 0xff and a NUL (valid Windows-1252)",
+                                 struct.pack("<II", 0x1E, 34) + b"\xff" * 33 + b"\0\0\0")):
+                problems_, lines_ = verdict(swapped(R, SI, si_build(R[SI], {pid: slot_})), R)
+                check("W36-0d.6 %s with %s is noise" % (label, what), problems_ == 0, "%r" % (lines_,))
+
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
         check("W36-0.3 compare with no null: one problem 'no null'",

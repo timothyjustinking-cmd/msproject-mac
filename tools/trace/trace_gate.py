@@ -372,6 +372,36 @@ def _canon_props14(data, streams):
     return bytes(out), noise, derived
 
 
+FILETIME_2000 = 0x01BF53EB256D4000   # 2000-01-01T00:00:00Z as a FILETIME
+
+
+def _stamp_ok(raw):
+    """A 32-bit creation stamp or save word as saved: not 0 and not all-ones.  The committed saves
+    span 0x3d141482 to 0x3d282db4 (5835 values; none 0 or all-ones), and the value grows with time,
+    so only the two values a field that was never written holds are refused (W36-0d.6)."""
+    return len(raw) == 4 and raw != bytes(4) and raw != b"\xff" * 4
+
+
+def _filetime_ok(raw):
+    """A LastSave FILETIME: after 2000-01-01 and not all-ones (the committed saves: 2026)."""
+    value = struct.unpack("<Q", raw)[0] if len(raw) == 8 else 0
+    return FILETIME_2000 <= value < 0xFFFFFFFFFFFFFFFF
+
+
+def _lpstr_text_ok(raw):
+    """The string of a VT_LPSTR slot: at least its NUL, ending in a NUL, a Windows-1252 text with
+    no control character before the trailing NULs (W36-0d.6)."""
+    length = _u32(raw, 4)
+    body = raw[8:8 + length]
+    if length < 1 or body[-1:] != b"\0":
+        return False
+    try:
+        text = body.decode("cp1252")
+    except UnicodeDecodeError:
+        return False
+    return all(ch >= " " and ch != "\x7f" for ch in text.rstrip("\0"))
+
+
 def _lpstr_slot_ok(raw):
     """A VT_LPSTR value slot exactly: type 0x1e, the length word, the string, and zero padding to
     a 4-byte boundary, so the slot is 8 + the length rounded up to 4 bytes (W36-0c.3 / R36G0b-3).
@@ -408,18 +438,23 @@ def _canon_summary(data, streams):
             return data, set(), set()
         values[i] = (lo, hi)
     noise = set()
+    derived = set()
     canon = {}
     for i, (pid, _) in enumerate(ents):
         lo, hi = values[i]
         raw = data[lo:hi]
-        if pid in (SI_AUTHOR, SI_LASTAUTHOR, SI_REVNUMBER) and _lpstr_slot_ok(raw):
+        if pid in (SI_AUTHOR, SI_LASTAUTHOR, SI_REVNUMBER) and _lpstr_slot_ok(raw) and \
+                _lpstr_text_ok(raw):
             # a VT_LPSTR: type, length (with its NUL), bytes, zero padding to a 4-byte boundary;
-            # only the length word and the string are noise (W36-0c.3)
+            # only the length word and the string are noise (W36-0c.3), and only a text (W36-0d.6)
             raw = struct.pack("<II", 0x1E, 0)
             noise.update(range(lo + 4, lo + 8 + _u32(data, lo + 4)))
-        elif pid == SI_LASTSAVE and len(raw) == 12 and _u32(raw, 0) == 0x40:
+            derived.add("pid %d" % pid)
+        elif pid == SI_LASTSAVE and len(raw) == 12 and _u32(raw, 0) == 0x40 and \
+                _filetime_ok(raw[4:]):
             raw = struct.pack("<I", 0x40) + bytes(8)
             noise.update(range(lo + 4, hi))
+            derived.add("pid %d" % pid)
         canon[i] = raw
     out = bytearray(data[:sec])
     offs = {}
@@ -435,7 +470,7 @@ def _canon_summary(data, streams):
     noise.update(range(sec, sec + 4))
     for i in range(count):
         noise.update(range(table + 8 * i + 4, table + 8 * i + 8))
-    return bytes(out), noise, set()
+    return bytes(out), noise, derived
 
 
 CANON = {
@@ -585,7 +620,8 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
             for r in range(nrec):
                 row = base + r * size
                 if _u32(data, row) not in known and \
-                        (row + 4 > len(other) or _u32(other, row) not in known):
+                        (row + 4 > len(other) or _u32(other, row) not in known) and \
+                        _stamp_ok(data[row + lo:row + hi]) and _stamp_ok(other[row + lo:row + hi]):
                     offs.update(range(row + lo, row + hi))
     for at in rule.get("guid", ()):
         if _guid_ok(data[at:at + 16]) and _guid_ok(other[at:at + 16]):
@@ -594,7 +630,8 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
         for pos, length, rid, kind in frame_records(data, 16) or []:
             cls = rule["props"].get(rid)
             at = pos + 12
-            if cls == "word" and length == 4:
+            if cls == "word" and length == 4 and _stamp_ok(data[at:at + 4]) and \
+                    _stamp_ok(other[at:at + 4]):
                 offs.update(range(at, at + 4))
             elif cls == "guid" and length == 16 and _guid_ok(data[at:at + 16]) and \
                     _guid_ok(other[at:at + 16]):
@@ -608,7 +645,9 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
         for uid, off, key in _meta_blocks(meta):
             if key in rule["varkey"] and off != 0xFFFFFFFF and uid not in known:
                 lo, hi = rule["varkey"][key]
-                offs.update(range(off + 4 + lo, min(off + 4 + hi, len(data))))
+                at = off + 4 + lo
+                if _stamp_ok(data[at:off + 4 + hi]) and _stamp_ok(other[at:off + 4 + hi]):
+                    offs.update(range(at, min(off + 4 + hi, len(data))))
     return offs
 
 

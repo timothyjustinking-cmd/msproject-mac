@@ -52,3 +52,18 @@ The Fixed2Meta/FixedMeta streams are not used: the Assn meta lists only some row
 count is not the row count.  A stream whose Fixed2Data row count does not fit its FixedData is
 not named (no mask).  A uid that two rows carry (a deleted Task row that stays, two Rsc rows in
 two files) leaves those rows unmasked rather than guessed.
+
+## Value bounds of the masked fields (W36-0d.6, R36G0c-6)
+
+A named field is noise only when it holds a value a save writes, on both sides.  Decoded from the
+624 committed .mpp files of tests/data (probes `build/w36/g0d_probe.py`, `g0d_probe2.py`; the pairs, controls and nulls alike):
+
+| Field | Bound in the gate | Committed values |
+|---|---|---|
+| Task new-row stamp, Assn new-block stamp, Props save words (`_stamp_ok`) | 32 bits, not 0 and not all-ones | 5835 values (2700, 1887, 1248), 0x3d141482 to 0x3d282db4; none 0 or all-ones.  The value grows with time, so no upper bound is kept |
+| SummaryInformation LastSave (`_filetime_ok`) | a FILETIME from 2000-01-01 (0x01bf53eb256d4000) and not all-ones | 0x01dd62019f6a0e00 to 0x01dd72130aac6c00 (22 October to 11 November 2026) |
+| SummaryInformation Author, LastAuthor, RevNumber (`_lpstr_text_ok`) | a length of at least 1, ending in a NUL, a Windows-1252 text with no control character | 1872 strings, 4 to 16 bytes; none breaks the rule.  33 bytes of 0xff and a NUL is a valid Windows-1252 text and stays noise |
+| Font word top byte | none | 24 bytes, 8 distinct values (0, 52, 96, 107, 110, 144, 192, 215): an allocator byte with no pattern to test |
+
+The two Props save words are equal to each other in all 624 files; the gate does not
+test that.
