@@ -141,8 +141,9 @@ IDENT = {
 # is not, and every row of every stream is judged by the same rule (W36-0b.5).
 FIELDS = "spec/writers/evidence/trace-gate-fields-g0b.md"
 NOISE = {
-    # FIELDS:12  Assn Fixed2Data GUIDs at +0 and +16 (+32..+37 and +41 are per-save, not decoded)
-    "???114/TBkndAssn/Fixed2Data": {"guid_record": (0, 16)},
+    # FIELDS:12  Assn Fixed2Data GUIDs at +0 and +16; W36-0f.4.6: the third at +32 (DOSSIER, "Assn
+    # Fixed2Data third GUID +32..+47"; a version-1 GUID in 101 of the committed rows, else data)
+    "???114/TBkndAssn/Fixed2Data": {"guid_record": (0, 16, 32)},
     # FIELDS:13  Task Fixed2Data GUIDs at +0 and +24
     "???114/TBkndTask/Fixed2Data": {"guid_record": (0, 24)},
     # FIELDS:14  Rsc Fixed2Data GUIDs at +0 and +24

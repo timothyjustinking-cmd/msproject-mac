@@ -540,10 +540,7 @@ try:
         # (offsets as of 14 November 2026, from the control/null pairs); none is masked.
         MASKED = {
             "114/Props": "typed-property records between +63430 and +63502 (0x01000004, 0x00800004, "
-                         "0x024013c8, 0x024013bd among them); what they hold is not decoded",
-            "114/TBkndAssn/Fixed2Data": "row +32..+37 and +41: a per-save value nobody decoded "
-                                        "(a control and its null differ there with no edit); masking "
-                                        "it would also pass an edit of the real field",
+                         "0x024013c8 among them); what they hold is not decoded",
             "114/TBkndAssn/Fixed2Meta": "meta items at +8, +20, +68..+78, +121..+131, +174; not decoded",
             "114/TBkndAssn/FixedMeta": "meta items at +4, +8, +16..+20, +50..+54, +86..+97; not decoded",
             "114/TBkndRsc/FixedMeta": "meta items at +176 and +213; not decoded",
@@ -559,7 +556,7 @@ try:
         }
         MASKED_IN = {
             "wave23-flags": (
-                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/Props", "114/TBkndAssn/Fixed2Meta",
                 "114/TBkndAssn/FixedMeta", "114/TBkndTask/Fixed2Data", "214/CV_iew/Var2Data",
                 "214/Props",
             ),
@@ -568,7 +565,6 @@ try:
                 "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
                 "214/CV_iew/Var2Data", "214/Props",
             ),
-            "wave27-unlink": ("114/TBkndAssn/Fixed2Data",),
             "wave28-outline-outdent": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
             ),
@@ -584,19 +580,13 @@ try:
             "wave29-outline-manual-parent": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
             ),
-            "wave29-percent-leaf": ("114/TBkndAssn/Fixed2Data",),
-            "wave29-percent-mid25": ("114/TBkndAssn/Fixed2Data",),
-            "wave29-percent-milestone": ("114/TBkndAssn/Fixed2Data",),
-            "wave29-percent-work": ("114/TBkndAssn/Fixed2Data",),
             "wave30-assign-add": ("114/TBkndRsc/FixedMeta",),
-            "wave30-assign-delete": ("114/TBkndAssn/Fixed2Data", "114/TBkndRsc/FixedMeta"),
+            "wave30-assign-delete": ("114/TBkndRsc/FixedMeta",),
             "wave30-baseline": ("114/TBkndTask/Fixed2Data",),
-            "wave30-level": ("114/TBkndAssn/Fixed2Data", "114/TBkndRsc/FixedMeta"),
+            "wave30-level": ("114/TBkndRsc/FixedMeta",),
             "wave30-resource-add": ("114/TBkndRsc/FixedMeta",),
             "wave30-resource-notes": ("114/TBkndRsc/FixedMeta",),
             "wave30-resource-rename": ("114/TBkndRsc/FixedMeta",),
-            "wave30-respect-links-auto": ("114/TBkndAssn/Fixed2Data",),
-            "wave30-respect-links-manual": ("114/TBkndAssn/Fixed2Data",),
             "wave30-wbs": ("114/TBkndTask/Fixed2Data",),
             "wave31-resource-sheet": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
@@ -614,23 +604,17 @@ try:
                 "214/CV_iew/Var2Data", "214/Props",
             ),
             "wave34-assign-add-second": (
-                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/Props", "114/TBkndAssn/Fixed2Meta",
                 "114/TBkndAssn/FixedMeta",
             ),
             "wave34-assign-add-third": (
-                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/Props", "114/TBkndAssn/Fixed2Meta",
                 "114/TBkndAssn/FixedMeta",
             ),
             "wave35-g3-assign-remove-port-saved": (
-                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/Props", "114/TBkndAssn/Fixed2Meta",
                 "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta",
             ),
-            "wave36-r7-calc-assign-1": ("114/TBkndAssn/Fixed2Data",),
-            "wave36-r7-calc-assign-2": ("114/TBkndAssn/Fixed2Data",),
-            "wave36-r7-dsi-total-work": ("114/TBkndAssn/Fixed2Data",),
-            "wave36-r7-note-assignment": ("114/TBkndAssn/Fixed2Data",),
-            "wave36-r7-w37-b-assign-one": ("114/TBkndAssn/Fixed2Data",),
-            "wave36-r7-w37-b-assign-two": ("114/TBkndAssn/Fixed2Data",),
         }
         def stream_key(short):   # the gate's name of a stream: the storage prefix is three "?"
             return short if short == "Props14" else "???" + short
@@ -651,9 +635,9 @@ try:
         # at W36-0f.4.2 (the CV_iew view stamp and view date words are read; fourteen pairs pass): 130 rows in 39 pairs.
         # at W36-0f.4.4 (the Props baseline-slot words and the third GUID are read; two pairs pass): 128 rows in 37 pairs.
         # at W36-0f.4.5 (the view GUID of every table and view row is read; two pairs pass): 126 rows in 35 pairs.
+        # at W36-0f.4.6 (the third Assn Fixed2Data GUID is read; thirteen pairs pass): 107 rows in 22 pairs.
         OPEN_PINNED = (
     ('wave23-flags', '???114/Props', 'control-mask 4'),
-    ('wave23-flags', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
     ('wave23-flags', '???114/TBkndAssn/Fixed2Meta', 'control-mask 15'),
     ('wave23-flags', '???114/TBkndAssn/FixedMeta', 'control-mask 30'),
     ('wave23-flags', '???114/TBkndAssn/Var2Data', 'size-differs 460->520'),
@@ -681,7 +665,6 @@ try:
     ('wave27-percent-actuals', '???214/CFilter/VarMeta', 'size-differs 36->48'),
     ('wave27-percent-actuals', '???214/CV_iew/Var2Data', 'control-mask 97'),
     ('wave27-percent-actuals', '???214/Props', 'control-mask 2'),
-    ('wave27-unlink', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
     ('wave28-outline-outdent', '???114/Props', 'control-mask 2'),
     ('wave28-outline-outdent', '???114/TBkndAssn/Fixed2Meta', 'control-mask 4'),
     ('wave28-outline-outdent', '???114/TBkndAssn/FixedMeta', 'control-mask 6'),
@@ -697,22 +680,14 @@ try:
     ('wave29-outline-manual-parent', '???114/Props', 'control-mask 2'),
     ('wave29-outline-manual-parent', '???114/TBkndAssn/Fixed2Meta', 'control-mask 8'),
     ('wave29-outline-manual-parent', '???114/TBkndAssn/FixedMeta', 'control-mask 6'),
-    ('wave29-percent-leaf', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
-    ('wave29-percent-mid25', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
-    ('wave29-percent-milestone', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
-    ('wave29-percent-work', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
     ('wave30-assign-add', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
-    ('wave30-assign-delete', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
     ('wave30-assign-delete', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
     ('wave30-baseline', '???114/TBkndTask/Fixed2Data', 'control-mask 12'),
     ('wave30-inactivate-second', '???214/CEdl/Var2Data', 'size-differs 358->332'),
-    ('wave30-level', '???114/TBkndAssn/Fixed2Data', 'control-mask 12'),
     ('wave30-level', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
     ('wave30-resource-add', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
     ('wave30-resource-notes', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
     ('wave30-resource-rename', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
-    ('wave30-respect-links-auto', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
-    ('wave30-respect-links-manual', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
     ('wave30-wbs', '???114/TBkndTask/Fixed2Data', 'control-mask 12'),
     ('wave31-resource-sheet', '???114/Props', 'control-mask 1'),
     ('wave31-resource-sheet', '???114/TBkndAssn/Fixed2Meta', 'control-mask 3'),
@@ -760,24 +735,15 @@ try:
     ('wave31-usage', '???214/CV_iew/Var2Data', 'control-mask 97'),
     ('wave31-usage', '???214/Props', 'control-mask 2'),
     ('wave34-assign-add-second', '???114/Props', 'control-mask 2'),
-    ('wave34-assign-add-second', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
     ('wave34-assign-add-second', '???114/TBkndAssn/Fixed2Meta', 'control-mask 6'),
     ('wave34-assign-add-second', '???114/TBkndAssn/FixedMeta', 'control-mask 10'),
     ('wave34-assign-add-third', '???114/Props', 'control-mask 1'),
-    ('wave34-assign-add-third', '???114/TBkndAssn/Fixed2Data', 'control-mask 8'),
     ('wave34-assign-add-third', '???114/TBkndAssn/Fixed2Meta', 'control-mask 7'),
     ('wave34-assign-add-third', '???114/TBkndAssn/FixedMeta', 'control-mask 11'),
     ('wave35-g3-assign-remove-port-saved', '???114/Props', 'control-mask 2'),
-    ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/Fixed2Meta', 'control-mask 6'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/FixedMeta', 'control-mask 10'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
-    ('wave36-r7-calc-assign-1', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
-    ('wave36-r7-calc-assign-2', '???114/TBkndAssn/Fixed2Data', 'control-mask 8'),
-    ('wave36-r7-dsi-total-work', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
-    ('wave36-r7-note-assignment', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
-    ('wave36-r7-w37-b-assign-one', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
-    ('wave36-r7-w37-b-assign-two', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
         )
         # three edits equal their control outside the noise (a no-op percent edit, a task mode set to
         # the mode the task has).  Before W36-0c.5 they PASSed the negative case because the control
@@ -916,7 +882,6 @@ try:
         INVERTED = (   # (pair stem, the pair's edit file, {stream: bytes inverted})
             ("wave30-baseline", "wave30-baseline-set", {"???114/TBkndTask/Fixed2Data": 12}),
             ("wave30-wbs", "wave30-wbs-code", {"???114/TBkndTask/Fixed2Data": 12}),
-            ("wave29-percent-leaf", "wave29-percent-leaf40", {"???114/TBkndAssn/Fixed2Data": 5}),
             ("wave28-outline-summary", "wave28-outline-summary",
              {"???114/Props": 2, "???114/TBkndAssn/FixedMeta": 5, "???114/TBkndAssn/Fixed2Meta": 3}),
             ("wave30-resource-rename", "wave30-resource-rename",
@@ -970,7 +935,7 @@ try:
         ROW_SIZE = {"???114/TBkndAssn/Fixed2Data": 48, "???114/TBkndTask/Fixed2Data": 64,
                     "???114/TBkndRsc/Fixed2Data": 40, "???114/TBkndCal/Fixed2Data": 16,
                     "???114/TBkndCons/Fixed2Data": 16}
-        ROW_GUIDS = {"???114/TBkndAssn/Fixed2Data": (0, 16), "???114/TBkndTask/Fixed2Data": (0, 24),
+        ROW_GUIDS = {"???114/TBkndAssn/Fixed2Data": (0, 16, 32), "???114/TBkndTask/Fixed2Data": (0, 24),
                      "???114/TBkndRsc/Fixed2Data": (0, 24), "???114/TBkndCal/Fixed2Data": (0,),
                      "???114/TBkndCons/Fixed2Data": (0,)}
         ABS_GUIDS = {"???214/CEdl/FixedData": (144,), "???214/CFilter/FixedData": (214, 444),
@@ -3028,11 +2993,11 @@ try:
                        for i_ in slot_ids_]
             return put(base_, props114, edits_)
 
-        def slot_verdict(label_, tr_, rf_, want_fail, stream_=props114):
+        def slot_verdict(label_, tr_, rf_, want_fail, stream_=props114, tag_="W36-0f.4.4"):
             problems_, lines_ = verdict(tr_, rf_)
             ok_ = (problems_ >= 1 and any(stream_ in ln for ln in lines_)) if want_fail else \
                 (problems_ == 0 and tr_[stream_] != rf_[stream_])
-            check("W36-0f.4.4 %s" % label_, ok_, "%r" % (lines_,))
+            check("%s %s" % (tag_, label_), ok_, "%r" % (lines_,))
 
         for rid_ in slot_ids:
             for vname, a_, b_ in (("committed stamps", 0x3D200000, 0x3D200001),
@@ -3127,6 +3092,33 @@ try:
             moved_[sname_] = bytes(body_)
             slot_verdict("%s: a byte beside the added row's GUID fails" % tag_,
                          moved_, grown(1, guids_=(v1(1),)), True, sname_)
+        # --- W36-0f.4.6: the third GUID of an assignment's Fixed2Data row ---------------------------------
+        # +32..+47 of the 48-byte row is a version-1 GUID regenerated whenever the assignment is touched, its
+        # node the machine's (DOSSIER, "Assn Fixed2Data third GUID +32..+47"; a control and its null differ in
+        # it in 223 of 223 pairs).  It is a version-1 GUID in 101 of the committed rows and something else in
+        # the rest (the older builds hold 788bcba08c2a6d4300000000000000ff, not a GUID), and noise only as a
+        # version-1 GUID on both sides, like +0 and +16.
+        a2_ = "???114/TBkndAssn/Fixed2Data"
+        rows_a2 = len(R[a2_]) // 48
+        check("W36-0f.4.6 the pair's %s holds %d whole rows" % (a2_, rows_a2),
+              len(R[a2_]) == rows_a2 * 48 and rows_a2 >= 2, "%d" % len(R[a2_]))
+
+        def third(guids_, a2_=a2_):
+            """R with the third GUID of the rows 0, 1, .. set to guids_ (a row not listed keeps its own)."""
+            return put(R, a2_, [(48 * k_ + 32, g_) for k_, g_ in enumerate(guids_)])
+
+        slot_verdict("Assn Fixed2Data: two different version-1 third GUIDs in row 0 are noise",
+                     third((v1(1),)), third((v1(2),)), False, a2_, "W36-0f.4.6")
+        slot_verdict("Assn Fixed2Data: two different version-1 third GUIDs in row 1 are noise",
+                     third((v1(3), v1(1))), third((v1(3), v1(2))), False, a2_, "W36-0f.4.6")
+        slot_verdict("Assn Fixed2Data: a version-1 third GUID against zeros fails",
+                     third((v1(1),)), third((bytes(16),)), True, a2_, "W36-0f.4.6")
+        slot_verdict("Assn Fixed2Data: zeros against a version-1 third GUID fails",
+                     third((bytes(16),)), third((v1(1),)), True, a2_, "W36-0f.4.6")
+        slot_verdict("Assn Fixed2Data: a version-4 third GUID against a version-1 one fails",
+                     third((v4(1),)), third((v1(2),)), True, a2_, "W36-0f.4.6")
+        slot_verdict("Assn Fixed2Data: two different version-4 third GUIDs fail",
+                     third((v4(1),)), third((v4(2),)), True, a2_, "W36-0f.4.6")
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
