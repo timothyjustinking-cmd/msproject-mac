@@ -257,7 +257,7 @@ try:
             "Props14": "the canonical forms are 428 and 408 bytes; the record or tail entry that "
                        "differs is not decoded",
         }
-        OPEN = {
+        SIZE_OPEN = {
             "wave27-priority-750": R24, "wave27-unlink": R24, "wave28-newtask-auto": R24,
             "wave28-newtask-manual": R24, "wave28-split": R24,
             "wave35-g3-assign-remove-port-saved": R24,
@@ -266,8 +266,141 @@ try:
             "wave31-resource-sheet": LATER_BUILD, "wave31-tables": LATER_BUILD,
             "wave31-usage": LATER_BUILD,
         }
-        # two edits equal their control outside the noise (a no-op percent edit): they PASS the
-        # negative case, and the test shows that they equal the control
+        # W36-0c.5 (R36G0b-1): the control mask excuses nothing.  These are the streams in which the
+        # control and its null differ at bytes no named field covers, so the gate prints
+        # `control-mask <stream> <n>` and the pair is OPEN.  Each field is recorded as NOT DECODED
+        # (offsets as of 14 November 2026, from the control/null pairs); none is masked.
+        MASKED = {
+            "114/Props": "typed-property records between +63430 and +63502 (0x01000004, 0x00800004, "
+                         "0x024013c8, 0x024013bd among them); what they hold is not decoded",
+            "114/TBkndAssn/Fixed2Data": "row +32..+37 and +41: data by trace-gate-fields-g0b.md "
+                                        "row 12, never masked",
+            "114/TBkndAssn/Fixed2Meta": "meta items at +8, +20, +68..+78, +121..+131, +174; not decoded",
+            "114/TBkndAssn/FixedMeta": "meta items at +4, +8, +16..+20, +50..+54, +86..+97; not decoded",
+            "114/TBkndRsc/FixedMeta": "meta items at +176 and +213; not decoded",
+            "114/TBkndTask/Fixed2Data": "row +42 and +46..+48: a flags byte and the Calculate save "
+                                        "stamp, data by trace-gate-fields-g0b.md row 13, never masked",
+            "114/TBkndTask/FixedMeta": "the meta item at +315; not decoded",
+            "214/CEdl/Var2Data": "12 payload bytes of record 0x26400024 (the sort table); not decoded",
+            "214/CTable/FixedData": "the byte at +447; not decoded",
+            "214/CV_iew/Var2Data": "4-byte save words of the view bag (bag block uid 2 +42682; block "
+                                   "uid 3 +2270..+2281 and their kin); not decoded",
+            "214/Props": "the words at +10358 and +10406 of the canonical form; not decoded",
+            "Props14": "the canonical byte at +394 (or the record that holds it); not decoded",
+        }
+        MASKED_IN = {
+            "wave23-flags": (
+                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/TBkndAssn/FixedMeta", "114/TBkndTask/Fixed2Data", "214/CV_iew/Var2Data",
+                "214/Props",
+            ),
+            "wave27-percent-actuals": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
+                "214/CV_iew/Var2Data", "214/Props",
+            ),
+            "wave27-priority-750": ("214/CV_iew/Var2Data",),
+            "wave27-unlink": ("114/TBkndAssn/Fixed2Data", "214/CV_iew/Var2Data"),
+            "wave28-mark-auto": ("214/CV_iew/Var2Data",),
+            "wave28-mark-manual": ("214/CV_iew/Var2Data",),
+            "wave28-newtask-auto": ("214/CV_iew/Var2Data",),
+            "wave28-newtask-manual": ("214/CV_iew/Var2Data",),
+            "wave28-outline-indent": ("214/CV_iew/Var2Data",),
+            "wave28-outline-outdent": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "214/CV_iew/Var2Data",
+            ),
+            "wave28-outline-summary": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "214/CV_iew/Var2Data",
+            ),
+            "wave28-percent-auto0": ("214/CV_iew/Var2Data",),
+            "wave28-percent-auto100": ("214/CV_iew/Var2Data", "Props14"),
+            "wave28-percent-auto40": ("214/CV_iew/Var2Data", "Props14"),
+            "wave28-percent-manual0": ("214/CV_iew/Var2Data",),
+            "wave28-split": ("214/CV_iew/Var2Data",),
+            "wave28-update": ("214/CV_iew/Var2Data",),
+            "wave29-outline-auto-indent": ("214/CV_iew/Var2Data",),
+            "wave29-outline-auto-outdent": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "214/CV_iew/Var2Data",
+            ),
+            "wave29-outline-auto-summary": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "214/CV_iew/Var2Data",
+            ),
+            "wave29-outline-manual-parent": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "214/CV_iew/Var2Data",
+            ),
+            "wave29-percent-leaf": ("114/TBkndAssn/Fixed2Data",),
+            "wave29-percent-mid25": ("114/TBkndAssn/Fixed2Data", "214/CV_iew/Var2Data"),
+            "wave29-percent-milestone": ("114/TBkndAssn/Fixed2Data",),
+            "wave29-percent-work": ("114/TBkndAssn/Fixed2Data",),
+            "wave30-assign-add": ("114/TBkndRsc/FixedMeta",),
+            "wave30-assign-delete": ("114/TBkndAssn/Fixed2Data", "114/TBkndRsc/FixedMeta"),
+            "wave30-baseline": ("114/TBkndTask/Fixed2Data",),
+            "wave30-inactivate-second": ("214/CEdl/Var2Data",),
+            "wave30-level": ("114/TBkndAssn/Fixed2Data", "114/TBkndRsc/FixedMeta"),
+            "wave30-resource-add": ("114/TBkndRsc/FixedMeta",),
+            "wave30-resource-notes": ("114/TBkndRsc/FixedMeta",),
+            "wave30-resource-rename": ("114/TBkndRsc/FixedMeta",),
+            "wave30-respect-links-auto": ("114/TBkndAssn/Fixed2Data",),
+            "wave30-respect-links-manual": ("114/TBkndAssn/Fixed2Data",),
+            "wave30-task-mode-auto": ("214/CV_iew/Var2Data",),
+            "wave30-wbs": ("114/TBkndTask/Fixed2Data",),
+            "wave31-resource-sheet": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
+                "214/CV_iew/Var2Data", "214/Props",
+            ),
+            "wave31-tables": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
+                "214/CV_iew/Var2Data", "214/Props",
+            ),
+            "wave31-usage": (
+                "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
+                "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
+                "214/CV_iew/Var2Data", "214/Props",
+            ),
+            "wave34-assign-add-second": (
+                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/TBkndAssn/FixedMeta",
+            ),
+            "wave34-assign-add-third": (
+                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/TBkndAssn/FixedMeta", "Props14",
+            ),
+            "wave35-g3-assign-remove-port-saved": (
+                "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
+                "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta", "214/CV_iew/Var2Data",
+                "Props14",
+            ),
+            "wave35-viewstate-zoom-custom-narrow": ("214/CEdl/Var2Data",),
+            "wave36-r7-calc-assign-1": ("114/TBkndAssn/Fixed2Data",),
+            "wave36-r7-calc-assign-2": ("114/TBkndAssn/Fixed2Data",),
+            "wave36-r7-dsi-total-work": ("114/TBkndAssn/Fixed2Data",),
+            "wave36-r7-note-assignment": ("114/TBkndAssn/Fixed2Data",),
+            "wave36-r7-table1-column-replace": ("214/CTable/FixedData",),
+            "wave36-r7-table1-date-format": ("214/CTable/FixedData",),
+            "wave36-r7-w37-b-assign-one": ("114/TBkndAssn/Fixed2Data",),
+            "wave36-r7-w37-b-assign-two": ("114/TBkndAssn/Fixed2Data",),
+            "wave36-r7-w37-b-rebaseline-changed": ("114/Props",),
+            "wave36-r7-w37-b-rebaseline-same": ("114/Props",),
+        }
+        def stream_key(short):   # the gate's name of a stream: the storage prefix is three "?"
+            return short if short == "Props14" else "???" + short
+
+        OPEN = {}
+        for stem in sorted(set(SIZE_OPEN) | set(MASKED_IN)):
+            OPEN[stem] = dict(SIZE_OPEN.get(stem, {}))
+            for sname in MASKED_IN.get(stem, ()):
+                OPEN[stem][stream_key(sname)] = MASKED[sname]
+        # two edits equal their control outside the noise (a no-op percent edit).  Before W36-0c.5
+        # they PASSed the negative case because the control mask excused the view-bag bytes in which
+        # their null differs from the control; now they FAIL it like every other edit, and the test
+        # still shows that they equal their control
         NOOP_EDITS = {"wave28-percent-auto100": "no task, assignment or view byte differs from its "
                                                 "control; only the path strings and their sizes",
                       "wave28-percent-auto40": "no task, assignment or view byte differs from its "
@@ -275,7 +408,7 @@ try:
         stems = sorted(f[:-len("-control-null.mpp")] for f in os.listdir(DATA)
                        if f.endswith("-control-null.mpp"))
         pos_n = neg_n = 0
-        pos_failed, neg_passed, no_control = {}, set(), []
+        pos_failed, pos_kind, neg_passed, no_control = {}, {}, set(), []
         for stem in stems:
             c_path = control_path(stem)
             n_path = os.path.join(DATA, stem + "-control-null.mpp")
@@ -288,6 +421,8 @@ try:
             pos_n += 1
             if problems:
                 pos_failed[stem] = sorted({ln.split()[1] for ln in lines if len(ln.split()) > 1})
+                pos_kind[stem] = {(ln.split()[0], ln.split()[1]) for ln in lines
+                                  if len(ln.split()) > 1}
             if not os.path.exists(e_path):
                 continue
             SE = load(e_path)
@@ -298,7 +433,7 @@ try:
             if not problems:
                 neg_passed.add(stem)
         print("W36-0c.1 positive: %d control-nulls, %d PASS, %d OPEN; negative: %d edits, %d FAIL, "
-              "%d PASS (no-op)" % (pos_n, pos_n - len(pos_failed), len(pos_failed), neg_n,
+              "%d PASS" % (pos_n, pos_n - len(pos_failed), len(pos_failed), neg_n,
                                    neg_n - len(neg_passed), len(neg_passed)))
         check("W36-0c.1 every control-null has its control in tests/data",
               not no_control, "%r" % (no_control,))
@@ -317,8 +452,24 @@ try:
         for s in sorted(OPEN):
             print("OPEN %s: %s" % (s, "; ".join("%s: %s" % (n, OPEN[s][n]) for n in
                                                   sorted(pos_failed.get(s, [])))))
-        check("W36-0b.2 negative sweep: no edit PASSes except the no-op edits",
-              neg_passed == set(NOOP_EDITS), "%r" % (sorted(neg_passed),))
+        # W36-0c.5: the control mask minus the named fields is empty for every committed pair
+        # except the OPEN ones, and for those it is exactly the streams MASKED_IN names.  In the
+        # positive sweep every byte that differs lies under the control mask, so a stream that
+        # fails by `bytes-differ` would be a byte the mask does not cover: none exists.
+        masked_seen = {s: sorted(n for k, n in v if k == "control-mask")
+                       for s, v in pos_kind.items()}
+        masked_seen = {s: v for s, v in masked_seen.items() if v}
+        check("W36-0c.5 the control mask minus the named fields is exactly the MASKED_IN streams "
+              "(%d pairs)" % len(MASKED_IN),
+              masked_seen == {s: sorted(stream_key(n) for n in v) for s, v in MASKED_IN.items()},
+              "%r" % (sorted(set(masked_seen) ^ set(MASKED_IN)),))
+        check("W36-0c.5 no positive pair fails by bytes-differ (the control mask is every byte)",
+              not [s for s, v in pos_kind.items() if any(k == "bytes-differ" for k, n in v)],
+              "%r" % ([s for s, v in pos_kind.items() if any(k == "bytes-differ" for k, n in v)],))
+        check("W36-0c.5 every MASKED stream has a recorded reason",
+              all(n in MASKED for v in MASKED_IN.values() for n in v))
+        check("W36-0c.5 the negative sweep: no edit PASSes (the no-op edits fail on their null)",
+              neg_passed == set(), "%r" % (sorted(neg_passed),))
         for stem in sorted(NOOP_EDITS):
             c_path = control_path(stem)
             e_path = os.path.join(DATA, stem + ".mpp")
@@ -327,6 +478,53 @@ try:
                                                             load(c_path), load(n_path))
             check("W36-0b.2 %s: the no-op edit equals its control outside the noise (%s)" %
                   (stem, NOOP_EDITS[stem]), problems == 0, "%r" % (lines,))
+
+        # --- W36-0c.5 (R36G0b-1): the review's seven inverted-byte files FAIL -----------------------
+        # TRACED = the pair's edit with exactly the bytes at which its control and null differ, and
+        # no field names, inverted; REFERENCE = the edit; the pair's own control and null.  Before
+        # W36-0c.5 each was `0 problems`.  The byte counts are the review's (R36G0b-1 table), so a
+        # field that is later named, and leaves the count short, shows here as a difference.
+        INVERTED = (   # (pair stem, the pair's edit file, {stream: bytes inverted})
+            ("wave30-baseline", "wave30-baseline-set", {"???114/TBkndTask/Fixed2Data": 12}),
+            ("wave30-wbs", "wave30-wbs-code", {"???114/TBkndTask/Fixed2Data": 12}),
+            ("wave29-percent-leaf", "wave29-percent-leaf40", {"???114/TBkndAssn/Fixed2Data": 5}),
+            ("wave28-outline-summary", "wave28-outline-summary",
+             {"???114/Props": 2, "???114/TBkndAssn/FixedMeta": 5, "???114/TBkndAssn/Fixed2Meta": 3}),
+            ("wave30-resource-rename", "wave30-resource-rename",
+             {"???114/TBkndRsc/FixedMeta": 2}),
+            ("wave36-r7-table1-column-replace", "wave36-r7-table1-column-replace",
+             {"???214/CTable/FixedData": 1}),
+            ("wave28-mark-auto", "wave28-mark-auto", {"???214/CV_iew/Var2Data": 6}),
+        )
+        for stem, edit, expect in INVERTED:
+            e_path, c_path = os.path.join(DATA, edit + ".mpp"), control_path(stem)
+            n_path = os.path.join(DATA, stem + "-control-null.mpp")
+            IE, IC, IN = load(e_path), load(c_path), load(n_path)
+            bad = os.path.join(tmp, "inverted-%s.mpp" % stem)
+            shutil.copyfile(e_path, bad)
+            ole = olefile.OleFileIO(bad, write_mode=True)
+            found = {}
+            try:
+                for sname in expect:
+                    ids = (g.row_ids(sname, IC[sname], IC), g.row_ids(sname, IE[sname], IE)) \
+                        if g._stride(sname) else None
+                    mask = g.control_mask(sname, len(IE[sname]), IC[sname], IN[sname], ids) or set()
+                    meta = IE.get(g.VAR_META[sname]) if sname in g.VAR_META else None
+                    win = g.noise_windows(sname, IE[sname], meta, IC, IE[sname])
+                    found[sname] = sorted(mask - win)
+                    data = bytearray(IE[sname])
+                    for k in found[sname]:
+                        data[k] ^= 0xFF
+                    ole.write_stream(stream_path(ole, sname), bytes(data))
+            finally:
+                ole.close()
+            check("W36-0c.5 %s: the unnamed control/null bytes are the review's %r" %
+                  (stem, tuple(expect.values())),
+                  {s: len(v) for s, v in found.items()} == expect, "%r" % (found,))
+            rc, out = run_cli(bad, e_path, c_path, n_path)
+            check("W36-0c.5 %s: the inverted file FAILs, one control-mask line per stream" % stem,
+                  rc == 1 and all(("control-mask %s %d" % (s, n)) in out for s, n in expect.items()),
+                  out[:400])
 
         # --- W36-0b.7 (R36G0-8): a flip at EVERY offset outside the named noise fields fails -----------
         # The named fields are written out here from the evidence note (FIELDS rows 12 to 24), not
@@ -1004,15 +1202,21 @@ try:
                 out[t2] = bytes(tb)
                 return out
 
+            # W36-0c.5: the mask excuses nothing, so the control's noise seen in the same row of the
+            # edit FAILs, and the line says it lies under the mask (it follows its row by identity);
+            # the same byte at the control's POSITION in another row, or in the inserted row, is not
+            # under any mask and FAILs as a plain difference.
             lines, problems, checked, unchecked = g.compare(traced_with(s0), MR, MC, N2)
-            check("W36-0b.8 noise in the control's row, seen in the same row of the edit, passes",
-                  problems == 0, "%r" % (lines,))
+            check("W36-0b.8 noise in the control's row, seen in the same row of the edit, is "
+                  "reported as control-mask and fails",
+                  problems == 1 and lines == ["control-mask %s 1" % t2], "%r" % (lines,))
             lines, problems, checked, unchecked = g.compare(traced_with(r0), MR, MC, N2)
-            check("W36-0b.8 the same noise at the control's POSITION in the edit (another row) fails",
-                  problems == 1 and any(t2 in ln for ln in lines), "%r" % (lines,))
+            check("W36-0b.8 the same noise at the control's POSITION in the edit (another row) "
+                  "fails as bytes-differ, not under the mask",
+                  problems == 1 and lines == ["bytes-differ %s 1" % t2], "%r" % (lines,))
             lines, problems, checked, unchecked = g.compare(traced_with(new_rows[0]), MR, MC, N2)
-            check("W36-0b.8 the same noise in the inserted row fails (no mask for a new row)",
-                  problems == 1 and any(t2 in ln for ln in lines), "%r" % (lines,))
+            check("W36-0b.8 the same noise in the inserted row fails as bytes-differ (no mask for "
+                  "a new row)", problems == 1 and lines == ["bytes-differ %s 1" % t2], "%r" % (lines,))
 
         # row identities of the other stride streams, on the committed pairs that add a row
         for stem, sname, grown in (("wave34-assign-add-second", "Assn/Fixed2Data", 1),

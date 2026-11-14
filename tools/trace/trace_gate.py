@@ -10,17 +10,19 @@ REFERENCE    the committed file the trace must reproduce (the pair's edited file
 CONTROL, CONTROL_NULL
              the committed control and its committed null save.  An absent, unreadable or
              control-identical CONTROL_NULL is a FAIL named "no null", never a pass (W36-0.3).
-             The bytes where these two differ are the control mask.  It is built from an equal-length control and null
-             only, and is refused (line "mask-refused") when the reference's length differs
-             from the control's, except in a fixed-stride stream, which is masked row by row
-             by the row's identity (its uid word), never by its position: a row inserted before
-             another does not move a mask, and a row either side lacks has no mask (W36-0b.8).
+             The bytes where these two differ are the control mask.  It excuses nothing (W36-0c.5):
+             a byte it alone would have excused is printed as `control-mask <stream> <n>` and is a
+             problem.  It is built from an equal-length control and null only, and a fixed-stride
+             stream is masked row by row by the row's identity (its uid word), never by its
+             position: a row inserted before another does not move a mask, and a row either side
+             lacks has no mask (W36-0b.8).  It tells a byte no field names from a byte that
+             is not under the mask either; both FAIL.
 
-A byte of the traced save may differ from the reference only where
-  1. the control mask covers it, or
-  2. NOISE below names it: a decoded field, never a region, and no limit on how many rows carry
-     one; or the stream is parsed and the field is replaced in the canonical form (`canonical`).
-Any other differing byte, a size change, or a stream in one file only, is a problem.
+A byte of the traced save may differ from the reference only where NOISE below names it: a decoded
+field, never a region, and no limit on how many rows carry one; or the stream is parsed and the
+field is replaced in the canonical form (`canonical`).  Any other differing byte, a size change,
+or a stream in one file only, is a problem.  A field nothing decodes is left unmasked: the pair
+FAILs and is OPEN in the test (tools/trace/test_trace_gate.py), recorded as not decoded.
 
 The named fields are the whole of the waiver: there is no by-name whole-stream skip.  Each is
 decoded from the committed control/null pairs (99 of them) and the trace's null run, and cited by
@@ -636,18 +638,21 @@ def compare(traced, ref, ctl, nul):
         checked += 1
         c, n = ctl.get(name), nul.get(name)
         ids = (row_ids(name, c, ctl), row_ids(name, a, ref)) if _stride(name) else None
-        mask = control_mask(name, len(a), c, n, ids)
-        if mask is None and c is not None and n is not None and len(c) == len(n) and len(c) != len(a):
-            lines.append("mask-refused %s control %d reference %d" % (name, len(c), len(a)))
-        mask = mask or set()
+        mask = control_mask(name, len(a), c, n, ids) or set()
         meta_a = meta_b = None
         if name in VAR_META:
             meta_a, meta_b = ref.get(VAR_META[name]), traced.get(VAR_META[name])
         win = noise_windows(name, a, meta_a, ctl, b) | noise_windows(name, b, meta_b, ctl, a)
-        diff = [i for i in range(len(a)) if a[i] != b[i] and i not in mask]
-        outside = [i for i in diff if i not in win]
-        if outside:
-            lines.append("bytes-differ %s %d" % (name, len(outside)))
+        outside = [i for i in range(len(a)) if a[i] != b[i] and i not in win]
+        # The control mask excuses nothing (W36-0c.5).  A byte it alone would have excused is a
+        # difference no field names; it is counted apart, so the line says which kind it is.
+        masked = [i for i in outside if i in mask]
+        free = [i for i in outside if i not in mask]
+        if free:
+            lines.append("bytes-differ %s %d" % (name, len(free)))
+            problems += 1
+        if masked:
+            lines.append("control-mask %s %d" % (name, len(masked)))
             problems += 1
     if checked == 0 and problems == 0:
         lines.append("nothing checked")   # a gate that compared no stream is not a pass (W36-0.4)
