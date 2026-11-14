@@ -47,6 +47,7 @@ import hashlib
 import re
 import struct
 import sys
+import uuid
 
 try:
     import olefile
@@ -501,8 +502,10 @@ def font_item_garbage(data, meta):
 
 
 def _is_v1_guid(raw):
-    """A version-1 (time-based) GUID in RFC byte order: byte 6 >> 4 == 1, byte 8 >> 6 == 2."""
-    return len(raw) == 16 and raw[6] >> 4 == 1 and raw[8] >> 6 == 2
+    """A version-1 (time-based) GUID in RFC byte order: byte 6 >> 4 == 1, byte 8 >> 6 == 2, and a
+    timestamp that is not 0 (time_low, time_mid and the low 12 bits of time_hi; W36-0d.3)."""
+    return (len(raw) == 16 and raw[6] >> 4 == 1 and raw[8] >> 6 == 2 and
+            (any(raw[:6]) or raw[6] & 15 != 0 or raw[7] != 0))
 
 
 def _guid_ok(raw):   # W36-0c.2: a GUID field is noise only as a version-1 GUID, never as zeros
@@ -513,16 +516,27 @@ GUIDSTR = re.compile(r"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f
                      r"[0-9A-Fa-f]{12}\}")
 
 
-def _guidstr_digits(payload):
-    """The payload offsets of the low bytes of the 32 hex digits of a UTF-16 GUID string that
-    starts at payload +0, or [] when the payload does not hold one."""
+def _guidstr_bytes(payload):
+    """The 16 bytes, in the file's own order, of the UTF-16 GUID string that starts at payload +0
+    (the string is the little-endian rendering of those bytes), or None when the payload does not
+    hold one (W36-0d.3 / R36G0c-3)."""
     if len(payload) < 76:
-        return []
+        return None
     try:
         text = payload[:76].decode("utf-16le")
     except UnicodeDecodeError:
-        return []
+        return None
     if not GUIDSTR.fullmatch(text):
+        return None
+    return uuid.UUID(text).bytes_le
+
+
+def _guidstr_digits(payload):
+    """The payload offsets of the low bytes of the 32 hex digits of a UTF-16 GUID string that
+    starts at payload +0, or [] when the payload does not hold a string that is a version-1 GUID
+    with a timestamp that is not 0 (all-zero digits, or a changed version digit, is data)."""
+    raw = _guidstr_bytes(payload)
+    if raw is None or not _guid_ok(raw):
         return []
     return [2 * i for i in range(38) if i not in (0, 9, 14, 19, 24, 37)]
 

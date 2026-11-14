@@ -35,6 +35,7 @@ import os
 import re
 import shutil
 import struct
+import uuid
 import subprocess
 import sys
 import tempfile
@@ -1067,6 +1068,8 @@ try:
                     want(sname, at, fresh_guid())
                 elif cls == "guidstr":
                     for d in g._guidstr_digits(data[at:at + length]):
+                        if d // 2 in (17, 20):      # the version and variant digits are data (W36-0d.3)
+                            continue
                         want(sname, at + d, b"7" if data[at + d:at + d + 1] != b"7" else b"8")
             if "new_row" in rule:
                 base, size = g.STRIDE[sname]
@@ -1639,6 +1642,62 @@ try:
             rc, out = run_cli(tr, rf, ctl, nul)
             check("W36-0d.2 a stream on one side only (%s) FAILs" % label,
                   rc == 1 and ("only-in-" + label) in out, "rc=%d %r" % (rc, out[:200]))
+
+        # --- W36-0d.3 (R36G0c-3): the view GUID string is noise only as a version-1 GUID ------------
+        # The string is parsed to its 16 bytes and held to what a binary GUID field is held to: version
+        # 1, the RFC variant, and a timestamp that is not 0.  All-zero digits, a changed version digit
+        # and a zero timestamp are data.  The string is the little-endian rendering of the bytes, so
+        # the version digit is the third digit of the third group (string index 17), the variant digit
+        # the first of the fourth group (index 20); index 15 is the high nibble of time_hi.
+        vs_at = [pos for pos, length, rid in records(R[view_props], 16) if rid == 0x03400001][0]
+        vs_text = R[view_props][vs_at:vs_at + 76].decode("utf-16le")
+        vs_raw = uuid.UUID(vs_text).bytes_le
+        check("W36-0d.3 the pair's view GUID string parses to a version-1 GUID with a timestamp",
+              vs_raw[6] >> 4 == 1 and vs_raw[8] >> 6 == 2 and any(vs_raw[:6]) and vs_text[17] == "1",
+              vs_text)
+        upper = vs_text == vs_text.upper()
+
+        def guid_text(raw_):
+            t_ = "{%s}" % uuid.UUID(bytes_le=bytes(raw_))
+            return t_.upper() if upper else t_
+
+        def with_text(streams_, text_):
+            return put(streams_, view_props, [(vs_at, text_.encode("utf-16le"))])
+
+        check("W36-0d.3 the helper rebuilds the pair's string from its bytes", guid_text(vs_raw) == vs_text,
+              "%s %s" % (guid_text(vs_raw), vs_text))
+        zero_ts = bytearray(vs_raw)
+        zero_ts[0:6] = bytes(6)
+        zero_ts[6] = 0x10
+        zero_ts[7] = 0
+        bad_ver = bytearray(vs_raw)
+        bad_ver[6] = (bad_ver[6] & 15) | 0x40         # version 4
+        bad_var = bytearray(vs_raw)
+        bad_var[8] = 0xC0 | (bad_var[8] & 63)         # not the RFC variant
+        for label, text_ in (("all-zero digits", "{00000000-0000-0000-0000-000000000000}"),
+                             ("a version digit that is not 1", guid_text(bad_ver)),
+                             ("a variant that is not RFC", guid_text(bad_var)),
+                             ("a version-1 GUID with a zero timestamp", guid_text(zero_ts))):
+            for which, (tr, rf) in (("traced", (with_text(R, text_), R)),
+                                    ("reference", (R, with_text(R, text_)))):
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0d.3 %s in the %s view GUID string fails" % (label, which),
+                      problems_ >= 1 and any(view_props in ln for ln in lines_), "%r" % (lines_,))
+        # the version digit by index: a flip of string index 17 fails; index 15 (time_hi) is noise
+        for idx, expect in ((17, "fails"), (20, "fails"), (15, "noise")):
+            chars = list(vs_text)
+            chars[idx] = "4" if chars[idx] != "4" else "5"
+            if idx == 20:
+                chars[idx] = "c"
+            problems_, lines_ = verdict(with_text(R, "".join(chars)), R)
+            check("W36-0d.3 view GUID string index %d changed: %s" % (idx, expect),
+                  (problems_ >= 1) == (expect == "fails"), "%r" % (lines_,))
+        # another v1 GUID with another timestamp is still noise
+        other = bytearray(vs_raw)
+        other[0] ^= 0x55
+        problems_, lines_ = verdict(with_text(R, guid_text(other)), R)
+        check("W36-0d.3 a different version-1 GUID string is noise and passes", problems_ == 0,
+              "%r" % (lines_,))
 
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
