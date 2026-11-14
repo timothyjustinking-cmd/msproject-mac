@@ -34,7 +34,9 @@ are G0's; G0b and G0c added the later checks listed after them:
            that raises, or a gate that returns the wrong shape, into a named FAIL, so a removal is red
            by a verdict and not by a crash; four guards the G0d review found green (the Props14 tail
            count word, the SummaryInformation section size, the first value after the table, the
-           LastSave type word) have cases of their own (0e.1).
+           LastSave type word) have cases of their own (0e.1); a masked value is accepted only inside
+           the range the committed saves show: a stamp of 1 or 0x7fffffff, two unequal Props save
+           words and a LastSave in 2001 or 2600 FAIL (0e.2).
 
     python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only] [--no-meta] [--fail-fast]
 
@@ -46,6 +48,7 @@ does not run the guard meta-test after a pass (the meta-test itself runs this te
 installed (ctest SKIP).
 """
 
+import datetime
 import os
 import io
 import re
@@ -1211,10 +1214,14 @@ try:
         props_n = "???114/Props"
         recs = {rid: (pos + 12, length) for pos, length, rid, kind in
                 g.frame_records(AR[props_n], 16)}
+        # a stamp or save word is noise inside the committed span (W36-0e.2), so a changed one holds
+        # a value inside it; the two save words are one value and move together
+        in_span = struct.pack("<I", 0x3D200000)
+        word_rids = [rid for rid, cls in sorted(g.NOISE[props_n]["props"].items()) if cls == "word"]
         for rid, cls in sorted(g.NOISE[props_n]["props"].items()):
             at, length = recs[rid]
-            new = bytes([AR[props_n][at] ^ 0x55]) * 4 if cls == "word" else v1(99)
-            problems, lines = verdict(put(AR, props_n, [(at, new)]), AR)
+            edits_ = [(recs[r_][0], in_span) for r_ in word_rids] if cls == "word" else [(at, v1(99))]
+            problems, lines = verdict(put(AR, props_n, edits_), AR)
             check("W36-0b.4 114/Props record %#x (%s) changed is noise" % (rid, cls),
                   problems == 0, "%r" % (lines,))
         for rid in (0x02401394, 0x02400003):
@@ -1244,16 +1251,25 @@ try:
         last = base + (rows - 1) * size
         short = dict(AR)
         short[task_n] = AR[task_n][:last]                      # a control without the last row
-        problems, lines = verdict(put(AR, task_n, [(last + 128, b"\x01\x02\x03\x04")]), AR, short)
+        problems, lines = verdict(put(AR, task_n, [(last + 128, in_span)]), AR, short)
         check("W36-0b.4 Task FixedData: the creation stamp of a row the control lacks is noise",
               problems == 0, "%r" % (lines,))
         problems, lines = verdict(put(AR, task_n, [(last + 132, b"\x01")]), AR, short)
         check("W36-0b.4 Task FixedData: the byte after the stamp is data and fails",
               problems >= 1, "%r" % (lines,))
-        problems, lines = verdict(put(AR, task_n, [(base + size + 128, b"\x01\x02\x03\x04")]),
-                                  AR, short)
+        problems, lines = verdict(put(AR, task_n, [(base + size + 128, in_span)]), AR, short)
         check("W36-0b.4 Task FixedData: the stamp of a row the control has fails",
               problems >= 1 and task_n in "".join(lines), "%r" % (lines,))
+        # W36-0e.2: with the span a stamp outside it fails on its own, so the guard that a row the
+        # control has (on either side) is not new is held by exact counts of the bytes that differ:
+        # the stamp's four bytes count as data when the traced row, or the reference's, is the control's
+        stamp_at = base + size + 128
+        edited = put(AR, task_n, [(stamp_at, in_span), (base + size, bytes([AR[task_n][base + size] ^ 0x40]))])
+        ndiff = sum(a != b for a, b in zip(edited[task_n], AR[task_n]))
+        problems, lines = verdict(edited, AR, short)
+        check("W36-0e.2 Task FixedData: the traced row is new but the reference's is the control's, so the "
+              "stamp counts: %d bytes differ" % ndiff,
+              lines == ["bytes-differ %s %d" % (task_n, ndiff)] and ndiff >= 2, "%r" % (lines,))
         var_n, meta_n2 = "???114/TBkndAssn/Var2Data", "???114/TBkndAssn/VarMeta"
         known = {uid for uid, _, _ in g._meta_blocks(AC[meta_n2])}
         stamps = [(uid, off) for uid, off, key in g._meta_blocks(AR[meta_n2])
@@ -1262,10 +1278,10 @@ try:
         old_s = [off + 4 for uid, off in stamps if uid in known]
         check("W36-0b.4 the Assn Var2Data case has a new block and an old one",
               fresh_s and old_s, "%r %r" % (fresh_s, old_s))
-        problems, lines = verdict(put(AR, var_n, [(fresh_s[0], b"\xaa\xbb\xcc\xdd")]), AR, AC)
+        problems, lines = verdict(put(AR, var_n, [(fresh_s[0], in_span)]), AR, AC)
         check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control lacks is noise",
               problems == 0, "%r" % (lines,))
-        problems, lines = verdict(put(AR, var_n, [(old_s[0], b"\xaa\xbb\xcc\xdd")]), AR, AC)
+        problems, lines = verdict(put(AR, var_n, [(old_s[0], in_span)]), AR, AC)
         check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control has fails",
               problems >= 1 and var_n in "".join(lines), "%r" % (lines,))
 
@@ -1302,7 +1318,7 @@ try:
             for pos, length, rid, kind in (g.frame_records(data, 16) or []) if "props" in rule else []:
                 cls, at = rule["props"].get(rid), pos + 12
                 if cls == "word":
-                    want(sname, at, bytes([data[at] ^ 0x55]) + data[at + 1:at + 4])
+                    want(sname, at, in_span)      # both save words to one value inside the span
                 elif cls == "guid" and g._is_v1_guid(data[at:at + 16]):
                     want(sname, at, fresh_guid())
                 elif cls == "guidstr":
@@ -1317,10 +1333,10 @@ try:
                 for r in range((len(data) - base) // size):
                     row = base + r * size
                     if g._u32(data, row) not in known_uids:
-                        want(sname, row + lo, bytes(b ^ 0x33 for b in data[row + lo:row + hi]))
+                        want(sname, row + lo, struct.pack("<I", 0x3D200000 + r))
         for uid, off, key in g._meta_blocks(AR[meta_n2]):
             if key == 0x0F40027A and off != 0xFFFFFFFF and uid not in known:
-                want(var_n, off + 4, bytes(b ^ 0x33 for b in AR[var_n][off + 4:off + 8]))
+                want(var_n, off + 4, struct.pack("<I", 0x3D210000 + uid % 4096))
         cview = "???214/CV_iew/Var2Data"
         for at in bag_font_bytes(AR[cview], AR["???214/CV_iew/VarMeta"]):
             want(cview, at, bytes([AR[cview][at] ^ 0xFF]))
@@ -2030,8 +2046,8 @@ try:
                           (rid, vname, which),
                           problems_ >= 1 and any(props114 in ln for ln in lines_), "%r" % (lines_,))
         saved_slot = si_have[13]
-        later = struct.pack("<I", 0x40) + struct.pack("<Q", 0x01DD8000_00000000)
-        check("W36-0d.6 a LastSave of another date after 2000 is noise",
+        later = struct.pack("<I", 0x40) + struct.pack("<Q", 0x01DD6A00_00000000)
+        check("W36-0d.6 a LastSave of another date inside the committed span is noise",
               verdict(swapped(R, SI, si_build(R[SI], {13: later})), R)[0] == 0)
         for vname, ft_ in (("0", 0), ("0xffffffffffffffff", 0xFFFFFFFFFFFFFFFF),
                            ("a date before 2000", 0x01BF53EB256D4000 - 1)):
@@ -2061,6 +2077,93 @@ try:
                                  struct.pack("<II", 0x1E, 34) + b"\xff" * 33 + b"\0\0\0")):
                 problems_, lines_ = verdict(swapped(R, SI, si_build(R[SI], {pid: slot_})), R)
                 check("W36-0d.6 %s with %s is noise" % (label, what), problems_ == 0, "%r" % (lines_,))
+
+        # --- W36-0e.2 (R36G0d-2): a masked value is accepted only inside the range the saves show -------
+        # The bounds of 0d.6 refused 0 and all-ones only, so a stamp of 1 or 0x7fffffff, two unequal save
+        # words, and a LastSave in 2001 or 2600 were noise.  A stamp is noise inside the span of the 624
+        # committed saves (0x3d141482 to 0x3d282db4), the two 114/Props save words only when equal, and
+        # LastSave inside its committed span (0x01dd62019f6a0e00 to 0x01dd72130aac6c00, 22 October to
+        # 11 November 2026).  The numbers are written here from the Value bounds table of
+        # spec/writers/evidence/trace-gate-fields-g0b.md, not read from the gate.
+        span_lo, span_hi = 0x3D141482, 0x3D282DB4
+        ls_lo, ls_hi = 0x01DD62019F6A0E00, 0x01DD72130AAC6C00
+
+        def filetime_of(year):
+            return (datetime.date(year, 1, 1) - datetime.date(1601, 1, 1)).days * 86400 * 10 ** 7
+
+        gate_spans = (getattr(g, "STAMP_SPAN", None), getattr(g, "LASTSAVE_SPAN", None))
+        check("W36-0e.2 the gate's stamp span is the committed span", gate_spans[0] == (span_lo, span_hi),
+              "%r" % (gate_spans[0],))
+        check("W36-0e.2 the gate's LastSave span is the committed span", gate_spans[1] == (ls_lo, ls_hi),
+              "%r" % (gate_spans[1],))
+        for label, stream_, at_, ref_, ctl_ in (
+                ("Task FixedData new-row stamp", task_n, last + 128, AR, short),
+                ("Assn Var2Data new-block stamp", var_n, fresh_s[0], AR, AC)):
+            for vname, val_ in (("1", 1), ("0x7fffffff", 0x7FFFFFFF), ("one below the span", span_lo - 1),
+                                ("one above the span", span_hi + 1)):
+                for which in ("traced", "reference"):
+                    badf = put(ref_, stream_, [(at_, struct.pack("<I", val_))])
+                    tr, rf = (badf, ref_) if which == "traced" else (ref_, badf)
+                    problems_, lines_ = verdict(tr, rf, ctl_)
+                    check("W36-0e.2 %s of %s in the %s save fails" % (label, vname, which),
+                          problems_ >= 1 and any(stream_ in ln for ln in lines_), "%r" % (lines_,))
+            # the ends and the inside of the span are noise; each is set against another value inside
+            # the span, so the two saves differ whatever the pair held
+            for vname, val_, other_ in (("the span's lower end", span_lo, 0x3D200000),
+                                        ("the span's upper end", span_hi, 0x3D200000),
+                                        ("a value inside it", 0x3D200000, 0x3D200001)):
+                badf = put(ref_, stream_, [(at_, struct.pack("<I", val_))])
+                othr = put(ref_, stream_, [(at_, struct.pack("<I", other_))])
+                problems_, lines_ = verdict(badf, othr, ctl_)
+                check("W36-0e.2 %s of %s against another value inside the span is noise" % (label, vname),
+                      problems_ == 0 and badf[stream_] != othr[stream_], "%r" % (lines_,))
+        save_at = {r_: pos for pos, length, r_ in records(R[props114], 16)
+                   if r_ in (0x02400007, 0x024013B1) and length == 4}
+        check("W36-0e.2 the pair's Props holds both save words, equal",
+              len(save_at) == 2 and len({R[props114][p_:p_ + 4] for p_ in save_at.values()}) == 1,
+              "%r" % (save_at,))
+        w_a, w_b = (pos for _, pos in sorted(save_at.items()))
+        for vname, val_ in (("1", 1), ("0x7fffffff", 0x7FFFFFFF)):
+            for which in ("traced", "reference"):
+                badf = put(R, props114, [(w_a, struct.pack("<I", val_)), (w_b, struct.pack("<I", val_))])
+                tr, rf = (badf, R) if which == "traced" else (R, badf)
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0e.2 both 114/Props save words %s in the %s save fails" % (vname, which),
+                      problems_ >= 1 and any(props114 in ln for ln in lines_), "%r" % (lines_,))
+        for vname, edits_ in (("the first word alone", [(w_a, struct.pack("<I", 0x3D200000))]),
+                              ("the second word alone", [(w_b, struct.pack("<I", 0x3D200000))]),
+                              ("the two words to two values inside the span",
+                               [(w_a, struct.pack("<I", 0x3D200000)), (w_b, struct.pack("<I", 0x3D200001))])):
+            for which in ("traced", "reference"):
+                badf = put(R, props114, edits_)
+                tr, rf = (badf, R) if which == "traced" else (R, badf)
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0e.2 unequal 114/Props save words (%s, inside the span) in the %s save fail" %
+                      (vname, which), problems_ >= 1 and any(props114 in ln for ln in lines_), "%r" % (lines_,))
+        for vname, val_ in (("the span's lower end", span_lo), ("the span's upper end", span_hi),
+                            ("a value inside it", 0x3D200000)):
+            badf = put(R, props114, [(w_a, struct.pack("<I", val_)), (w_b, struct.pack("<I", val_))])
+            othr = put(R, props114, [(w_a, struct.pack("<I", 0x3D200001)), (w_b, struct.pack("<I", 0x3D200001))])
+            problems_, lines_ = verdict(badf, othr)
+            check("W36-0e.2 both 114/Props save words at %s against another value inside it are noise" % vname,
+                  problems_ == 0 and badf[props114] != othr[props114], "%r" % (lines_,))
+        for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
+                           ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
+            slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
+            for which in ("traced", "reference"):
+                badf = swapped(R, SI, si_build(R[SI], {13: slot_}))
+                tr, rf = (badf, R) if which == "traced" else (R, badf)
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0e.2 LastSave in %s in the %s save fails" % (vname, which),
+                      problems_ >= 1 and any(SI in ln for ln in lines_), "%r" % (lines_,))
+        mid_ = (ls_lo + ls_hi) // 2
+        for vname, ft_, other_ in (("the span's lower end", ls_lo, mid_), ("the span's upper end", ls_hi, mid_),
+                                   ("a time inside it", mid_, ls_lo)):
+            badf = swapped(R, SI, si_build(R[SI], {13: struct.pack("<I", 0x40) + struct.pack("<Q", ft_)}))
+            othr = swapped(R, SI, si_build(R[SI], {13: struct.pack("<I", 0x40) + struct.pack("<Q", other_)}))
+            problems_, lines_ = verdict(badf, othr)
+            check("W36-0e.2 LastSave at %s against another time inside the span is noise" % vname,
+                  problems_ == 0 and badf[SI] != othr[SI], "%r" % (lines_,))
 
         # --- W36-0d.9 (R36G0c-8): the text test rejects every Unicode C category --------------------
         # U+0085 (a C1 control), U+200E (format), U+E000 (private use) and U+0378 (unassigned) were
@@ -2263,6 +2366,17 @@ try:
             expect("_stamp_ok of %d bytes is False" % len(raw_), calls("_stamp_ok", g._stamp_ok, raw_), False)
         for raw_ in (b"", b"\x01\x02", b"\x01" * 12):
             expect("_filetime_ok of %d bytes is False" % len(raw_), calls("_filetime_ok", g._filetime_ok, raw_), False)
+        # the two 114/Props save words are told by their id and a length of 4 (W36-0e.2)
+        word_a = struct.pack("<III", 4, 0x02400007, 1) + struct.pack("<I", 0x3D200000)
+        word_b = struct.pack("<III", 4, 0x024013B1, 1) + struct.pack("<I", 0x3D200001)
+        wide_b = struct.pack("<III", 8, 0x024013B1, 1) + struct.pack("<II", 0x3D200001, 0)
+        other_rec = struct.pack("<III", 4, 0x02401394, 1) + struct.pack("<I", 0x3D200002)
+        expect("_save_words_equal: two save words that differ is False",
+               calls("_save_words_equal", getattr(g, "_save_words_equal", None), fr_head + word_a + word_b), False)
+        expect("_save_words_equal: a record of another id is not a save word",
+               calls("_save_words_equal", getattr(g, "_save_words_equal", None), fr_head + word_a + other_rec), True)
+        expect("_save_words_equal: a save-word id with a length of 8 is not a save word",
+               calls("_save_words_equal", getattr(g, "_save_words_equal", None), fr_head + word_a + wide_b), True)
         for raw_ in (b"", b"\x1e\0\0\0", b"\x1e\0\0\0\x01\0\0"):
             expect("_lpstr_slot_ok of %d bytes is False" % len(raw_), calls("_lpstr_slot_ok", g._lpstr_slot_ok, raw_),
                    False)

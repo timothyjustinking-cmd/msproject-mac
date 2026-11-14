@@ -26,8 +26,9 @@ FAILs and is OPEN in the test (tools/trace/test_trace_gate.py), recorded as not 
 
 The named fields are the whole of the waiver: there is no by-name whole-stream skip and, since
 W36-0c.5, no mask.  A field is waived only as a value a save writes, on both sides (a version-1
-GUID, a non-zero 32-bit stamp, a FILETIME after 2000, text with no C-category character, a size
-word that equals what its stream implies), and a derived field that is present on one side only
+GUID, a 32-bit stamp and a LastSave FILETIME each inside the span the committed saves show, the two
+Props save words equal, text with no C-category character, a size word that equals what its stream
+implies), and a derived field that is present on one side only
 FAILs; the one thing this does not stop is noise that is itself a valid value (a name of 33 bytes of
 0xff is valid Windows-1252) and the per-save fields nobody decoded, which are OPEN in the test.
 Each field is decoded from the committed control/null pairs and the trace's
@@ -379,20 +380,24 @@ def _canon_props14(data, streams):
     return bytes(out), noise, derived
 
 
-FILETIME_2000 = 0x01BF53EB256D4000   # 2000-01-01T00:00:00Z as a FILETIME
+# The range of each masked value is the span the committed saves show (W36-0e.2 / R36G0d-2), each a
+# row of "Value bounds" in spec/writers/evidence/trace-gate-fields-g0b.md.  A value outside its span
+# is data, not noise.  The stamp grows with time, so a capture made after the last committed save
+# is outside its span until the span is widened with that evidence row (the re-gate will show it).
+STAMP_SPAN = (0x3D141482, 0x3D282DB4)   # 5835 stamps of 624 files: Task +128, Assn block, Props words
+LASTSAVE_SPAN = (0x01DD62019F6A0E00, 0x01DD72130AAC6C00)   # 624 LastSave FILETIMEs, 22 Oct to 11 Nov 2026
 
 
 def _stamp_ok(raw):
-    """A 32-bit creation stamp or save word as saved: not 0 and not all-ones.  The committed saves
-    span 0x3d141482 to 0x3d282db4 (5835 values; none 0 or all-ones), and the value grows with time,
-    so only the two values a field that was never written holds are refused (W36-0d.6)."""
-    return len(raw) == 4 and raw != bytes(4) and raw != b"\xff" * 4
+    """A 32-bit creation stamp or save word as saved: inside the committed span (a stamp of 1, of
+    0x7fffffff, of 0 or all-ones is not one a save writes; W36-0e.2)."""
+    return len(raw) == 4 and STAMP_SPAN[0] <= struct.unpack("<I", raw)[0] <= STAMP_SPAN[1]
 
 
 def _filetime_ok(raw):
-    """A LastSave FILETIME: after 2000-01-01 and not all-ones (the committed saves: 2026)."""
-    value = struct.unpack("<Q", raw)[0] if len(raw) == 8 else 0
-    return FILETIME_2000 <= value < 0xFFFFFFFFFFFFFFFF
+    """A LastSave FILETIME: inside the committed span (a year 2001 or 2600 is not one a save
+    writes; W36-0e.2)."""
+    return len(raw) == 8 and LASTSAVE_SPAN[0] <= struct.unpack("<Q", raw)[0] <= LASTSAVE_SPAN[1]
 
 
 def _lpstr_text_ok(raw):
@@ -602,6 +607,18 @@ def _meta_blocks(meta):
     return [struct.unpack_from("<III", meta, 24 + 12 * k) for k in range(count)]   # must not loop 2^32
 
 
+SAVE_WORD_IDS = (0x02400007, 0x024013B1)   # the two 114/Props save words
+
+
+def _save_words_equal(blob):
+    """The two 114/Props save words of one file are one value: they are equal in all 624 committed
+    files (spec/writers/evidence/trace-gate-fields-g0b.md, Value bounds), so a file whose two words
+    differ has a word that no save wrote, and neither is noise (W36-0e.2 / R36G0d-2)."""
+    words = {rid: blob[pos + 12:pos + 16] for pos, length, rid, kind in frame_records(blob, 16) or []
+             if rid in SAVE_WORD_IDS and length == 4}
+    return len(set(words.values())) <= 1
+
+
 def noise_windows(name, data, meta=None, ctl=None, other=None):
     """The set of offsets of the named noise fields of one stream's bytes.  `meta` is the
     companion VarMeta of a Var2Data stream, `ctl` the control's streams (a field that only a new
@@ -637,10 +654,11 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
         if _guid_ok(data[at:at + 16]) and _guid_ok(other[at:at + 16]):
             offs.update(range(at, at + 16))
     if "props" in rule:
+        words_one_value = _save_words_equal(data) and _save_words_equal(other)
         for pos, length, rid, kind in frame_records(data, 16) or []:
             cls = rule["props"].get(rid)
             at = pos + 12
-            if cls == "word" and length == 4 and _stamp_ok(data[at:at + 4]) and \
+            if cls == "word" and length == 4 and words_one_value and _stamp_ok(data[at:at + 4]) and \
                     _stamp_ok(other[at:at + 4]):
                 offs.update(range(at, at + 4))
             elif cls == "guid" and length == 16 and _guid_ok(data[at:at + 16]) and \

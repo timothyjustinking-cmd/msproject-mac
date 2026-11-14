@@ -53,17 +53,24 @@ count is not the row count.  A stream whose Fixed2Data row count does not fit it
 not named (no mask).  A uid that two rows carry (a deleted Task row that stays, two Rsc rows in
 two files) leaves those rows unmasked rather than guessed.
 
-## Value bounds of the masked fields (W36-0d.6, R36G0c-6)
+## Value bounds of the masked fields (W36-0d.6, R36G0c-6; W36-0e.2, R36G0d-2)
 
 A named field is noise only when it holds a value a save writes, on both sides.  Decoded from the
-624 committed .mpp files of tests/data (probes `build/w36/g0d_probe.py`, `g0d_probe2.py`; the pairs, controls and nulls alike):
+624 committed .mpp files of tests/data (probes `build/w36/g0d_probe.py`, `g0d_probe2.py`, `g0e_probe.py`; the pairs, controls and nulls alike):
 
 | Field | Bound in the gate | Committed values |
 |---|---|---|
-| Task new-row stamp, Assn new-block stamp, Props save words (`_stamp_ok`) | 32 bits, not 0 and not all-ones | 5835 values (2700, 1887, 1248), 0x3d141482 to 0x3d282db4; none 0 or all-ones.  The value grows with time, so no upper bound is kept |
-| SummaryInformation LastSave (`_filetime_ok`) | a FILETIME from 2000-01-01 (0x01bf53eb256d4000) and not all-ones | 0x01dd62019f6a0e00 to 0x01dd72130aac6c00 (22 October to 11 November 2026) |
+| Task new-row stamp, Assn new-block stamp, Props save words (`_stamp_ok`, `STAMP_SPAN`) | 32 bits inside 0x3d141482 to 0x3d282db4 (W36-0d.6 refused only 0 and all-ones, so a stamp of 1 or 0x7fffffff was noise; W36-0e.2) | 5835 values (Task +128 2700, Assn block 1887, Props words 1248), 0x3d141482 to 0x3d282db4 (Task and Assn to 0x3d282daa, the Props words to 0x3d282db4); none 0 or all-ones |
+| Props save words 0x02400007 and 0x024013b1 (`_save_words_equal`) | equal to each other, on both sides (W36-0e.2) | equal in all 624 files (0 unequal) |
+| SummaryInformation LastSave (`_filetime_ok`, `LASTSAVE_SPAN`) | a FILETIME inside 0x01dd62019f6a0e00 to 0x01dd72130aac6c00 (W36-0d.6 took any date after 2000, so 2001 and 2600 were noise; W36-0e.2) | 624 values, 0x01dd62019f6a0e00 to 0x01dd72130aac6c00 (22 October to 11 November 2026) |
 | SummaryInformation Author, LastAuthor, RevNumber (`_lpstr_text_ok`) | a length of at least 1, ending in a NUL, a Windows-1252 text with no control character | 1872 strings, 4 to 16 bytes; none breaks the rule.  33 bytes of 0xff and a NUL is a valid Windows-1252 text and stays noise |
 | Font word top byte | none | 24 bytes, 8 distinct values (0, 52, 96, 107, 110, 144, 192, 215): an allocator byte with no pattern to test |
 
-The two Props save words are equal to each other in all 624 files; the gate does not
-test that.
+The span is the range the committed saves show, not a law of the writer: a stamp grows with time
+and LastSave is the time of the save, so a capture made after the newest committed save lies outside
+both spans, and its stamps and LastSave then FAIL as data.  That is the point of the bound (a
+value no committed save wrote is not noise), and the cost: when new saves are committed, the probes
+above are re-run and `STAMP_SPAN` and `LASTSAVE_SPAN` in tools/trace/trace_gate.py, the two
+`span_lo/span_hi` and `ls_lo/ls_hi` pairs in tools/trace/test_trace_gate.py and this table are widened
+together, as one evidence row.  The re-gate shows it: a pair of the new saves fails on the stamp or
+the LastSave until that is done.
