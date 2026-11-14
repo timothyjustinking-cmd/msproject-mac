@@ -168,8 +168,11 @@ NOISE = {
     "???214/CEdl/FixedData": {"guid": (144,)},
     "???214/CFilter/FixedData": {"guid": (214, 444)},
     "???214/CGrouping/FixedData": {"guid": (214, 444)},
-    "???214/CTable/FixedData": {"guid": (214,)},
-    "???214/CV_iew/FixedData": {"guid": (122, 260, 398)},
+    # W36-0f.4.5: a table (230 bytes) and a view (138 bytes) is one row of its stream, with the GUID at
+    # +214 and +122 of the row: the 460 and 690-byte CTable and the 552 and 690-byte CV_iew streams
+    # carry it at +444, +674 and +536, +674 (guid_rows: first offset, row size)
+    "???214/CTable/FixedData": {"guid": (214,), "guid_rows": (214, 230)},
+    "???214/CV_iew/FixedData": {"guid": (122, 260, 398), "guid_rows": (122, 138)},
     # FIELDS:23  the assignment creation stamp is a var block located through VarMeta
     "???114/TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}},
 }
@@ -890,6 +893,12 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
     for at in rule.get("guid", ()):
         if _guid_ok(data[at:at + 16]) and _guid_ok(other[at:at + 16]):
             offs.update(range(at, at + 16))
+    if "guid_rows" in rule:
+        first, size = rule["guid_rows"]
+        if len(data) % size == 0:   # whole rows, or none is read (a stream of another size differs anyway)
+            for at in range(first, len(data) - 15, size):
+                if _guid_ok(data[at:at + 16]) and _guid_ok(other[at:at + 16]):
+                    offs.update(range(at, at + 16))
     if "props" in rule:
         words_one_value = _save_words_equal(data) and _save_words_equal(other)
         for pos, length, rid, kind in frame_records(data, 16) or []:

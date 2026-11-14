@@ -629,8 +629,6 @@ try:
             "wave36-r7-calc-assign-2": ("114/TBkndAssn/Fixed2Data",),
             "wave36-r7-dsi-total-work": ("114/TBkndAssn/Fixed2Data",),
             "wave36-r7-note-assignment": ("114/TBkndAssn/Fixed2Data",),
-            "wave36-r7-table1-column-replace": ("214/CTable/FixedData",),
-            "wave36-r7-table1-date-format": ("214/CTable/FixedData",),
             "wave36-r7-w37-b-assign-one": ("114/TBkndAssn/Fixed2Data",),
             "wave36-r7-w37-b-assign-two": ("114/TBkndAssn/Fixed2Data",),
         }
@@ -652,6 +650,7 @@ try:
         # at W36-0f.4.1 (the CEdl date words and the view word are read; one pair passes): 152 rows in 53 pairs.
         # at W36-0f.4.2 (the CV_iew view stamp and view date words are read; fourteen pairs pass): 130 rows in 39 pairs.
         # at W36-0f.4.4 (the Props baseline-slot words and the third GUID are read; two pairs pass): 128 rows in 37 pairs.
+        # at W36-0f.4.5 (the view GUID of every table and view row is read; two pairs pass): 126 rows in 35 pairs.
         OPEN_PINNED = (
     ('wave23-flags', '???114/Props', 'control-mask 4'),
     ('wave23-flags', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
@@ -777,8 +776,6 @@ try:
     ('wave36-r7-calc-assign-2', '???114/TBkndAssn/Fixed2Data', 'control-mask 8'),
     ('wave36-r7-dsi-total-work', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
     ('wave36-r7-note-assignment', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
-    ('wave36-r7-table1-column-replace', '???214/CTable/FixedData', 'control-mask 1'),
-    ('wave36-r7-table1-date-format', '???214/CTable/FixedData', 'control-mask 1'),
     ('wave36-r7-w37-b-assign-one', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
     ('wave36-r7-w37-b-assign-two', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
         )
@@ -793,7 +790,16 @@ try:
                       "wave28-percent-auto40": "no task, assignment or view byte differs from its "
                                                "control; only the path strings and their sizes",
                       "wave30-task-mode-auto": "no task, assignment or view byte differs from its "
-                                               "control; only the path strings and their sizes"}
+                                               "control; only the path strings and their sizes",
+                      # W36-0f.4.5: the second table's GUID (CTable FixedData +444, the one byte the
+                      # control and null differed in outside the named fields) is a session field, and
+                      # these two edits then equal their control: no table byte, no Var2Data byte
+                      "wave36-r7-table1-column-replace": "no task, assignment, table or view byte differs "
+                                                         "from its control; only session fields and the "
+                                                         "path strings",
+                      "wave36-r7-table1-date-format": "no task, assignment, table or view byte differs "
+                                                      "from its control; only session fields and the "
+                                                      "path strings"}
         # W36-0f.1: five edits equal their null save in every field the gate checks, so that only
         # session fields tell them apart: the Props14 record 0x3540000a (1 in the edit, 0 in the
         # null: the DOSSIER's session flag), the tail count and the 0xffffffff entry.  Before W36-0f.1
@@ -881,7 +887,7 @@ try:
               "%r" % ([s for s, v in pos_kind.items() if any(k == "bytes-differ" for k, n in v)],))
         check("W36-0c.5 every MASKED stream has a recorded reason",
               all(n in MASKED for v in MASKED_IN.values() for n in v))
-        check("W36-0c.5 the negative sweep: no edit PASSes but the pinned no-op edits (W36-0f.1, 0f.4.2)",
+        check("W36-0c.5 the negative sweep: no edit PASSes but the pinned no-op edits (W36-0f.1, 0f.4.2, 0f.4.5)",
               neg_passed == set(NOOP_NULL) | set(NOOP_EDITS),
               "%r" % (sorted(set(neg_passed) ^ (set(NOOP_NULL) | set(NOOP_EDITS))),))
         for stem in sorted(NOOP_NULL):
@@ -915,8 +921,6 @@ try:
              {"???114/Props": 2, "???114/TBkndAssn/FixedMeta": 5, "???114/TBkndAssn/Fixed2Meta": 3}),
             ("wave30-resource-rename", "wave30-resource-rename",
              {"???114/TBkndRsc/FixedMeta": 2}),
-            ("wave36-r7-table1-column-replace", "wave36-r7-table1-column-replace",
-             {"???214/CTable/FixedData": 1}),
             ("wave28-mark-auto", "wave28-mark-auto", {"???214/CV_iew/Var2Data": 6}, "named"),
         )
         # W36-0f.4.2: the sixth file's six bytes are now fields of a mask (the view stamp and a view date
@@ -972,6 +976,7 @@ try:
         ABS_GUIDS = {"???214/CEdl/FixedData": (144,), "???214/CFilter/FixedData": (214, 444),
                      "???214/CGrouping/FixedData": (214, 444), "???214/CTable/FixedData": (214,),
                      "???214/CV_iew/FixedData": (122, 260, 398)}
+        GUID_ROWS = {"???214/CTable/FixedData": (214, 230), "???214/CV_iew/FixedData": (122, 138)}
         PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2, 0x024013BD)
         PROPS_SLOTS = (0x02401395, 0x02401396, 0x02401397, 0x0240139F)   # W36-0f.4.4
 
@@ -986,6 +991,10 @@ try:
             for at in ABS_GUIDS.get(name, ()):
                 if is_v1(data[at:at + 16]):
                     out.update(range(at, at + 16))
+            if name in GUID_ROWS and len(data) % GUID_ROWS[name][1] == 0:   # W36-0f.4.5: one GUID per row
+                for at in range(GUID_ROWS[name][0], len(data) - 15, GUID_ROWS[name][1]):
+                    if is_v1(data[at:at + 16]):
+                        out.update(range(at, at + 16))
             if name == "???114/Props":
                 for at, length, rid in records(data, 16):
                     if rid in PROPS_WORDS and length == 4:
@@ -3019,10 +3028,10 @@ try:
                        for i_ in slot_ids_]
             return put(base_, props114, edits_)
 
-        def slot_verdict(label_, tr_, rf_, want_fail):
+        def slot_verdict(label_, tr_, rf_, want_fail, stream_=props114):
             problems_, lines_ = verdict(tr_, rf_)
-            ok_ = (problems_ >= 1 and any(props114 in ln for ln in lines_)) if want_fail else \
-                (problems_ == 0 and tr_[props114] != rf_[props114])
+            ok_ = (problems_ >= 1 and any(stream_ in ln for ln in lines_)) if want_fail else \
+                (problems_ == 0 and tr_[stream_] != rf_[stream_])
             check("W36-0f.4.4 %s" % label_, ok_, "%r" % (lines_,))
 
         for rid_ in slot_ids:
@@ -3078,6 +3087,46 @@ try:
                 ("two different version-4 GUIDs", v4(1), v4(2), True)):
             slot_verdict("the third GUID: %s" % what_, put(R, props114, [(g3_at, a_)]),
                          put(R, props114, [(g3_at, b_)]), want_)
+        # --- W36-0f.4.5: the view GUID of every table and view row ----------------------------------------
+        # A table is a 230-byte row of CTable FixedData with its GUID at +214 and a view a 138-byte row of
+        # CV_iew FixedData with its GUID at +122; the committed saves with more tables or views (11 and 1
+        # CTable streams of 460 and 690 bytes, one CV_iew each of 552 and 690) carry the GUID of the
+        # later rows at +444, +674 and +536, +674 (DOSSIER, "view GUID beyond the offsets the gate names").
+        # A GUID is noise only as a version-1 GUID on both sides, in a stream of whole rows.
+        for sname_, first_, size_ in (("???214/CTable/FixedData", 214, 230), ("???214/CV_iew/FixedData", 122, 138)):
+            rows0_ = len(R[sname_]) // size_
+            check("W36-0f.4.5 the pair's %s holds %d whole rows" % (sname_, rows0_),
+                  len(R[sname_]) == rows0_ * size_ and rows0_ >= 1, "%d" % len(R[sname_]))
+
+            def grown(extra_rows_, tail_=b"", guids_=(), sname_=sname_, size_=size_, first_=first_, rows0_=rows0_):
+                blob_ = bytearray(R[sname_] + R[sname_][:size_] * extra_rows_ + tail_)
+                for k_, g_ in enumerate(guids_):
+                    blob_[first_ + (rows0_ + k_) * size_:first_ + (rows0_ + k_) * size_ + 16] = g_
+                out_ = dict(R)
+                out_[sname_] = bytes(blob_)
+                return out_
+
+            tag_ = sname_.split("/")[1]
+            slot_verdict("%s: two different version-1 GUIDs in the added row are noise" % tag_,
+                         grown(1, guids_=(v1(1),)), grown(1, guids_=(v1(2),)), False, sname_)
+            slot_verdict("%s: two different version-1 GUIDs in the second added row are noise" % tag_,
+                         grown(2, guids_=(v1(3), v1(1))), grown(2, guids_=(v1(3), v1(2))), False, sname_)
+            slot_verdict("%s: a version-1 GUID against zeros in the added row fails" % tag_,
+                         grown(1, guids_=(v1(1),)), grown(1, guids_=(bytes(16),)), True, sname_)
+            slot_verdict("%s: zeros against a version-1 GUID in the added row fails" % tag_,
+                         grown(1, guids_=(bytes(16),)), grown(1, guids_=(v1(1),)), True, sname_)
+            slot_verdict("%s: a version-4 GUID against a version-1 GUID in the added row fails" % tag_,
+                         grown(1, guids_=(v4(1),)), grown(1, guids_=(v1(2),)), True, sname_)
+            slot_verdict("%s: two different version-4 GUIDs in the added row fail" % tag_,
+                         grown(1, guids_=(v4(1),)), grown(1, guids_=(v4(2),)), True, sname_)
+            slot_verdict("%s: a stream of 1 byte over whole rows reads no added row's GUID" % tag_,
+                         grown(1, b"\0", guids_=(v1(1),)), grown(1, b"\0", guids_=(v1(2),)), True, sname_)
+            body_ = bytearray(grown(1, guids_=(v1(1),))[sname_])
+            body_[size_ * rows0_ + 3] ^= 0x55
+            moved_ = dict(R)
+            moved_[sname_] = bytes(body_)
+            slot_verdict("%s: a byte beside the added row's GUID fails" % tag_,
+                         moved_, grown(1, guids_=(v1(1),)), True, sname_)
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
