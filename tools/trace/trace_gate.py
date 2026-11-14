@@ -24,9 +24,11 @@ field is replaced in the canonical form (`canonical`).  Any other differing byte
 or a stream in one file only, is a problem.  A field nothing decodes is left unmasked: the pair
 FAILs and is OPEN in the test (tools/trace/test_trace_gate.py), recorded as not decoded.
 
-The named fields are the whole of the waiver: there is no by-name whole-stream skip.  Each is
-decoded from the committed control/null pairs (99 of them) and the trace's null run, and cited by
-row of spec/writers/evidence/trace-gate-fields-g0b.md:
+The named fields are the whole of the waiver: there is no by-name whole-stream skip and, since
+W36-0c.5, no mask.  Each field is decoded from the committed control/null pairs and the trace's
+null run, and cited by row of spec/writers/evidence/trace-gate-fields-g0b.md.  A field the
+committed files do not show to be noise is not one, and a pair whose edit or control differs in
+a field nobody decoded FAILs there (OPEN in the test, with the stream and offsets):
   * version-1 GUIDs (the Fixed2Data rows, the view stamps, the Props save GUIDs);
   * the creation date-times of a new Task row or assignment, and the Props save words;
   * the uninitialised top byte of the font word (payload +43 of the 0x2240000c items);
@@ -35,7 +37,10 @@ row of spec/writers/evidence/trace-gate-fields-g0b.md:
 
 Prints one summary line, then one line per problem stream (no names, no paths, only stream
 paths and byte counts), then the SHA-256 of everything printed before it, so a copy read off
-the screen can be checked.  Exit 0 means PASS (no problems), 1 FAIL.
+the screen can be checked.  Exit 0 means PASS (no problems), 1 FAIL.  The summary line counts
+the streams, those compared byte by byte (`checked`) and those that could not be (`not
+checked`: in one file only, or of another size; each is also a problem line, and with no usable
+null every stream is not checked).
 """
 
 import hashlib
@@ -612,7 +617,10 @@ def control_mask(name, ref_len, ctl, nul, ids=None):
 
 def compare(traced, ref, ctl, nul):
     """-> (lines, problems, checked, not_checked).  The four dicts are stream name -> bytes;
-    `nul` is None when there is no usable control null, which is a FAIL named "no null"."""
+    `nul` is None when there is no usable control null, which is a FAIL named "no null".
+    `checked` counts the streams compared byte by byte; `not_checked` those that could not be
+    (a stream in one file only, or of another size), each also a problem line, and every stream
+    when there is no null (W36-0c.8 / R36G0b-10)."""
     lines = []
     problems = 0
     checked = 0
@@ -625,15 +633,18 @@ def compare(traced, ref, ctl, nul):
         if name not in ref:
             lines.append("only-in-traced %s %d" % (name, len(traced[name])))
             problems += 1
+            unchecked += 1
             continue
         if name not in traced:
             lines.append("only-in-reference %s %d" % (name, len(ref[name])))
             problems += 1
+            unchecked += 1
             continue
         a, b = ref[name], traced[name]
         if len(a) != len(b):
             lines.append("size-differs %s %d->%d" % (name, len(a), len(b)))
             problems += 1
+            unchecked += 1
             continue
         checked += 1
         c, n = ctl.get(name), nul.get(name)

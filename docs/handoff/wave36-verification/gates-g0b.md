@@ -11,8 +11,8 @@ sweep as a script is `build/w36/explore/sweep.py`, and its output at W36-0b.8 is
 
 | sweep | TRACED | REFERENCE | result |
 |---|---|---|---|
-| negative | the control's null save | the pair's edit, for every edit that differs from the control-null outside `SummaryInformation` | **87 of 89 FAIL**; the 2 that PASS are named below |
-| positive | the control's null save | the control | **97 of 99 PASS** |
+| negative | the control's null save | the pair's edit, for every edit that differs from the control-null outside `SummaryInformation` | **87 of 89 FAIL** at `c1a5cd5` (W36-0b.8, the pairs the sweep script then listed); **183 of 185** at the G0b tip `cea3c6d` (the committed file set, R36G0b-5, -7); the 2 that PASS are named below.  After W36-0c.5 (`9d930c6`): 191 of 191 edits FAIL |
+| positive | the control's null save | the control | **97 of 99 PASS** at `c1a5cd5`; **189 of 196** at `cea3c6d`.  After W36-0c.5 (`9d930c6`): 146 of 202 control-nulls PASS and 56 are OPEN (a field nobody decoded; the G0c record) |
 
 The four named exceptions, each checked by hand and listed by name in the test:
 

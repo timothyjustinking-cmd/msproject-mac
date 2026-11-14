@@ -135,7 +135,7 @@ jobs:
             python scripts/check_markers.py
           fi
 
-      # Wave 36 (W36-0b.9 / G0b): trace_gate_guards (tools/trace/test_trace_gate.py) needs
+      # Wave 36 (W36-0b.10 / G0b): trace_gate_guards (tools/trace/test_trace_gate.py) needs
       # olefile and exits 77, which ctest reports as SKIPPED, without it.  setup-python puts one
       # interpreter first on PATH, so the Configure step below finds the one olefile went into.
       - name: Python with olefile (for trace_gate_guards)
@@ -306,7 +306,7 @@ jobs:
             python scripts/check_markers.py
           fi
 
-      # Wave 36 (W36-0b.9 / G0b): olefile for trace_gate_guards, as in the matrix job.
+      # Wave 36 (W36-0b.10 / G0b): olefile for trace_gate_guards, as in the matrix job.
       - name: Python with olefile (for trace_gate_guards)
         uses: actions/setup-python@v5
         with:

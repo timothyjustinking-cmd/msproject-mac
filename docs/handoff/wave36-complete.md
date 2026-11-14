@@ -9,7 +9,7 @@ Items, one finding id per commit, in order:
 
 | item | id | commit | what |
 |---|---|---|---|
-| W36-0.1 | A-2 | `a20874d` | the noise allow-list moves into `tools/trace/trace_gate.py`: per-stream windows and byte ceilings taken from the trace null run (the G0 review found by-name waivers and regions still in them, R36G0-1 to -5; G0b removed them, and every mask now names a field); four narrow masks (the GUID counter bytes, the creation stamps, the font word's top byte at payload +43, the per-file Props identity records); `runone6.ps1` records the exit code |
+| W36-0.1 | A-2 | `a20874d` | the noise allow-list moves into `tools/trace/trace_gate.py`: per-stream windows and byte ceilings taken from the trace null run (the G0 review found by-name waivers and regions still in them, R36G0-1 to -5; G0b removed them; the control mask, which stayed a rule of the gate through G0b and excused any byte it covered, stopped excusing in G0c, W36-0c.5); four narrow masks (the GUID counter bytes, the creation stamps, the font word's top byte at payload +43, the per-file Props identity records); `runone6.ps1` records the exit code |
 | W36-0.2 | A-4 | `028fb51` | no wrong-length mask: refused when the control and the reference differ in length; fixed-stride streams masked per record (Task FixedData 202 from 48, Task Fixed2Data 64, Assn FixedData 110, Assn Fixed2Data 48, and the smaller Fixed2Data streams) |
 | W36-0.3 | A-3 | `f0c3113` | an absent control null, or the control passed as its own null, is a FAIL named "no null"; `runone6.ps1` passes a path that does not exist instead of the control |
 | W36-0.4 | A-6 | `cebf445` | ctest `trace_gate_guards` (`tools/trace/test_trace_gate.py`): one flipped byte, at the first offset the mask and windows do not cover, in each non-empty stream of a committed pair is a FAIL (a window over a whole stream but its first byte went unseen, R36G0-8; G0b's test flips every offset outside the named fields), with `checked > 0` and an equal stream set; a gate that checked nothing is a FAIL "nothing checked" |
@@ -197,14 +197,14 @@ WAVE-36-G1-COMPLETE
 ## G0b: the trace gate, fixed
 
 Brief `docs/handoff/wave36-brief.md` section 2 (G0b); findings R36G0-1 to -11 of `docs/handoff/wave36-verification/review-g0.md`.  Design rule: a mask
-names a field, never a region, and there are no single-run ceilings.  Items, one finding id per commit, in order:
+names a field, never a region, and there are no single-run ceilings (the control mask broke the first half of it until W36-0c.5, and two fields absorbed any size until W36-0c.3 and -0c.4: R36G0b-1 to -3).  Items, one finding id per commit, in order:
 
 | item | id | commit | what |
 |---|---|---|---|
 | W36-0b.1 | R36G0-1, -6 | `916ac5b` | the whole-view-bag window of `214/CV_iew/Var2Data` is gone; the only noise left there is the font word's top byte (payload +43), found by parsing the bag blocks VarMeta locates; windows come from each side's own VarMeta |
-| W36-0b.2 | R36G0-2 | `6082441` | no size tolerance: `214/CEdl/Var2Data`, `Props14` and `SummaryInformation` are parsed and their decoded fields replaced by placeholders in a canonical form compared byte for byte; the acceptance sweep enters the ctest |
+| W36-0b.2 | R36G0-2 | `6082441` | no size tolerance, but for the SummaryInformation string slot and the Props14 tail count, which absorbed any size until W36-0c.3 and -0c.4: `214/CEdl/Var2Data`, `Props14` and `SummaryInformation` are parsed and their decoded fields replaced by placeholders in a canonical form compared byte for byte; the acceptance sweep enters the ctest |
 | W36-0b.3 | R36G0-3 | `e2602fb` | stream names match whole (no `endswith`); `DocumentSummaryInformation` is compared in full |
-| W36-0b.4 | R36G0-4 | `1a7a4d8` | every mask is a named field, cited by row of `spec/writers/evidence/trace-gate-fields-g0b.md`: GUIDs only when both sides are version 1 or zero, the creation stamp only of a row the control lacks, the view GUID string at payload +0 |
+| W36-0b.4 | R36G0-4 | `1a7a4d8` | every noise window is a named field (the control mask was not, until W36-0c.5), cited by row of `spec/writers/evidence/trace-gate-fields-g0b.md`: GUIDs only when both sides are version 1 or zero, the creation stamp only of a row the control lacks, the view GUID string at payload +0 |
 | W36-0b.5 | R36G0-5 | `0e96af7` | no single-run ceilings (`ceiling`, `rows`, `ceiling_for`) |
 | W36-0b.6 | R36G0-7 | `6b7f690` | `vmx`'s reply-length check accepts the Out-String reply shape (the announced length counts the trailing newline); the stub models it |
 | W36-0b.7 | R36G0-8 | `6279a9e` | the flip test covers every offset outside the named fields in three pairs, and six planted windows; this found the `_meta_blocks` hang (a flipped VarMeta count looped 2^32 times) |
@@ -213,15 +213,15 @@ names a field, never a region, and there are no single-run ceilings.  Items, one
 | W36-0b.10 | CI | `712b40d` | both ctest-running CI jobs install `olefile` so `trace_gate_guards` runs; the test carries a 300 s TIMEOUT |
 
 **Acceptance (the committed ctest `trace_gate_guards`).**  Negative: TRACED = the control's null save, REFERENCE = the edit, over every committed
-pair whose edit differs from its control-null outside `SummaryInformation`: **87 of 89 FAIL**; the two that PASS (`wave28-percent-auto100`,
+pair whose edit differs from its control-null outside `SummaryInformation`: **87 of 89 FAIL** at `c1a5cd5` (183 of 185 over the committed file set at the G0b tip `cea3c6d`, R36G0b-5, -7); the two that PASS (`wave28-percent-auto100`,
 `wave28-percent-auto40`) are no-op edits equal to the control outside the noise.  Positive: TRACED = the control's null save, REFERENCE = the control:
-**97 of 99 PASS**; the two that FAIL (`wave30-inactivate`, `wave35-g3-assign-remove-port-saved`) have a control and null that are not one state
+**97 of 99 PASS** at `c1a5cd5` (189 of 196 at `cea3c6d`); the two that FAIL (`wave30-inactivate`, `wave35-g3-assign-remove-port-saved`) have a control and null that are not one state
 (`214/CEdl/Var2Data` record structure differs), and no mask was widened.  Before G0b the negative sweep let 8 of 89 PASS.
 
 **Gate line.**  At `712b40d`, core tree `build/w35g-close-fresh`: build exit 0; `ctest -E plan_recalc -j4` 67/67 passed, including `trace_gate_guards`
 (219 checks, 15 s) and `trace_host_scripts` (`build/w36/285da21-W36-0b.10-core-ctest.log`).  Every commit: `check_fixtures` 0, `check_markers` 0,
-`guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each commit carries the one
-trailer.  Per-item logs are in `docs/handoff/wave36-verification/gates-g0b.md`.  G0b changes no C++ source.  The builder did not touch the VM
+`guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; the G0b commits carry `Co-Authored-By` and not the
+`Generated-By` trailer rule 1 requires (R36G0b-11; history is not rewritten, G0c's commits carry it).  Per-item logs are in `docs/handoff/wave36-verification/gates-g0b.md`.  G0b changes no C++ source.  The builder did not touch the VM
 and pushed nothing.
 
 ### Guards seen red
@@ -254,8 +254,10 @@ None.  Every G0b item is fixed.
   The coordinator confirms it with one `vmx 'Get-Date'` before the re-gate.
 * **Undecoded 4-byte save-date words in `214/CV_iew/Var2Data`** (17 control/null pairs differ there, outside the font bytes).  Only the control mask covers
   them; a traced save whose control is another pair's would show them as differences.  Direction: decode the word's record and name the field.
-* **Task Fixed2Data +42 and +46..49 are data**, not noise: they are equal in every committed control/null pair.  The old VM null run may have seen
-  noise there; the coordinator's re-gate would then FAIL on it, which is a finding by design (name the field with a measured offset, never a region).
+* **Task Fixed2Data +42 and +46..49 are data**, not noise, in the gate; they are NOT equal in every committed control/null pair (they differ in
+  `wave30-baseline` and `wave30-wbs`, committed before G0b; R36G0b-12).  G0b's control mask excused them there; since W36-0c.5 nothing does, and
+  those pairs are OPEN.  The old VM null run may have seen noise there; the coordinator's re-gate would then FAIL on it, which is a finding by
+  design (name the field with a measured offset, never a region).
 * **Props14 tail entry `0xffffffff`**: present in the controls and edits, absent in 98 of the 99 null saves.  It is replaced by a placeholder in the
   canonical form; what it means is not known.
 * **Two control/null pairs are not one state** (`wave30-inactivate`, `wave35-g3-assign-remove-port-saved`): the positive sweep FAILs there by design.  The

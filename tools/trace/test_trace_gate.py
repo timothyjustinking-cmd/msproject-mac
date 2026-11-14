@@ -1,16 +1,27 @@
 #!/usr/bin/env python3
-"""Guards for tools/trace/trace_gate.py (wave 36 G0, W36-0.1 to 0.4).
+"""Guards for tools/trace/trace_gate.py (wave 36 G0, G0b and G0c).
 
-Runs the gate on committed pairs (tests/data) and asserts it FAILS where it must:
+Runs the gate on committed pairs (tests/data) and asserts it FAILS where it must.  The first four
+are G0's; G0b and G0c added the later checks listed after them:
 
   W36-0.1  no by-name whole-stream waiver: a flipped byte in a stream the old gate skipped whole
            (214/CEdl/Var2Data, Props14) is no longer hidden;
   W36-0.2  no wrong-length mask: a control/null difference is not applied to a reference of
            another length, and a fixed-stride stream is masked record by record;
   W36-0.3  an absent control null, or the control passed as its own null, is a FAIL "no null";
-  W36-0.4  one flipped byte in EVERY stream of a committed pair (at an offset the control mask
-           and the noise windows do not cover) is a FAIL, with `checked > 0` and an equal stream
-           set; the unflipped pair is a PASS.
+  W36-0.4  one flipped byte in EVERY stream of a committed pair (at an offset no named field
+           covers) is a FAIL, with `checked > 0` and an equal stream set; the unflipped pair is
+           a PASS.
+  W36-0b   every offset outside the named fields is flipped in three pairs and fails; planted
+           windows are found; stride masks follow a row's identity; the two sweeps run over the
+           committed pairs;
+  W36-0c   the sweeps run over the committed file set, with the OPEN list (pairs whose undecoded
+           field makes the positive sweep fail) pinned to what each stream and offset shows; the
+           control mask excuses nothing (0c.5); a GUID is noise only as a version-1 GUID (0c.2),
+           a SummaryInformation string slot only as exactly its string (0c.3), the Props14 tail
+           entries and count word as named (0c.4); the noise of the five parsed streams and the
+           font rows is written in the test, not read from the gate (0c.6); the head line's
+           `not checked` is a real count (0c.8).
 
     python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only]
 
@@ -826,6 +837,30 @@ try:
         lines, problems, checked, unchecked = g.compare(extra, R, C, N)
         check("W36-0.4 an extra stream fails", problems == 1 and
               any(ln.startswith("only-in-traced") for ln in lines), "%r" % (lines,))
+
+        # --- W36-0c.8 (R36G0b-10): the head line's "not checked" is a real count ------------------
+        # the streams that could not be compared byte by byte: in one file only, or another size
+        lines, problems, checked, unchecked = g.compare(gone, R, C, N)
+        check("W36-0c.8 a stream missing from the traced save is 1 not checked, the rest checked",
+              unchecked == 1 and checked == len(R) - 1, "%r" % ((unchecked, checked, len(R)),))
+        lines, problems, checked, unchecked = g.compare(extra, R, C, N)
+        check("W36-0c.8 an extra stream is 1 not checked", unchecked == 1 and checked == len(R),
+              "%r" % ((unchecked, checked),))
+        longer = dict(R)
+        longer["?SummaryInformation"] = R["?SummaryInformation"] + b"\0\0\0\0"
+        lines, problems, checked, unchecked = g.compare(longer, R, C, N)
+        check("W36-0c.8 a stream of another size is 1 not checked", unchecked == 1 and
+              checked == len(R) - 1 and any(ln.startswith("size-differs") for ln in lines),
+              "%r" % ((unchecked, checked, lines),))
+        lines, problems, checked, unchecked = g.compare(R, R, C, N)
+        check("W36-0c.8 a pair compared in full is 0 not checked", unchecked == 0 and
+              checked == len(R), "%r" % ((unchecked, checked),))
+        lines, problems, checked, unchecked = g.compare(R, R, C, None)
+        check("W36-0c.8 no null: every stream is not checked", unchecked == len(R) and checked == 0,
+              "%r" % ((unchecked, checked),))
+        rc, out = run_cli(ref, ref, ctl, nul)
+        check("W36-0c.8 the head line of a clean pair says 0 not checked",
+              ", 0 not checked, 0 problems" in out.splitlines()[0], out[:200])
 
         # --- W36-0b.4 (R36G0-4): every mask names a field -------------------------------------------
         # The control mask is taken away (the control equals the reference, its null is a copy), so
