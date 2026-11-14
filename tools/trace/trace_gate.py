@@ -25,7 +25,12 @@ or a stream in one file only, is a problem.  A field nothing decodes is left unm
 FAILs and is OPEN in the test (tools/trace/test_trace_gate.py), recorded as not decoded.
 
 The named fields are the whole of the waiver: there is no by-name whole-stream skip and, since
-W36-0c.5, no mask.  Each field is decoded from the committed control/null pairs and the trace's
+W36-0c.5, no mask.  A field is waived only as a value a save writes, on both sides (a version-1
+GUID, a non-zero 32-bit stamp, a FILETIME after 2000, text with no C-category character, a size
+word that equals what its stream implies), and a derived field that is present on one side only
+FAILs; the one thing this does not stop is noise that is itself a valid value (a name of 33 bytes of
+0xff is valid Windows-1252) and the per-save fields nobody decoded, which are OPEN in the test.
+Each field is decoded from the committed control/null pairs and the trace's
 null run, and cited by row of spec/writers/evidence/trace-gate-fields-g0b.md.  A field the
 committed files do not show to be noise is not one, and a pair whose edit or control differs in
 a field nobody decoded FAILs there (OPEN in the test, with the stream and offsets):
