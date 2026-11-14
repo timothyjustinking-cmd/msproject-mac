@@ -240,6 +240,13 @@ def _text_ok(payload):
     return all(unicodedata.category(ch)[0] != "C" for ch in text)
 
 
+def _name_ok(payload):
+    """A Props14 tail user name: text, and not an empty one.  The canonical form replaces a name by
+    an empty byte string, so an emptied name must not equal its own placeholder (W36-0e.3 /
+    R36G0d-3, as `payload and` does for the path records)."""
+    return bool(payload) and _text_ok(payload)
+
+
 def frame_records(data, base):
     """[(offset, length, id, kind)] of the Props-format records ([len][id][kind][payload], padded
     to an even length) that chain exactly from `base` to the end of `data`, else None."""
@@ -362,21 +369,23 @@ def _canon_props14(data, streams):
     # 0x3540000b entry with a text payload; its canonical form then carries the 0xffffffff header
     # and the derived count (W36-0c.4 / R36G0b-2).  Junk in the entry, a second one, or any other
     # shape is compared as it is.
-    named_absent = len(entries) == 1 and entries[0][0] == 0x3540000B and _text_ok(entries[0][1])
+    named_absent = len(entries) == 1 and entries[0][0] == 0x3540000B and _name_ok(entries[0][1])
     canon = ([(0xFFFFFFFF, b"")] if named_absent else []) + entries
     out += struct.pack("<I", len(canon))
     if named_absent:
         noise.update(range(end, end + 4))   # the count word is the derived one
+        derived.add("tail name %#010x" % 0xFFFFFFFF)   # the absent entry's name is the placeholder
     at = end + 4
     for eid, name in entries:
         stop = at + 8 + len(name)
-        if _text_ok(name):
+        if _name_ok(name):
             noise.update(range(at + 8, stop))
+            derived.add("tail name %#010x" % eid)
         at = stop
     if named_absent:
         out += struct.pack("<II", 0xFFFFFFFF, 0x1E)
     for eid, name in entries:
-        out += struct.pack("<II", eid, 0x1E) + (b"" if _text_ok(name) else name)
+        out += struct.pack("<II", eid, 0x1E) + (b"" if _name_ok(name) else name)
     return bytes(out), noise, derived
 
 

@@ -36,7 +36,8 @@ are G0's; G0b and G0c added the later checks listed after them:
            count word, the SummaryInformation section size, the first value after the table, the
            LastSave type word) have cases of their own (0e.1); a masked value is accepted only inside
            the range the committed saves show: a stamp of 1 or 0x7fffffff, two unequal Props save
-           words and a LastSave in 2001 or 2600 FAIL (0e.2).
+           words and a LastSave in 2001 or 2600 FAIL (0e.2); an emptied Props14 tail name is not a
+           name, so two emptied names do not equal their placeholder and FAIL (0e.3).
 
     python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only] [--no-meta] [--fail-fast]
 
@@ -1834,6 +1835,36 @@ try:
             check("W36-0d.1 an empty Props14 path record in the %s fails" % which,
                   problems_ >= 1 and any(ln.endswith("Props14") or "Props14 " in ln for ln in lines_),
                   "%r" % (lines_,))
+
+        # --- W36-0e.3 (R36G0d-3): an emptied Props14 tail name is not a name ------------------------
+        # The canonical form replaces a name by an empty byte string, so a name emptied by hand equalled
+        # its own placeholder and passed (the path record has had `payload and` since 0d.1).  The tail
+        # names are now derived fields as well: an emptied one on one side only is a problem.
+        lone_text = swapped(R, P14, p14_join(p14_head, [(second[0], text_name)]))
+        for label, entries_, ref_ in (
+                ("both tail names emptied", [(first[0], b""), (second[0], b"")], R),
+                ("the 0xffffffff name emptied", [(first[0], b""), second], R),
+                ("the 0x3540000b name emptied", [first, (second[0], b"")], R),
+                ("the lone 0x3540000b name emptied (the reference's text)", [(second[0], b"")], lone_text)):
+            emptied_ = swapped(R, P14, p14_join(p14_head, entries_))
+            for which, (tr, rf) in (("traced", (emptied_, ref_)), ("reference", (ref_, emptied_))):
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0e.3 %s in the %s save fails" % (label, which),
+                      problems_ >= 1 and any(P14 in ln for ln in lines_), "%r" % (lines_,))
+        emptied_ = swapped(R, P14, p14_join(p14_head, [(first[0], b""), (second[0], b"")]))
+        problems_, lines_ = verdict(emptied_, emptied_)
+        check("W36-0e.3 both tail names emptied on both sides is equality and passes",
+              problems_ == 0, "%r" % (lines_,))
+        # With the name a derived field, one junk name against the reference's text is caught by the
+        # derived flag as well as by the canon, so the 0xffffffff name's guard needs a case the flag
+        # cannot see: two different junk names of one length, neither a name, in that entry.
+        junk_b = bytes([3, 0, 4, 0]) * 100
+        junk_a_ = swapped(R, P14, p14_join(p14_head, [(first[0], junk), second]))
+        junk_b_ = swapped(R, P14, p14_join(p14_head, [(first[0], junk_b), second]))
+        for which, (tr, rf) in (("traced", (junk_a_, junk_b_)), ("reference", (junk_b_, junk_a_))):
+            problems_, lines_ = verdict(tr, rf)
+            check("W36-0e.3 two different junk names in the 0xffffffff entry fail (%s the first)" % which,
+                  problems_ >= 1 and any(P14 in ln for ln in lines_), "%r" % (lines_,))
 
         # --- W36-0d.2 (R36G0c-2): streams are keyed by their raw directory name ---------------------
         # The printable rendering of a name is lossy: \x05SummaryInformation and \x06SummaryInformation
