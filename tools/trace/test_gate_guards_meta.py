@@ -15,9 +15,23 @@ the test raise, or `GREEN`), then `guards listed N, red M` (and the baseline).  
 listed guard is red, every text to remove was found in the gate exactly as many times as stated, and
 the unmodified gate passes (`--skip-baseline` leaves that to the caller, which is test_trace_gate.py
 running this after its own pass).  Exit 1 otherwise; 77 when olefile is absent.
+
+W36-0e.1 (R36G0d-1): the named list above can only hold the guards someone thought of, so the
+candidates are also DERIVED from the gate with `ast`: the condition of an `if` that returns,
+continues, breaks or counts a problem is replaced by False (`if-never`), any other by True
+(`if-always`); every operand of an
+`or` by False (`or-false`) and of an `and` by True (`and-true`); every conditional expression's test
+by True or False (`ifexp-true`, `ifexp-false`).  The key of a candidate is `function:kind:condition`.
+Each is run as a named guard is.  A candidate that stays GREEN must be on REDUNDANT, as
+`key: (cover, reason)`, where the cover is a guard or candidate that is itself red and whose removal
+leaves the same files passing; a stale entry (not derived, red itself, or a cover that is not red)
+is an error.  A CRASH (the test died with no FAIL line) is an error: a removal is red by a named FAIL.
+`--only named` or `--only derived` runs one of the two lists.
 """
 
+import ast
 import concurrent.futures
+import itertools
 import os
 import subprocess
 import sys
@@ -90,14 +104,14 @@ GUARDS = [
     ("nothing-checked", "W36-0.4", "a gate that checked nothing passes",
      [("    if checked == 0 and problems == 0:", "    if False:")]),
     ("control-as-null", "W36-0.3", "the control passed as its own null is accepted",
-     [("    if nul is not None and nul == ctl:", "    if False:")]),
+     [("    if nul == ctl:", "    if False:")]),
     ("cedl-meta-length", "R36G0b-6", "CEdl VarMeta +20 is zeroed unconditionally",
      [("    if var2 is None or len(data) < 24 or _u32(data, 20) != len(var2):",
        "    if var2 is None or len(data) < 24:")]),
     ("guidstr-shape", "R36G0b-6", "the view GUID string's shape is not tested",
      [("    if not GUIDSTR.fullmatch(text):\n        return None\n", "")]),
     ("guidstr-other", "R36G0b-6", "the view GUID string is masked when only one side holds one",
-     [("                if digits and digits == _guidstr_digits(other[at:at + length]):",
+     [("                if digits == _guidstr_digits(other[at:at + length]):",
        "                if digits:")]),
     ("new-row-other", "R36G0b-4", "a new-row stamp is masked without the other side's row",
      [("                        (row + 4 > len(other) or _u32(other, row) not in known) and \\\n", "")]),
@@ -111,7 +125,7 @@ GUARDS = [
      [("        elif pid == SI_LASTSAVE and len(raw) == 12 and _u32(raw, 0) == 0x40 and \\\n                _filetime_ok(raw[4:]):",
        "        elif len(raw) == 12 and _u32(raw, 0) == 0x40 and _filetime_ok(raw[4:]):")]),
     ("text-ok-true", "R36G0b-6", "_text_ok is always true",
-     [("    if len(payload) % 2 or len(payload) > 2048:\n        return False\n    try:",
+     [("    if len(payload) > 2048:\n        return False\n    try:",
        "    return True\n    try:")]),
     ("cedl-path-waived", "R36G0b-6", "the CEdl path record is waived whatever its bytes",
      [('        if rid == CEDL_PATH_ID and _text_ok(payload) and payload.endswith(b"!\\0\\0\\0"):',
@@ -132,10 +146,21 @@ GUARDS = [
     ("tail-first-entry", "R36G0c-5", "_tail_entries: the first entry need not start at +4",
      [("    if len(marks) != count or (marks and marks[0] != 4) or not marks and len(tail) != 4:",
        "    if len(marks) != count or not marks and len(tail) != 4:")]),
+    # --- W36-0e.1: the four guards the G0d review removed with the test still green ------------------------
+    ("tail-count", "R36G0d-1", "_tail_entries: the count word need not equal the entries found",
+     [("    if len(marks) != count or (marks and marks[0] != 4) or not marks and len(tail) != 4:",
+       "    if (marks and marks[0] != 4) or not marks and len(tail) != 4:")]),
+    ("si-section-size", "R36G0d-1", "_canon_summary: the section size word is not checked",
+     [("    if sec + 8 > len(data) or _u32(data, sec) != len(data) - sec:", "    if sec + 8 > len(data):")]),
+    ("si-first-value", "R36G0d-1", "_canon_summary: the first value need not follow the offset table",
+     [("    if count == 0 or ents[order[0]][1] != 8 + 8 * count:", "    if count == 0:")]),
+    ("si-lastsave-type", "R36G0d-1", "_canon_summary: the LastSave type word is not checked",
+     [("        elif pid == SI_LASTSAVE and len(raw) == 12 and _u32(raw, 0) == 0x40 and \\\n                _filetime_ok(raw[4:]):",
+       "        elif pid == SI_LASTSAVE and len(raw) == 12 and _filetime_ok(raw[4:]):")]),
     ("props14-size-words", "R36G0c-5", "the Props14 blob's two size words need not agree",
      [("    if _u32(data, 4) != end - 4 or end > len(data):", "    if end > len(data):")]),
     ("text-cap", "R36G0c-5", "_text_ok has no 2048-byte cap",
-     [("    if len(payload) % 2 or len(payload) > 2048:", "    if len(payload) % 2:")]),
+     [("    if len(payload) > 2048:", "    if False:")]),
     # --- W36-0d.1: a derived field is told from a raw one -------------------------------------------
     ("derived-compare", "R36G0c-1", "a field derived on one side only is not a problem",
      [("        for field in sorted(d_ref.get(name, set()) ^ d_traced.get(name, set())):",
@@ -215,12 +240,137 @@ def plant(src, edits):
     return src, None
 
 
-def run_guard(entry, src, tmp):
-    gid, finding, what, edits = entry
-    mutant, problem = plant(src, edits)
-    if problem:
-        return gid, "NOFIT", problem
-    d = os.path.join(tmp, gid)
+# --- W36-0e.1 (R36G0d-1): the candidate guards are derived from the gate, not written by hand --------
+# Every condition of trace_gate.py that decides a refusal, a problem line or a waiver is a candidate,
+# found by `ast`:
+#   if-never    an `if` whose body returns, continues, breaks or counts a problem: the test becomes False
+#               (the refusal never fires)
+#   or-false    each operand of an `or` inside such a test becomes False (that one refusal is gone)
+#   if-always   any other `if`: the test becomes True (the branch is taken whatever the bytes)
+#   and-true    each operand of an `and` outside such a test becomes True (that one requirement is gone)
+#   ifexp-true / ifexp-false   each conditional expression, both ways
+# Module-level code is not a candidate (the `__main__` guard).  GUARDS above are the named, compound
+# removals (several edits at once); the derived candidates are every single condition.
+# A candidate may be left off ONLY by REDUNDANT below: key -> (covering guard, reason).  The covering
+# guard is a GUARDS id or another derived key, and its own removal must be red, so the refusal the
+# listed condition makes is still made, by that one.  An entry for a key that is not derived, whose
+# removal is red (it is not needed), or whose cover is not red, is stale and fails the run.  Keys are
+# `function:kind:condition`, with `#n` for the n-th occurrence of the same text.
+# Each reason below is a short proof that, with the condition gone, every input is still refused or
+# taken as it was, because the cover does it.
+REDUNDANT = {
+    "frame_records:if-never:pos + 12 + length > len(data)": (
+        "frame_records:ifexp-true:pos == len(data)",
+        "a record that overruns the data leaves pos past len(data), which the final test refuses"),
+    "_canon_cedl_var2:ifexp-true:len(data) >= 20": (
+        "frame_records:ifexp-true:pos == len(data)",
+        "frame_records(data, 20) of fewer than 20 bytes starts past the end and is refused by the final test"),
+    "_canon_view_props:and-true:len(data) >= 16": (
+        "frame_records:ifexp-true:pos == len(data)",
+        "frame_records(data, 16) of fewer than 16 bytes starts past the end and is refused by the final test"),
+    "_canon_props14:or-false:end > len(data)": (
+        "_tail_entries:if-never:len(tail) < 4",
+        "a blob that ends past the data leaves an empty tail, which _tail_entries refuses"),
+    "_lpstr_text_ok:or-false:length < 1": (
+        "_lpstr_text_ok:or-false:body[-1:] != b'\\x00'",
+        "a length of 0 leaves an empty body, which does not end in a NUL"),
+    "_canon_summary:and-true:len(raw) == 12": (
+        "_filetime_ok:ifexp-true:len(raw) == 8",
+        "_filetime_ok(raw[4:]) takes only eight bytes, so a slot of another length than 12 is refused there"),
+    "font_item_garbage:or-false:off == 4294967295": (
+        "font_item_garbage:or-false:off + 4 > len(data)",
+        "an offset of 0xffffffff is past the data, which the next test refuses"),
+    "_guidstr_bytes:if-never:len(payload) < 76": (
+        "_guidstr_bytes:if-never:not GUIDSTR.fullmatch(text)",
+        "fewer than 76 bytes decode to fewer than 38 characters, which the shape test refuses"),
+    "noise_windows:and-true:off != 4294967295": (
+        "_stamp_ok:and-true:len(raw) == 4",
+        "at an offset of 0xffffffff the slice is empty, and _stamp_ok of an empty slice is False"),
+    "row_ids:or-false:len(data) < base": (
+        "row_ids:or-false:(len(data) - base) % size",
+        "base is less than size, so a stream shorter than base leaves a remainder, which the next test refuses"),
+    "row_ids:or-false:len(fd) < fbase": (
+        "row_ids:or-false:(len(fd) - fbase) % fsize",
+        "fbase is less than fsize, so a stream shorter than fbase leaves a remainder, which the next test refuses"),
+    "compare:ifexp-true:_stride(name)": (
+        "control_mask:if-never:stride is not None and ids is not None and (ids[0] is not None) and "
+        "(ids[1] is not None)",
+        "row_ids of a stream that is not a stride stream is None, so ids is (None, None) and the stride "
+        "branch of control_mask is not taken, as with no ids"),
+}
+
+
+_COUNTER = itertools.count()
+
+
+def _refusing(body):
+    for n in body:
+        if isinstance(n, (ast.Return, ast.Continue, ast.Break)):
+            return True
+        if isinstance(n, ast.AugAssign) and isinstance(n.target, ast.Name) and \
+                n.target.id in ("problems", "unchecked"):
+            return True
+    return False
+
+
+def derive(src):
+    """-> [(key, kind, function, line, (start byte, end byte), replacement text, condition text)]"""
+    tree = ast.parse(src)
+    raw = src.encode("utf-8")
+    starts, pos = [0], 0
+    for ln in raw.split(b"\n")[:-1]:
+        pos += len(ln) + 1
+        starts.append(pos)
+    found = []
+
+    def add(kind, fn, node, repl):
+        span = (starts[node.lineno - 1] + node.col_offset, starts[node.end_lineno - 1] + node.end_col_offset)
+        found.append((kind, fn, node.lineno, span, repl, ast.unparse(node)))
+
+    def visit(node, fn, refuse):
+        for field, value in ast.iter_fields(node):
+            for k in (value if isinstance(value, list) else [value]):
+                if not isinstance(k, ast.AST):
+                    continue
+                f = k.name if isinstance(k, ast.FunctionDef) else fn
+                r = refuse
+                if isinstance(node, ast.If) and field == "test":
+                    r = _refusing(node.body)
+                elif isinstance(node, ast.If):
+                    r = False
+                if f is not None:
+                    if isinstance(k, ast.If):
+                        add("if-never", f, k.test, "False") if _refusing(k.body) else \
+                            add("if-always", f, k.test, "True")
+                    elif isinstance(k, ast.IfExp):
+                        add("ifexp-true", f, k.test, "True")
+                        add("ifexp-false", f, k.test, "False")
+                    elif isinstance(k, ast.BoolOp) and r and isinstance(k.op, ast.Or):
+                        for v in k.values:
+                            add("or-false", f, v, "False")
+                    elif isinstance(k, ast.BoolOp) and not r and isinstance(k.op, ast.And):
+                        for v in k.values:
+                            add("and-true", f, v, "True")
+                visit(k, f, r)
+
+    visit(tree, None, False)
+    seen, out = {}, []
+    for kind, fn, line, span, repl, text in found:
+        base = "%s:%s:%s" % (fn, kind, text)
+        seen[base] = seen.get(base, 0) + 1
+        key = base if seen[base] == 1 else "%s#%d" % (base, seen[base])
+        if raw[span[0]:span[1]].decode("utf-8") != repl:
+            out.append((key, kind, fn, line, span, repl, text))
+    return out
+
+
+def splice(src, span, repl):
+    raw = src.encode("utf-8")
+    return (raw[:span[0]] + repl.encode("utf-8") + raw[span[1]:]).decode("utf-8")
+
+
+def run_mutant(gid, mutant, tmp):
+    d = os.path.join(tmp, "m%04d" % next(_COUNTER))
     os.makedirs(d)
     with open(os.path.join(d, "trace_gate.py"), "w", encoding="utf-8", newline="\n") as f:
         f.write(mutant)
@@ -228,19 +378,38 @@ def run_guard(entry, src, tmp):
                        capture_output=True, text=True, cwd=HERE)
     fails = [ln for ln in r.stdout.splitlines() if ln.startswith("FAIL")]
     if r.returncode == 0:
-        return gid, "GREEN", ""
+        return "GREEN", ""
+    if fails and "gate raised" in fails[0]:
+        return "red (raise)", fails[0][5:100]    # a case asserts the gate does not raise, and it does
     if fails:
-        return gid, "red", fails[0][5:100]
-    return gid, "red (crash)", (r.stderr.strip().splitlines() or ["exit %d" % r.returncode])[-1][:100]
+        return "red", fails[0][5:100]
+    return "CRASH", (r.stderr.strip().splitlines() or ["exit %d" % r.returncode])[-1][:100]
+
+
+def run_guard(entry, src, tmp):
+    gid, finding, what, edits = entry
+    mutant, problem = plant(src, edits)
+    if problem:
+        return gid, "NOFIT", problem
+    state, detail = run_mutant(gid, mutant, tmp)
+    return gid, state, detail
+
+
+def run_candidate(cand, src, tmp):
+    key, kind, fn, line, span, repl, text = cand
+    state, detail = run_mutant(key, splice(src, span, repl), tmp)
+    return key, state, detail
 
 
 def main(argv):
-    jobs, skip_baseline, listing, picks = min(6, os.cpu_count() or 1), False, False, []
+    jobs, skip_baseline, listing, picks, only = min(6, os.cpu_count() or 1), False, False, [], None
     args = list(argv)
     while args:
         a = args.pop(0)
         if a == "--jobs":
             jobs = int(args.pop(0))
+        elif a == "--only":
+            only = args.pop(0)      # "named" or "derived"
         elif a == "--skip-baseline":
             skip_baseline = True
         elif a == "--list":
@@ -254,18 +423,27 @@ def main(argv):
     if len(set(ids)) != len(ids):
         print("duplicate guard id")
         return 1
-    guards = [g for g in GUARDS if not picks or g[0] in picks]
+    with open(GATE, encoding="utf-8") as f:
+        src = f.read()
+    cands = derive(src)
+    keys = [c[0] for c in cands]
+    if len(set(keys)) != len(keys):
+        print("duplicate candidate key")
+        return 1
+    guards = [g for g in GUARDS if (not picks or g[0] in picks) and only != "derived"]
+    derived = [c for c in cands if (not picks or c[0] in picks) and only != "named"]
     if listing:
         for gid, finding, what, _ in GUARDS:
             print("%-26s %-10s %s" % (gid, finding, what))
+        for key, kind, fn, line, span, repl, text in cands:
+            print("%-8s %s%s" % ("derived", key, "   [redundant: %s]" % REDUNDANT[key][0] if key in REDUNDANT else ""))
         return 0
-    with open(GATE, encoding="utf-8") as f:
-        src = f.read()
     results = {}
     baseline = None
     with tempfile.TemporaryDirectory(prefix="trace-gate-meta-") as tmp:
         with concurrent.futures.ThreadPoolExecutor(max_workers=jobs) as pool:
             futures = [pool.submit(run_guard, g, src, tmp) for g in guards]
+            futures += [pool.submit(run_candidate, c, src, tmp) for c in derived]
             if not skip_baseline and not picks:
                 base = pool.submit(subprocess.run, [sys.executable, TEST, "--no-meta", "--fail-fast"],
                                    capture_output=True, text=True, cwd=HERE)
@@ -274,18 +452,50 @@ def main(argv):
                 results[gid] = (state, detail)
             if not skip_baseline and not picks:
                 baseline = base.result().returncode
+    named = {g[0]: g for g in GUARDS}
     for gid, finding, what, _ in guards:
         state, detail = results[gid]
         print("%-12s %-26s %-10s %s%s" % (state, gid, finding, what, (" -> " + detail) if detail else ""))
-    red = [g for g, (s, _) in results.items() if s.startswith("red")]
-    crash = [g for g, (s, _) in results.items() if s == "red (crash)"]
-    bad = [g for g, (s, _) in results.items() if not s.startswith("red")]
-    print("guards listed %d, red %d (%d by a failing case, %d by a crash), not red %d%s" %
-          (len(guards), len(red), len(red) - len(crash), len(crash), len(bad),
-           (": " + ", ".join(bad)) if bad else ""))
+    for key, kind, fn, line, span, repl, text in derived:
+        state, detail = results[key]
+        note = ("   [redundant: %s]" % REDUNDANT[key][0]) if key in REDUNDANT else ""
+        print("%-12s derived %s (line %d)%s%s" % (state, key, line, note, (" -> " + detail) if detail else ""))
+    # named guards: every one red; derived candidates: red, or on REDUNDANT and not red
+    bad = [g for g, _, _, _ in guards if not results[g][0].startswith("red")]
+    d_red = [c[0] for c in derived if results[c[0]][0].startswith("red")]
+    d_raise = [k for k in d_red if results[k][0] == "red (raise)"]
+    d_redundant = [c[0] for c in derived if c[0] in REDUNDANT and not results[c[0]][0].startswith("red")]
+    d_green = [c[0] for c in derived if results[c[0]][0] == "GREEN" and c[0] not in REDUNDANT]
+    d_crash = [c[0] for c in derived if results[c[0]][0] == "CRASH"]
+    n_crash = [g for g, _, _, _ in guards if results[g][0] == "CRASH"]
+    d_nofit = [c[0] for c in derived if results[c[0]][0] == "NOFIT"]
+    # a stale entry: not a derived key, no longer green (it is red: the entry is not needed), or a
+    # cover that is not a guard, is the entry itself, or is not red when removed
+    stale = []
+    if not picks:
+        for key, (cover, why) in REDUNDANT.items():
+            if key not in keys:
+                stale.append("%s (not a derived candidate)" % key)
+            elif results[key][0].startswith("red"):
+                stale.append("%s (red when removed: take it off the list)" % key)
+            elif cover == key or (cover not in named and cover not in keys):
+                stale.append("%s (the cover %r is not another guard)" % (key, cover))
+            elif cover in results and not results[cover][0].startswith("red"):
+                stale.append("%s (the cover %r is not red when removed: %s)" % (key, cover, results[cover][0]))
+    print("named guards listed %d, red %d, not red %d%s" %
+          (len(guards), len(guards) - len(bad), len(bad), (": " + ", ".join(bad)) if bad else ""))
+    print("candidates derived %d (run %d): removed red %d (%d of them by a case that asserts the gate does "
+          "not raise), listed redundant %d, green %d, crashed %d" %
+          (len(cands), len(derived), len(d_red), len(d_raise), len(d_redundant), len(d_green),
+           len(d_crash) + len(n_crash)))
+    for what, items in (("GREEN, not on the redundant list", d_green), ("CRASH (the test died; a case is "
+                        "missing)", d_crash + n_crash), ("NOFIT", d_nofit), ("stale REDUNDANT entry", stale)):
+        for item in items:
+            print("  %s: %s" % (what, item))
     if baseline is not None:
         print("the unmodified gate: %s" % ("passes" if baseline == 0 else "FAILS (exit %d)" % baseline))
-    return 0 if not bad and baseline in (None, 0) else 1
+    ok = not bad and not d_green and not d_crash and not n_crash and not d_nofit and not stale
+    return 0 if ok and baseline in (None, 0) else 1
 
 
 if __name__ == "__main__":

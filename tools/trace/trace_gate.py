@@ -228,9 +228,9 @@ def _u32(data, at):
 def _text_ok(payload):
     """A decoded path or user name: UTF-16LE text with no character of a Unicode C category
     (controls, C1 included; format; surrogate; private use; unassigned), at most one trailing NUL."""
-    if len(payload) % 2 or len(payload) > 2048:
+    if len(payload) > 2048:
         return False
-    try:
+    try:   # an odd length does not decode, so it needs no test of its own (W36-0e.1)
         text = payload.decode("utf-16le")
     except UnicodeDecodeError:
         return False
@@ -570,7 +570,10 @@ def _guidstr_bytes(payload):
         return None
     if not GUIDSTR.fullmatch(text):
         return None
-    return uuid.UUID(text).bytes_le
+    try:
+        return uuid.UUID(text).bytes_le
+    except ValueError:   # not reached after the shape test; a damaged string never raises (W36-0e.1)
+        return None
 
 
 def _guidstr_digits(payload):
@@ -645,7 +648,7 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
                 offs.update(range(at, at + 16))
             elif cls == "guidstr":
                 digits = _guidstr_digits(data[at:at + length])
-                if digits and digits == _guidstr_digits(other[at:at + length]):
+                if digits == _guidstr_digits(other[at:at + length]):   # [] == [] masks nothing
                     offs.update(at + d for d in digits)
     if "varkey" in rule:
         known = {uid for uid, _, _ in _meta_blocks(ctl.get(VAR_META[name]))}
@@ -808,7 +811,7 @@ def main(argv):
         nul = streams(argv[4])
     except (OSError, ValueError, AttributeError):
         nul = None   # an absent or unreadable control null
-    if nul is not None and nul == ctl:
+    if nul == ctl:
         nul = None   # the control passed as its own null: no noise was measured
     lines, problems, checked, unchecked = compare(traced, ref, ctl, nul)
     # the count is of raw directory entries, not of printable names (W36-0d.2)

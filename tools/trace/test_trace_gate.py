@@ -30,6 +30,12 @@ are G0's; G0b and G0c added the later checks listed after them:
            (0d.7); and test_gate_guards_meta.py removes each named guard in turn and asserts this
            test goes red, run at the end of a default run (0d.8).
 
+  W36-0e   the meta-test derives its candidate guards from the gate (0e.1) and this test turns a gate
+           that raises, or a gate that returns the wrong shape, into a named FAIL, so a removal is red
+           by a verdict and not by a crash; four guards the G0d review found green (the Props14 tail
+           count word, the SummaryInformation section size, the first value after the table, the
+           LastSave type word) have cases of their own (0e.1).
+
     python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only] [--no-meta] [--fail-fast]
 
 --gate runs the command-line cases against another copy of the gate (a red run against an older
@@ -41,9 +47,11 @@ installed (ctest SKIP).
 """
 
 import os
+import io
 import re
 import shutil
 import struct
+import types
 import uuid
 import subprocess
 import sys
@@ -143,6 +151,9 @@ def flipped_copy(src, dst, name, offset):
 def run_cli(traced, ref, ctl, nul):
     p = subprocess.run([sys.executable, gate_path, traced, ref, ctl, nul],
                        capture_output=True, text=True)
+    if "Traceback (most recent call last)" in p.stderr:   # a raise is a finding, not a verdict
+        check("gate raised on the command line: %s" % (p.stderr.strip().splitlines() or [""])[-1][:80],
+              False)
     return p.returncode, p.stdout + p.stderr
 
 
@@ -223,6 +234,19 @@ try:
     if not cli_only:
         sys.path.insert(0, gate_dir)
         import trace_gate as g
+
+        # A gate that raises on a file is a failed case named "gate raised", not a crash of this test
+        # (W36-0e.1): the meta-test tells a removal that a case catches from one that only kills the
+        # run.  The gate must FAIL a damaged file cleanly, never raise on it (see the damage sweep).
+        _compare = g.compare
+
+        def _compare_guarded(*a, **k):
+            try:
+                return _compare(*a, **k)
+            except Exception as exc:   # noqa: BLE001 - any exception is the finding
+                check("gate raised %s in compare: %s" % (type(exc).__name__, str(exc)[:60]), False)
+                return ["gate raised"], 1, 0, 0
+        g.compare = _compare_guarded
 
         def load(path):
             return g.streams(path)
@@ -938,7 +962,8 @@ try:
             """Problems found in the gate's windows of one pair, by name; the empty list is clean."""
             rp, cp, np_ = pair(stem)
             RS, CS = load(rp), load(cp)
-            gate_canon = g.canonical(RS, with_noise=True)[1]
+            canon_pair = g.canonical(RS, with_noise=True)
+            gate_canon = canon_pair[1] if isinstance(canon_pair, tuple) else {}   # W36-0e.1: the case below says why
             canon_noise = {n_: spec_canon(n_, RS[n_], RS) for n_ in CANON_STREAMS if n_ in RS}
             found = []
             for n_ in CANON_STREAMS:
@@ -2054,6 +2079,298 @@ try:
               all(g._text_ok(t.encode("utf-16le")) for t in ("Ren\u00e9", "\u540d\u524d\0", "C:\\w30\\a-b!\0")))
         check("W36-0d.9 _text_ok refuses a C1 control, a format character, private use and an unassigned one",
               not any(g._text_ok(t.encode("utf-16le")) for t in ("a\u0085b", "a\u200eb", "a\ue000b", "a\u0378b")))
+
+        # --- W36-0e.1 (R36G0d-1): the guards the derived meta-test found no case for ----------------------
+        # test_gate_guards_meta.py derives its candidates from the gate (ast) and removes each one in
+        # turn.  The cases below are what turned the green ones red, each on a file or a stream that the
+        # guard refuses and the gate without it takes.  A gate that raises on a damaged input is a FAIL
+        # named "gate raised": the guard that keeps it from raising is a guard.
+        RAISED = object()
+
+        def calls(label, fn, *args):
+            try:
+                return fn(*args)
+            except Exception as exc:   # noqa: BLE001 - any exception is the finding
+                check("gate raised %s in %s: %s" % (type(exc).__name__, label, str(exc)[:60]), False)
+                return RAISED
+
+        def expect(label, got, want):
+            check("W36-0e.1 %s" % label, got == want, "%r != %r" % (got, want))
+
+        # the tail count word is the number of entries the tail holds; a wrong count is not noise
+        p14_both = [first, second]
+        for count_ in (0, 1, 3):
+            p14_verdict("a count word of %d over the two entries" % count_, p14_both, count=count_)
+        # the section size word of SummaryInformation is the section's length
+        si_len = len(R[SI])
+        for delta in (-4, 4):
+            for which, (tr, rf) in (("traced", (put(R, SI, [(si_sec, struct.pack("<I", si_len - si_sec + delta))]), R)),
+                                    ("reference", (R, put(R, SI, [(si_sec, struct.pack("<I", si_len - si_sec + delta))])))):
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0e.1 a SummaryInformation section size word %+d in the %s save fails" % (delta, which),
+                      problems_ >= 1 and any(SI in ln for ln in lines_), "%r" % (lines_,))
+        # the first value follows the offset table: four junk bytes between them are not noise
+        si_count = struct.unpack_from("<I", R[SI], si_sec + 4)[0]
+        si_table_at = si_sec + 8
+        gap = bytearray(R[SI][:si_table_at])
+        struct.pack_into("<I", gap, si_sec, len(R[SI]) + 4 - si_sec)
+        for k in range(si_count):
+            pid_, off_ = struct.unpack_from("<II", R[SI], si_table_at + 8 * k)
+            gap += struct.pack("<II", pid_, off_ + 4)
+        gap += b"\xa5" * 4 + R[SI][si_table_at + 8 * si_count:]
+        for which, (tr, rf) in (("traced", (swapped(R, SI, bytes(gap)), R)),
+                                ("reference", (R, swapped(R, SI, bytes(gap))))):
+            problems_, lines_ = verdict(tr, rf)
+            check("W36-0e.1 a SummaryInformation whose first value does not follow the table in the %s save fails"
+                  % which, problems_ >= 1 and any(SI in ln for ln in lines_), "%r" % (lines_,))
+        # the LastSave slot is a type 0x40 FILETIME: the same eight bytes under another type are not noise
+        for tword in (0x41, 0x1E, 0):
+            slot_ = struct.pack("<I", tword) + si_have[13][4:]
+            for which, (tr, rf) in (("traced", (swapped(R, SI, si_build(R[SI], {13: slot_})), R)),
+                                    ("reference", (R, swapped(R, SI, si_build(R[SI], {13: slot_}))))):
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0e.1 LastSave with the type word %#x in the %s save fails" % (tword, which),
+                      problems_ >= 1 and any(SI in ln for ln in lines_), "%r" % (lines_,))
+        # the view GUID string has the shape {8-4-4-4-12}: the hyphens moved, the digits still a GUID, is not
+        # a GUID string.  Both saves carry the moved shape and differ in a first digit, a masked place.
+        moved = list(vs_text)
+        moved[8], moved[9] = moved[9], moved[8]
+        moved_b = list(moved)
+        moved_b[1] = "4" if moved[1] != "4" else "5"
+        for which, (tr, rf) in (("traced", (with_text(R, "".join(moved_b)), with_text(R, "".join(moved)))),
+                                ("reference", (with_text(R, "".join(moved)), with_text(R, "".join(moved_b))))):
+            problems_, lines_ = verdict(tr, rf)
+            check("W36-0e.1 a view GUID string with a hyphen moved, differing in a digit, in the %s save fails"
+                  % which, problems_ >= 1 and any(view_props in ln for ln in lines_), "%r" % (lines_,))
+        pair_ = calls("canonical", g.canonical, R, True)
+        check("W36-0e.1 canonical(streams, with_noise=True) is (canonical streams, noise offsets)",
+              isinstance(pair_, tuple) and len(pair_) == 2 and set(pair_[1]) == set(R), "%r" % (type(pair_),))
+
+        # streams(): three directory entries that render alike are one collision, named once, and the
+        # later ones are kept apart
+        class StubOle:
+            def __init__(self, path):
+                self.table = STUB[path]
+
+            def listdir(self, streams=True, storages=False):
+                return [list(k) for k in self.table]
+
+            def openstream(self, entry):
+                return io.BytesIO(self.table[tuple(entry)])
+
+            def close(self):
+                pass
+
+        STUB = {"three": {("a\x01b",): b"1", ("a\x02b",): b"22", ("a\x03b",): b"333"}}
+        real_ole = g.olefile
+        g.olefile = types.SimpleNamespace(OleFileIO=StubOle)
+        try:
+            three = calls("streams", g.streams, "three")
+        finally:
+            g.olefile = real_ole
+        if three is not RAISED:
+            expect("three entries of one printable name: one collision", three.collisions, ["a?b"])
+            expect("three entries of one printable name: none dropped",
+                   sorted(three.items()), [("a?b", b"1"), ("a?b#1", b"22"), ("a?b#2", b"333")])
+
+        # _text_ok: a control character that is the last one is not a trailing NUL; an odd length is no text
+        expect("_text_ok refuses a text that ends in a control character",
+               calls("_text_ok", g._text_ok, "ab\x01".encode("utf-16le")), False)
+        expect("_text_ok refuses an odd length", calls("_text_ok", g._text_ok, b"a\0b"), False)
+
+        # frame_records: records chain exactly to the end, each padded to an even length
+        fr_head = bytes(16)
+        expect("frame_records: a record longer than the data is not a chain",
+               calls("frame_records", g.frame_records, fr_head + struct.pack("<III", 8, 1, 0) + b"abcd", 16), None)
+        expect("frame_records: a last record of odd length with no pad byte is not a chain",
+               calls("frame_records", g.frame_records, fr_head + struct.pack("<III", 1, 1, 0) + b"a", 16), None)
+        expect("frame_records: a last record of odd length with its pad byte is a chain",
+               calls("frame_records", g.frame_records, fr_head + struct.pack("<III", 1, 1, 0) + b"a\0", 16),
+               [(16, 1, 1, 0)])
+        expect("frame_records: a header that is cut short is not a chain",
+               calls("frame_records", g.frame_records, fr_head + bytes(8), 16), None)
+
+        # the CEdl path record is the record 0x26400031 only; another record of text that ends in "!" is data
+        bang = "a!\0".encode("utf-16le")
+        other_rec = bytes(20) + struct.pack("<III", len(bang), 0x26400030, 1) + bang
+        path_rec = bytes(20) + struct.pack("<III", len(bang), g.CEDL_PATH_ID, 1) + bang
+        expect("a CEdl record that is not the path record, text ending in '!', is not replaced",
+               calls("_canon_cedl_var2", g._canon_cedl_var2, other_rec, {}), (other_rec, set(), set()))
+        got_ = calls("_canon_cedl_var2", g._canon_cedl_var2, path_rec, {})
+        expect("the CEdl path record is replaced (and named)", got_[2] if got_ is not RAISED else None, {"path"})
+        expect("a CEdl stream shorter than its header is as it is",
+               calls("_canon_cedl_var2", g._canon_cedl_var2, b"\0" * 10, {}), (b"\0" * 10, set(), set()))
+
+        # CEdl VarMeta and 214/Props name the length of 214/CEdl/Var2Data: with no such stream, or a
+        # VarMeta too short to hold the word, nothing is replaced and nothing raises
+        expect("CEdl VarMeta with no CEdl Var2Data is as it is",
+               calls("_canon_cedl_meta", g._canon_cedl_meta, R["???214/CEdl/VarMeta"], {}),
+               (R["???214/CEdl/VarMeta"], set(), set()))
+        expect("a CEdl VarMeta of 10 bytes is as it is",
+               calls("_canon_cedl_meta", g._canon_cedl_meta, b"\0" * 10, {CEDL: b"x"}), (b"\0" * 10, set(), set()))
+        expect("214/Props with no CEdl Var2Data is as it is",
+               calls("_canon_view_props", g._canon_view_props, R[view_props], {}), (R[view_props], set(), set()))
+        expect("a 214/Props of 10 bytes is as it is",
+               calls("_canon_view_props", g._canon_view_props, b"\0" * 10, {CEDL: b"x"}), (b"\0" * 10, set(), set()))
+        v2_ = b"v" * 40
+        size_rec = fr_head + struct.pack("<III", 4, g.VIEW_CEDL_SIZE_ID, 1) + struct.pack("<I", len(v2_))
+        got_ = calls("_canon_view_props", g._canon_view_props, size_rec, {CEDL: v2_})
+        expect("214/Props record 0x00010007 equal to the CEdl length is replaced (and named)",
+               (got_[2], got_[1]) if got_ is not RAISED else None, ({"rec 0x00010007"}, set(range(28, 32))))
+        for what, rec_ in (("another id", struct.pack("<III", 4, 0x00010008, 1) + struct.pack("<I", len(v2_))),
+                           ("a length of 8", struct.pack("<III", 8, g.VIEW_CEDL_SIZE_ID, 1) +
+                            struct.pack("<II", len(v2_), 0))):
+            expect("a 214/Props record of %s whose first word is the CEdl length is not replaced" % what,
+                   calls("_canon_view_props", g._canon_view_props, fr_head + rec_, {CEDL: v2_}),
+                   (fr_head + rec_, set(), set()))
+
+        # the Props14 tail: [count][entries]; each entry starts with an id of the two names
+        tail_one = struct.pack("<I", 1) + struct.pack("<II", 0x3540000B, 0x1E)
+        expect("a tail shorter than its count word is none", calls("_tail_entries", g._tail_entries, b"\0\0"), None)
+        expect("an empty tail is none", calls("_tail_entries", g._tail_entries, b""), None)
+        expect("an id that is not a name followed by 0x1e inside a name is part of the name",
+               calls("_tail_entries", g._tail_entries,
+                     tail_one + b"aa" + struct.pack("<II", 0x1234, 0x1E)),
+               [(0x3540000B, b"aa" + struct.pack("<II", 0x1234, 0x1E))])
+        expect("a tail of count 0 and junk is none",
+               calls("_tail_entries", g._tail_entries, struct.pack("<I", 0) + b"junkjunk"), None)
+        expect("a tail of count 0 and nothing else is no entries",
+               calls("_tail_entries", g._tail_entries, struct.pack("<I", 0)), [])
+        expect("a tail whose count is not the number of entries is none",
+               calls("_tail_entries", g._tail_entries, struct.pack("<I", 3) + tail_one[4:] + b"aa"), None)
+        for n_ in (0, 8, 12, 14):
+            expect("a Props14 of %d bytes is as it is" % n_,
+                   calls("_canon_props14", g._canon_props14, bytes(n_), {}), (bytes(n_), set(), set()))
+        bad_magic = bytearray(R[P14])
+        struct.pack_into("<I", bad_magic, 8, 0x20000)
+        expect("a Props14 blob with another magic word is as it is",
+               calls("_canon_props14", g._canon_props14, bytes(bad_magic), {}), (bytes(bad_magic), set(), set()))
+        p14_end = len(p14_head)
+        for label, entries_, count_noise in (
+                ("a lone 0x3540000b entry with a text name", [(0x3540000B, text_name)], True),
+                ("a lone 0xffffffff entry with a text name", [(0xFFFFFFFF, text_name)], False),
+                ("a lone 0x3540000b entry with a junk name", [(0x3540000B, junk)], False)):
+            got_ = calls("_canon_props14", g._canon_props14, p14_join(p14_head, entries_), {})
+            expect("%s: the count word is %s" % (label, "derived" if count_noise else "not derived"),
+                   set(range(p14_end, p14_end + 4)) <= got_[1] if got_ is not RAISED else None, count_noise)
+        got_ = calls("_canon_props14", g._canon_props14, p14_join(p14_head, [(first[0], junk), second]), {})
+        junk_at = p14_end + 4 + 8
+        expect("a junk tail name is not among the replaced bytes",
+               got_[1].isdisjoint(range(junk_at, junk_at + len(junk))) if got_ is not RAISED else None, True)
+
+        # a stamp and a FILETIME are whole values; short ones are no value and do not raise
+        for raw_ in (b"", b"\x01\x02\x03"):
+            expect("_stamp_ok of %d bytes is False" % len(raw_), calls("_stamp_ok", g._stamp_ok, raw_), False)
+        for raw_ in (b"", b"\x01\x02", b"\x01" * 12):
+            expect("_filetime_ok of %d bytes is False" % len(raw_), calls("_filetime_ok", g._filetime_ok, raw_), False)
+        for raw_ in (b"", b"\x1e\0\0\0", b"\x1e\0\0\0\x01\0\0"):
+            expect("_lpstr_slot_ok of %d bytes is False" % len(raw_), calls("_lpstr_slot_ok", g._lpstr_slot_ok, raw_),
+                   False)
+        expect("_is_v1_guid of 12 bytes of a version-1 GUID is False",
+               calls("_is_v1_guid", g._is_v1_guid, v1(1)[:12]), False)
+
+        # SummaryInformation: a stream that does not hold its property set as it says stays raw
+        for n_ in (0, 20, 47, 50):
+            expect("a SummaryInformation of %d bytes is as it is" % n_,
+                   calls("_canon_summary", g._canon_summary, bytes(n_), {}), (bytes(n_), set(), set()))
+        count_big = bytearray(R[SI])
+        struct.pack_into("<I", count_big, si_sec + 4, 0xFFFFFFFF)
+        count_zero = bytearray(R[SI])
+        struct.pack_into("<I", count_zero, si_sec + 4, 0)
+        beyond = bytearray(R[SI])
+        ents_ = [struct.unpack_from("<II", R[SI], si_table_at + 8 * k) for k in range(si_count)]
+        last_k = max(range(si_count), key=lambda k: ents_[k][1])
+        struct.pack_into("<I", beyond, si_table_at + 8 * last_k + 4, len(R[SI]) - si_sec + 100)
+        for what, blob_ in (("a count of 0xffffffff", count_big), ("a count of 0", count_zero),
+                            ("a last value offset beyond the stream", beyond)):
+            expect("a SummaryInformation with %s is as it is" % what,
+                   calls("_canon_summary", g._canon_summary, bytes(blob_), {}), (bytes(blob_), set(), set()))
+
+        # the font rows of a view's bag: found by parsing the bag block the VarMeta names
+        def bag(records_, declared=None):
+            body = bytes(16) + b"".join(struct.pack("<III", len(p_), rid_, kind_) + p_ + bytes(len(p_) & 1)
+                                        for rid_, kind_, p_ in records_)
+            return struct.pack("<I", len(body) if declared is None else declared) + body
+
+        def vmeta(blocks_):
+            return bytes(8) + struct.pack("<I", len(blocks_)) + bytes(12) + \
+                b"".join(struct.pack("<III", *b_) for b_ in blocks_)
+
+        rows2 = (g.FONT_ITEM_ID, 1, bytes(2 * g.FONT_ROW))
+        bag_ok, meta_ok = bag([rows2]), vmeta([(1, 0, g.BAG_KEY)])
+        expect("font_item_garbage: two font rows, payload +43 of each",
+               calls("font_item_garbage", g.font_item_garbage, bag_ok, meta_ok), [75, 119])
+        for what, data_, meta_ in (
+                ("a block of another key", bag_ok, vmeta([(1, 0, g.BAG_KEY + 1)])),
+                ("a font record of 50 bytes", bag([(g.FONT_ITEM_ID, 1, bytes(50))]), meta_ok),
+                ("a font record longer than its block", bag([(g.FONT_ITEM_ID, 1, bytes(g.FONT_ROW))],
+                                                            declared=16 + 12 + 10), meta_ok),
+                ("a block offset past the stream", bag_ok, vmeta([(1, len(bag_ok) + 100, g.BAG_KEY)])),
+                ("a block offset 0xffffffff", bag_ok, vmeta([(1, 0xFFFFFFFF, g.BAG_KEY)])),
+                ("no VarMeta", bag_ok, None), ("a VarMeta of 10 bytes", bag_ok, bytes(10))):
+            expect("font_item_garbage: %s finds nothing" % what,
+                   calls("font_item_garbage", g.font_item_garbage, data_, meta_), [])
+        expect("noise_windows: the font rows of a CV_iew bag", calls("noise_windows", g.noise_windows,
+               g.CVIEW_VAR2, bag_ok, meta_ok, {}, bag_ok), {75, 119})
+        expect("noise_windows: a bag of another stream's VarMeta is not font rows",
+               calls("noise_windows", g.noise_windows, "???114/TBkndAssn/Var2Data", bag_ok, meta_ok, {}, bag_ok),
+               set())
+
+        # noise_windows: a Props record is a word by its id and length 4, a GUID by its id and length 16,
+        # a GUID string by its id; with no other side it is compared with itself
+        pr_word = fr_head + struct.pack("<III", 8, 0x02400007, 1) + struct.pack("<II", 0x3D200000, 0x3D200001)
+        pr_guid = fr_head + struct.pack("<III", 20, 0x02400029, 1) + v1(1) + bytes(4)
+        pr_ok = fr_head + struct.pack("<III", 16, 0x02400029, 1) + v1(1)
+        expect("noise_windows: a word record of 8 bytes is not a save word",
+               calls("noise_windows", g.noise_windows, props114, pr_word, None, {}, pr_word), set())
+        expect("noise_windows: a GUID record of 20 bytes is not a GUID",
+               calls("noise_windows", g.noise_windows, props114, pr_guid, None, {}, pr_guid), set())
+        expect("noise_windows: a GUID record of 16 bytes holding a version-1 GUID is noise",
+               calls("noise_windows", g.noise_windows, props114, pr_ok, None, {}, pr_ok), set(range(28, 44)))
+        expect("noise_windows: with no other side the stream is compared with itself",
+               calls("noise_windows", g.noise_windows, props114, pr_ok), set(range(28, 44)))
+        gstr = guid_text(v1(1)).encode("utf-16le")
+        digits_at = {28 + 2 * i for i in range(38) if i not in (0, 9, 14, 19, 24, 37)}   # the 32 hex digits
+        for rid_, want_ in ((0x03400002, set()), (0x03400001, digits_at)):
+            gs_ = fr_head + struct.pack("<III", len(gstr), rid_, 1) + gstr
+            expect("noise_windows: 214/Props record %#010x holding a GUID string" % rid_,
+                   calls("noise_windows", g.noise_windows, view_props, gs_, None, {}, gs_), want_)
+
+        # row identity: a stream is named by its rows only when its length fits its stride and FixedData
+        t_fixed, t_fixed2 = "???114/TBkndTask/FixedData", "???114/TBkndTask/Fixed2Data"
+        expect("row_ids of a stream with no identity rule is None", calls("row_ids", g.row_ids, "nope", b"", {}), None)
+        expect("row_ids of a missing stream is None", calls("row_ids", g.row_ids, t_fixed, None, {}), None)
+        expect("row_ids of a FixedData with a stray byte is None",
+               calls("row_ids", g.row_ids, t_fixed, R[t_fixed] + b"\0", R), None)
+        expect("row_ids of a Fixed2Data with no FixedData is None",
+               calls("row_ids", g.row_ids, t_fixed2, R[t_fixed2], {}), None)
+        expect("row_ids of a Fixed2Data whose FixedData has a stray byte is None",
+               calls("row_ids", g.row_ids, t_fixed2, R[t_fixed2], dict(R, **{t_fixed: R[t_fixed] + b"\0"})), None)
+        expect("row_ids of the pair's own Fixed2Data names every row",
+               len(calls("row_ids", g.row_ids, t_fixed2, R[t_fixed2], R) or []),
+               len(R[t_fixed2]) // g.STRIDE[t_fixed2][1])
+        expect("_task_uids of no stream is empty", calls("_task_uids", g._task_uids, None), set())
+        expect("_meta_blocks of no stream is empty", calls("_meta_blocks", g._meta_blocks, None), [])
+        expect("_meta_blocks of 10 bytes is empty", calls("_meta_blocks", g._meta_blocks, bytes(10)), [])
+
+        # the control mask: a row named twice in the control is not masked; no control or null is no mask
+        expect("_mask_by_id: a row identity twice in the control is not masked",
+               calls("_mask_by_id", g._mask_by_id, (0, 4), 8, bytes(8), b"\0\0\0\0\1\0\0\0", ["a", "a"], ["a"]), set())
+        expect("control_mask with no control is None",
+               calls("control_mask", g.control_mask, "x", 4, None, b"abcd"), None)
+        expect("control_mask with no null is None",
+               calls("control_mask", g.control_mask, "x", 4, b"abcd", None), None)
+
+        # the command line: the wrong number of arguments is usage, exit 2; with no olefile it says so, exit 2
+        p_ = subprocess.run([sys.executable, gate_path, ref, ref, ctl], capture_output=True, text=True)
+        check("W36-0e.1 the gate with three arguments prints usage and exits 2",
+              p_.returncode == 2 and "Traceback" not in p_.stderr, "rc=%d %s" % (p_.returncode, p_.stderr[-80:]))
+        hide = "import sys, runpy; sys.modules['olefile'] = None; sys.argv = sys.argv[1:]; " \
+               "runpy.run_path(sys.argv[0], run_name='__main__')"
+        p_ = subprocess.run([sys.executable, "-c", hide, gate_path, ref, ref, ctl, nul],
+                            capture_output=True, text=True)
+        check("W36-0e.1 the gate with no olefile says so and exits 2",
+              p_.returncode == 2 and "install olefile" in p_.stdout, "rc=%d %s" % (p_.returncode, p_.stderr[-80:]))
 
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
