@@ -93,7 +93,7 @@ IDENT = {
 #   new_row      (lo, hi) in-record bytes of a Task FixedData row whose uid is not in the control
 #   varkey       {key: (lo, hi)} bytes of the Var2Data block of that key, for a block whose uid
 #                is not in the control's VarMeta
-# A GUID is masked only when both sides hold a version-1 GUID or all zero.  Every row cites its
+# A GUID is masked only when both sides hold a version-1 GUID (all zeros against a real GUID FAILs: W36-0c.2).  Every row cites its
 # line of spec/writers/evidence/trace-gate-fields-g0b.md (FIELDS) for the decoded field.
 # There is no ceiling on how many bytes of the named fields may differ: a field is noise or it
 # is not, and every row of every stream is judged by the same rule (W36-0b.5).
@@ -432,8 +432,8 @@ def _is_v1_guid(raw):
     return len(raw) == 16 and raw[6] >> 4 == 1 and raw[8] >> 6 == 2
 
 
-def _guid_ok(raw):
-    return len(raw) == 16 and (raw == bytes(16) or _is_v1_guid(raw))
+def _guid_ok(raw):   # W36-0c.2: a GUID field is noise only as a version-1 GUID, never as zeros
+    return _is_v1_guid(raw)
 
 
 GUIDSTR = re.compile(r"\{[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-"
@@ -474,7 +474,7 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
     """The set of offsets of the named noise fields of one stream's bytes.  `meta` is the
     companion VarMeta of a Var2Data stream, `ctl` the control's streams (a field that only a new
     row carries is masked only for a row the control lacks) and `other` the other side's bytes
-    of the same stream (a GUID is masked only when both sides hold a version-1 GUID or zeros)."""
+    of the same stream (a GUID is masked only when both sides hold a version-1 GUID)."""
     rule = _noise_rule(name)
     offs = set()
     if name == CVIEW_VAR2:

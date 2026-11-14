@@ -5,7 +5,7 @@ session, so a field that differs between a control and its null save is per-save
 the earlier trace notes named in the last column.  `trace_gate.py` cites a row of this table by
 line number for every mask it keeps.  A mask names a field, never a region.
 
-A version-1 GUID (UuidCreateSequential) is stored in RFC byte order: byte 6 >> 4 == 1 and byte 8 >> 6 == 2.  A GUID field is masked only when both sides hold a version-1 GUID or all zero bytes.
+A version-1 GUID (UuidCreateSequential) is stored in RFC byte order: byte 6 >> 4 == 1 and byte 8 >> 6 == 2.  A GUID field is masked only when both sides hold a version-1 GUID; all zeros against a real GUID FAILs (W36-0c.2, R36G0b-4: in the 196 control/null pairs no GUID is zero on one side only).
 
 | Field | Where | Width | Noise because | Earlier note |
 |---|---|---|---|---|

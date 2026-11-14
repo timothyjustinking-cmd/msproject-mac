@@ -345,8 +345,8 @@ try:
                      "???214/CV_iew/FixedData": (122, 260, 398)}
         PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2)
 
-        def zero_or_v1(raw):
-            return len(raw) == 16 and (not any(raw) or (raw[6] >> 4 == 1 and raw[8] >> 6 == 2))
+        def is_v1(raw):
+            return len(raw) == 16 and raw[6] >> 4 == 1 and raw[8] >> 6 == 2
 
         def records(data, base):
             pos, out = base, []
@@ -372,16 +372,16 @@ try:
             for row in range(len(data) // ROW_SIZE[name] if name in ROW_SIZE else 0):
                 for lo in ROW_GUIDS[name]:
                     at = row * ROW_SIZE[name] + lo
-                    if zero_or_v1(data[at:at + 16]):
+                    if is_v1(data[at:at + 16]):
                         out.update(range(at, at + 16))
             for at in ABS_GUIDS.get(name, ()):
-                if zero_or_v1(data[at:at + 16]):
+                if is_v1(data[at:at + 16]):
                     out.update(range(at, at + 16))
             if name == "???114/Props":
                 for at, length, rid in records(data, 16):
                     if rid in PROPS_WORDS and length == 4:
                         out.update(range(at, at + 4))
-                    if rid in PROPS_GUIDS and zero_or_v1(data[at:at + length]):
+                    if rid in PROPS_GUIDS and is_v1(data[at:at + length]):
                         out.update(range(at, at + 16))
             if name == "???214/Props":
                 for at, length, rid in records(data, 16):
@@ -450,7 +450,7 @@ try:
                 starts = [row * ROW_SIZE[name] + lo for row in range(len(data) // ROW_SIZE[name])
                           for lo in ROW_GUIDS[name]] if name in ROW_SIZE else []
                 starts += list(ABS_GUIDS.get(name, ()))
-                starts = [s for s in starts if zero_or_v1(data[s:s + 16])]
+                starts = [s for s in starts if is_v1(data[s:s + 16])]
                 if starts:
                     mutated = dict(RS)
                     blob = bytearray(data)
@@ -570,6 +570,44 @@ try:
                     check("W36-0b.4 %s: a data byte at +%d next to a GUID fails" % (sname, at),
                           problems >= 1 and any(sname in ln for ln in lines), "%r" % (lines,))
         check("W36-0b.4 the GUID classes found fields to test (%d)" % guid_fields, guid_fields > 20)
+
+        # --- W36-0c.2 (R36G0b-4): a GUID field is noise only when BOTH sides are version-1 GUIDs ----
+        # All zeros against a real GUID is a save that never wrote the GUID, so it FAILs, whichever
+        # side holds the zeros.  (In the 196 committed control/null pairs no GUID is zero on one
+        # side only: 5,426 are zero on both sides, which is equality, not noise.)
+        zeroed = 0
+        for sname, rule in sorted(g.NOISE.items()):
+            if sname not in AR:
+                continue
+            offsets = []
+            if "guid_record" in rule:
+                base, size = g.STRIDE[sname]
+                offsets = [base + r * size + lo for r in range((len(AR[sname]) - base) // size)
+                           for lo in rule["guid_record"]]
+            offsets += list(rule.get("guid", ()))
+            for rid, cls in rule.get("props", {}).items():
+                if cls == "guid":
+                    offsets += [pos + 12 for pos, length, r_, kind in g.frame_records(AR[sname], 16)
+                                if r_ == rid]
+            offsets = [at for at in offsets if g._is_v1_guid(AR[sname][at:at + 16])]
+            if not offsets:
+                continue
+            zeroed += len(offsets)
+            z = put(AR, sname, [(at, bytes(16)) for at in offsets])
+            for which, (tr, rf) in (("traced", (z, AR)), ("reference", (AR, z))):
+                problems, lines = verdict(tr, rf)
+                check("W36-0c.2 %s: every GUID zero in the %s fails (%d GUIDs)" %
+                      (sname, which, len(offsets)),
+                      problems >= 1 and any(sname in ln for ln in lines), "%r" % (lines,))
+            one = put(AR, sname, [(offsets[0], bytes(16))])
+            problems, lines = verdict(one, AR)
+            check("W36-0c.2 %s: one GUID zero at +%d fails" % (sname, offsets[0]),
+                  problems >= 1 and any(sname in ln for ln in lines), "%r" % (lines,))
+        check("W36-0c.2 the zeroed GUIDs were found (%d)" % zeroed, zeroed > 20)
+        # both sides zero is equality: it passes, nothing to mask
+        both = put(AR, "???114/TBkndTask/Fixed2Data", [(0, bytes(16))])
+        problems, lines = verdict(both, both)
+        check("W36-0c.2 the same zeros on both sides pass", problems == 0, "%r" % (lines,))
 
         # the Assn Fixed2Data +32 window and the Task Fixed2Data +42/+46 bytes are data
         for sname, offs in (("???114/TBkndAssn/Fixed2Data", (32, 40, 42)),
