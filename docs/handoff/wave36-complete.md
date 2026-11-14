@@ -497,3 +497,69 @@ None.  R36G0c-9 and R36G0c-10 (Low) are queued below, as the brief allows for a 
 * **The meta-test lengthens the ctest** from about 36 s to about 8 minutes on this machine (12 cores, six copies at a time); the `TIMEOUT` is 3600 s.  `--no-meta` skips it.
 
 WAVE-36-G0d-COMPLETE
+
+## G0e: the trace gate, fourth fix
+
+Brief `docs/handoff/wave36-brief.md` section 2 (G0e); findings R36G0d-1 to -6 of `docs/handoff/wave36-verification/review-g0d.md`.  Design rule, restated: a masked field is accepted only as a
+value a save writes, on both sides; a field derived on one side only is a FAIL; and a guard is shown by a removal that turns the test red, found by the meta-test and not by a list.  Items, one
+finding id per commit, in order:
+
+| item | id | commit | what |
+|---|---|---|---|
+| W36-0e.1 | R36G0d-1 | `0c0563e` | the meta-test derives its candidate guards from `trace_gate.py` (`ast`): 208 candidates, 196 red, 12 redundant with a red cover and a reason, 0 green; four guards the review found green have cases; a crash is a named FAIL |
+| W36-0e.2 | R36G0d-2 | `ebbbb9a` | a masked value is accepted only inside the span the 624 committed saves show (stamps, LastSave) and the two Props save words must be equal; the six review files FAIL |
+| W36-0e.3 | R36G0d-3 | `e95c295` | an emptied Props14 tail name is not a name (`_name_ok`) and each tail name is a derived field; both names emptied FAILs |
+| W36-0e.4 | R36G0d-4 | `88488a1` | the meta-test labels `control-mask-count` as a pinned number, not a guard removal (the crash half was 0e.1) |
+
+**Acceptance (the committed `tools/trace/test_trace_gate.py`, on the committed file set).**  Negative, over 191 edits: **191 of 191 FAIL**.  Positive, over 202 control-nulls: **146 PASS and
+56 OPEN**.  Both counts are those of G0d and unchanged at every commit.  Everything G0d accepted stays green (the 491 checks are in the test, now **652 checks, 0 FAIL**).  Every hand-built wrong
+file of the G0d review FAILs.  The meta-test: **`named guards listed 67, red 67, not red 0`; `candidates derived 214 (run 214): removed red 202 (61 of them by a case that asserts the gate does
+not raise), listed redundant 12, green 0, crashed 0`**, the unmodified gate passes (`build/w36/ebbbb9a-W36-0e.3-meta.log`).
+
+**Gate line.**  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each
+carries both trailers.  The full default run (the test, then the meta-test) took about 25 minutes with 8 jobs on the 0e.3 tree and passed; the test alone (`--no-meta`) passed on the tip, 652 PASS
+(`build/w36/88488a1-W36-0e.tip-green.log`); 0e.4 is one description.  The ctest itself was not re-run at the tip (the build tree is shared); it runs the same script with no arguments, and its
+`TIMEOUT` of 3600 s is unchanged.  G0e changes no C++ source and no `CMakeLists.txt`.  Per-item logs and counts are in `docs/handoff/wave36-verification/gates-g0e.md`.  The builder used no COM, did
+not touch the VM, `build/trace-2021/` or `build/r7/`, and pushed nothing.
+
+### Guards seen red
+
+Each red ran on the previous commit's gate or on a copy with one guard removed; logs are `build/w36/<parent>-W36-0e.N-red.log`, `-green.log` and `-meta.log`.
+
+| item | red | green |
+|---|---|---|
+| 0e.1 | the four review guards (`tail-count`, `si-section-size`, `si-first-value`, `si-lastsave-type`) against the unchanged test: 0 of 4 red; the first derived run found 76 green and 1 crash | 588 PASS; 65 of 65 named red, 208 derived (196 red, 12 redundant, 0 green, 0 crashed) |
+| 0e.2 | the new test against the parent's gate: 42 FAIL, 602 PASS; the first full run found `new-row-other` and three candidates green (the span made them verdict-neutral) | 641 PASS; 66 of 66 named red, 212 derived (200 red, 12 redundant, 0 green, 0 crashed) |
+| 0e.3 | the new test against the parent's gate: 8 FAIL, 644 PASS; the first full run found three NOFIT (a rename) and `tail-ffff-dropped` green (the derived flag caught its old case alone) | 652 PASS; 67 of 67 named red, 214 derived (202 red, 12 redundant, 0 green, 0 crashed) |
+| 0e.4 | none: a description | `control-mask-count` red by the W36-0d.7 case |
+
+### Deferred
+
+None.
+
+### Queued (Low, not fixed)
+
+* **R36G0d-5 (R36G0c-10, the control null proves nothing).**  Not fixed: the coordinator's call, as the review says, because it changes the capture specs.  The control null is still demanded by
+  the command line and by `runone6.ps1`, and the gate uses it only to label a failing byte (`control-mask` or `bytes-differ`) and to refuse a missing one; the sweeps and every verdict are the same
+  with a fake null.  A reader of "no null is a FAIL" should not take the null to be measured.  Direction as G0d recorded it: drop the null from the command line and the specs, or make "no null" mean
+  "no measured noise" by checking that the null differs from the control in SummaryInformation and Props only.
+* **R36G0c-9, as evidence.**  The derived meta-test lists every `named_absent` condition of `_canon_props14`: the id test (`entries[0][0] == 0x3540000b`), the name test (`_name_ok`) and
+  `len(entries) == 1` are each **red** when removed (W36-0e.1 cases, and for the name W36-0e.3), and none is on `REDUNDANT`; the review's "redundant, not listed" no longer holds.  What
+  stays queued is the SummaryInformation noise range "to the end of the slot", which is verdict-neutral (it affects `with_noise` only) and is not isolated by any committed shape.
+
+### Found, not fixed
+
+* **R36G0d-6, the G0d record's own statements.**  "Props noise words and LastSave are of their decoded kind" was a kind, not a value (R36G0d-2 turns it into a value: the span); the 61 of "61
+  guards" was a count of a list (R36G0d-1 derives the candidates); the `0d.8` commit message says 60 and the record 61, explained in the record.  The G0d records are not rewritten; what the tests
+  hold now is the acceptance above, and `gates-g0e.md` states its counts from the logs.
+* **The spans make a post-span capture FAIL.**  A stamp or LastSave outside the span of the 624 committed files (stamps 0x3d141482 to 0x3d282db4, LastSave 22 October to 11 November 2026)
+  FAILs as data until the two spans in the gate, the test's copy and the table of `spec/writers/evidence/trace-gate-fields-g0b.md` are widened together.  The coordinator is re-gating the
+  recordings: a verdict that turns there is this, not a regression.
+* **The meta-test is 25 minutes, not 8** (214 derived candidates and 67 named, eight at a time); the ctest `TIMEOUT` is 3600 s.  `--only named|derived` prints a partial table and cannot check
+  `REDUNDANT` (it raises a `KeyError` on a key not run); a full run is the acceptance.  The test files must not be edited while a meta run is in progress: the test is read for each removal.
+* **Three dead clauses were deleted from the gate at 0e.1** (`len(payload) % 2` in `_text_ok`, `digits and` in `noise_windows`, `nul is not None and` in `main`): each was never taken on any
+  input the gate can see; every committed pair's verdict is unchanged.
+* **The two Props save words must be equal** (0e.2): true of all 624 committed files (0 unequal).  A save that wrote two different words would FAIL until the evidence note says why.
+* **The 56 OPEN pairs are still OPEN**, pinned to (pair, stream, count) but not decoded; `R36G0b-8` is still open and `R36G0b-11` is as G0c recorded it.
+
+WAVE-36-G0e-COMPLETE
