@@ -31,7 +31,12 @@ function vmx([string]$code,[int]$timeout=120){
       # The agent announces the length of its Out-String text: the base64 plus the newline Out-String
       # ends it with (CRLF, or LF), and the XML parse here drops a CR (and a piece of only
       # whitespace).  So the base64 alone, trimmed, is 1 or 2 shorter than the announced length.
-      $o = $o.TrimEnd(); $tail = [int]$m[2] - $o.Length
+      $o = $o.TrimEnd()
+      # The agent's own failure (a script it could not parse) is sent as "ERR <message>" with no
+      # Out-String newline; base64 has no space, so the prefix cannot be a reply.  Report the
+      # agent's error, not a length error (W36-0c.7 / R36G0b-9).
+      if ($o.StartsWith('ERR ')) { throw "vmx guest agent error: $($o.Substring(4))" }
+      $tail = [int]$m[2] - $o.Length
       if ($tail -lt 1 -or $tail -gt 2) { throw "vmx reply length $($o.Length) plus the Out-String newline does not match the $($m[2]) announced in out_meta" }
       $o=[Text.Encoding]::UTF8.GetString([Convert]::FromBase64String($o)); $k=$o.LastIndexOf("`n#SHA "); $gh=$o.Substring($k+6); $o=$o.Substring(0,$k); $hh=[BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($o))).Replace("-",""); if ($hh -ne $gh) { throw "vmx reply sha MISMATCH (host $($hh.Substring(0,12)), guest $($gh.Substring(0,12)))" }
       "[len $($o.Length) sha OK $($hh.Substring(0,12))]"

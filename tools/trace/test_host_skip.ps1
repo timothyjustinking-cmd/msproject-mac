@@ -23,11 +23,19 @@ function Through-Xml([string]$piece, [bool]$keepCr) {
     $x = [xml]("<INSTANCE><PROPERTY NAME=`"Data`"><VALUE>$esc</VALUE></PROPERTY></INSTANCE>")
     [string]$x.INSTANCE.PROPERTY.VALUE
 }
-function Reply([string]$text, [bool]$goodSha, [int]$lenDelta, [string]$nl = "`r`n", [bool]$keepCr = $false, [int]$dropPiece = -1) {
+# Wrapping (W36-0c.7 / R36G0b-9): `Out-String -Width 300` does not wrap a plain string.  Run on the
+# host, in PowerShell 7.7.0 and in Windows PowerShell 5.1.26100.9818 alike, a 1000-character string
+# and a 2000-character base64 line each come back whole with only the closing CRLF added
+# (build/w36/wrap_probe.ps1).  The model therefore adds no newline inside a reply of any length,
+# and the cases below send replies of 296, 320, 896 and about 4000 characters.  The VM has not
+# confirmed it.
+# `$raw` is a reply sent as it is (the agent's catch path: "ERR $_", no Out-String newline).
+function Reply([string]$text, [bool]$goodSha, [int]$lenDelta, [string]$nl = "`r`n", [bool]$keepCr = $false, [int]$dropPiece = -1, [string]$raw = $null) {
     $sha = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($text))).Replace('-', '')
     if (-not $goodSha) { $sha = ('0' * 64) }
     $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($text + "`n#SHA " + $sha))
     $o = $b64 + $nl
+    if ($raw) { $o = $raw }
     $n = [int][math]::Ceiling($o.Length / 900.0)
     $script:fake = @{}
     for ($k = 0; $k -lt $n; $k++) {
@@ -42,9 +50,9 @@ function Get-GuestKvp {
     $h['out_meta'] = $script:lastid + $script:meta.Substring($script:meta.IndexOf('|'))
     $h
 }
-function Run($text, $goodSha, $lenDelta, $nl = "`r`n", $keepCr = $false, $dropPiece = -1) {
+function Run($text, $goodSha, $lenDelta, $nl = "`r`n", $keepCr = $false, $dropPiece = -1, $raw = $null) {
     $script:seq = 0
-    Reply $text $goodSha $lenDelta $nl $keepCr $dropPiece
+    Reply $text $goodSha $lenDelta $nl $keepCr $dropPiece $raw
     $script:lastid = "{0}{1}" -f (Get-Date -f HHmmss), 1
     try { $r = vmx 'x' 5; return @{ threw = $false; out = ($r -join "`n") } }
     catch { return @{ threw = $true; out = $_.Exception.Message } }
@@ -80,6 +88,18 @@ $r = Run 'hello' $true 0 "" $false
 Check 'host.ps1 reply with no newline at all (not the Out-String shape): throws' ($r.threw -and $r.out -match 'length')
 $r = Run $long $true 0 "`r`n" $false 1
 Check 'host.ps1 reply with a piece missing: throws' ($r.threw -and $r.out -match 'length')
+# a reply over the 300-character width is one unwrapped line plus the closing newline
+foreach ($len in 150, 170, 600) {
+    $t = 'w' * $len
+    $b = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($t + "`n#SHA " + ('0' * 64))).Length
+    $r = Run $t $true 0
+    Check "host.ps1 good reply of $b characters ($(if ($b -gt 300) { 'over' } else { 'under' }) the 300 width): returns the text" (-not $r.threw -and $r.out -match "w{$len}")
+}
+# the agent's own error: "ERR <message>", announced at its own length, no newline
+$r = Run 'unused' $true 0 "" $false -1 'ERR Missing closing ''}'' in statement block.'
+Check 'host.ps1 agent ERR reply: throws the agent error text, not a length error' ($r.threw -and $r.out -match 'guest agent error: Missing closing' -and $r.out -notmatch 'does not match')
+$r = Run 'unused' $true 0 "" $false -1 ('ERR ' + ('e' * 1500))
+Check 'host.ps1 agent ERR reply of two pieces: throws the agent error text' ($r.threw -and $r.out -match 'guest agent error: e{1500}')
 
 # ---- r5b-skip.ps1: the Invoke() sits under a Sign in title test (AST) ----
 $tokens = $null; $errs = $null
