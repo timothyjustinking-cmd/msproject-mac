@@ -23,12 +23,21 @@ are G0's; G0b and G0c added the later checks listed after them:
            font rows is written in the test, not read from the gate (0c.6); the head line's
            `not checked` is a real count (0c.8).
 
-    python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only]
+  W36-0d   a derived field is told from a raw one (0d.1); streams are keyed by their raw name (0d.2);
+           the view GUID string is a version-1 GUID (0d.3); the string-slot type test, the Props14
+           first entry and size words and the 2048-byte cap are seen red (0d.4, 0d.5); a masked field
+           holds a value a save writes (0d.6); each OPEN entry is pinned as (pair, stream, count)
+           (0d.7); and test_gate_guards_meta.py removes each named guard in turn and asserts this
+           test goes red, run at the end of a default run (0d.8).
+
+    python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only] [--no-meta] [--fail-fast]
 
 --gate runs the command-line cases against another copy of the gate (a red run against an older
 version); --gate-dir runs every case, in-process ones too, against DIR/trace_gate.py (a gate
-with one guard removed); --cli-only skips the cases that import the gate's functions.  Exit 0
-all pass, 1 a case failed, 77 olefile is not installed (ctest SKIP).
+with one guard removed); --cli-only skips the cases that import the gate's functions; --no-meta
+does not run the guard meta-test after a pass (the meta-test itself runs this test with it);
+--fail-fast stops at the first FAIL.  Exit 0 all pass, 1 a case failed, 77 olefile is not
+installed (ctest SKIP).
 """
 
 import os
@@ -52,6 +61,8 @@ except ImportError:
 gate_path = os.path.join(HERE, "trace_gate.py")
 cli_only = False
 gate_dir = HERE
+no_meta = False
+fail_fast = False
 args = sys.argv[1:]
 while args:
     a = args.pop(0)
@@ -64,6 +75,10 @@ while args:
         gate_path = os.path.join(gate_dir, "trace_gate.py")
     elif a == "--cli-only":
         cli_only = True
+    elif a == "--no-meta":
+        no_meta = True
+    elif a == "--fail-fast":
+        fail_fast = True
     else:
         print(__doc__)
         sys.exit(2)
@@ -75,6 +90,9 @@ def check(label, ok, detail=""):
     print(("PASS " if ok else "FAIL ") + label + ((" -- " + detail) if detail and not ok else ""))
     if not ok:
         failures.append(label)
+        if fail_fast:
+            print("1 failed (--fail-fast)")
+            sys.exit(1)
 
 
 def pair(stem):
@@ -1828,6 +1846,10 @@ try:
             rc, out = run_cli(tr, rf, ctl, nul)
             check("W36-0d.2 a stream whose raw name differs in the %s FAILs" % label,
                   rc == 1 and "stream name differs ?SummaryInformation" in out, "rc=%d %r" % (rc, out[:200]))
+            # two raw entries (\x05 and \x06 SummaryInformation) that render as one name: the head
+            # line counts both (entry_count(ref) + 1), a count of printable names would count one
+            check("W36-0d.8 the head line counts both raw names of a renamed stream (%s)" % label,
+                  head_counts(out)[0] == entry_count(ref) + 1, out.splitlines()[0])
         rc, out = run_cli(moved, moved, ctl, nul)
         check("W36-0d.2 the same renamed stream on both sides is equality and passes",
               rc == 0, "rc=%d %r" % (rc, out[:200]))
@@ -2023,4 +2045,14 @@ finally:
     shutil.rmtree(tmp, ignore_errors=True)
 
 print("%d failed" % len(failures) if failures else "all passed")
-sys.exit(1 if failures else 0)
+if failures:
+    sys.exit(1)
+# W36-0d.8: the guards are removed one at a time in copies of the gate and this test must go red on
+# each.  Only the plain run does it: --gate, --gate-dir and --cli-only run another gate or a subset,
+# and the meta-test runs this file itself with --no-meta.
+if not no_meta and gate_dir == HERE and gate_path == os.path.join(HERE, "trace_gate.py") and not cli_only:
+    print("--- guard meta-test (test_gate_guards_meta.py)")
+    sys.stdout.flush()
+    sys.exit(subprocess.run([sys.executable, os.path.join(HERE, "test_gate_guards_meta.py"),
+                             "--skip-baseline"]).returncode)
+sys.exit(0)
