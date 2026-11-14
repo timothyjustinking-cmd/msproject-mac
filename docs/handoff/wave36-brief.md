@@ -193,6 +193,76 @@ was merged into this branch before G1b, so round 7's pairs are now in `tests/dat
 
 Done when every guard is seen red, then green, both quoted.  Marker `WAVE-36-G1b-COMPLETE`.
 
+**Group order after the G0b review (coordinator, Sat 14 Nov 2026).**  The G0b review found 6 High in the gate and
+its test, so the driver was stopped after G1b and relaunched with G0c, G2 and CLOSE.  G0c runs before G2.
+
+### G0c: the gate, second fix (the G0b review's six Highs, before G2)
+
+Source: `docs/handoff/wave36-verification/review-g0b.md` (R36G0b-1 to -12; every finding has a **Fix:**
+paragraph and the command that showed it; read each before its item).  The review ran at `9fe128a`, after
+`main` was merged in: `tests/data` now holds round 7's pairs (624 `.mpp` files), which G0b never saw.
+`trace_gate_guards` is red at that tip: it stops with `FileNotFoundError` after 103 PASS lines.  The
+coordinator reproduced that.  No Critical: the negative sweep let no wrong file through (183 of 185 FAIL; the
+two that PASS are the known no-op edits).  But the gate still passes wrong files built by hand, so the merge
+rule is not met.
+
+The G0b design rule stands: **a mask names a field, never a region.**  G0c adds: **a mask also checks the
+value it masks.**  A masked field is accepted only when both sides hold a well-formed value of the named kind,
+of the length that kind has.
+
+Items, in this order:
+- **W36-0c.1 (R36G0b-5, R36G0b-7): the test runs on the committed file set.**
+  - A control-null's control comes from one table in the test (the capture specs' control name), never from
+    the file name.  A null whose control cannot be found is a FAIL line, never a crash.
+  - The positive sweep then covers every control and control-null in `tests/data`.  Each pair that fails it is
+    listed by name in the test with the stream, the record id and the reason, read from the gate's output.
+    The review counted 13 of 202; `214/CEdl/Var2Data` records 0x26400024 and 0x2640003d explain 8.
+  - A pair on that list is reported as OPEN with its undecoded field.  It is not a PASS, and the list does not
+    grow without a named field.  The counts in `gates-g0c.md` are those of the committed file set.
+- **W36-0c.2 (R36G0b-4):** a GUID field is masked only when BOTH sides are version-1 GUIDs.  All-zero against
+  a real GUID FAILs.
+- **W36-0c.3 (R36G0b-3):** a `SummaryInformation` string slot is accepted only when its length is exactly
+  8 + the string length rounded up to 4, and its padding is zero.  Bytes after the string FAIL.
+- **W36-0c.4 (R36G0b-2):** the `Props14` tail entry 0xffffffff is handled like 0x3540000b.  Its 8-byte header
+  stays in the canonical form; only a well-formed text name is replaced; the entry may be absent on one side
+  only as a named case (one entry, a text payload).  Junk in the entry FAILs, and a second entry FAILs.
+- **W36-0c.5 (R36G0b-1): the control mask no longer excuses a byte that no field names.**
+  - For each row of the review's table (nine streams, 48 of 196 pairs): decode the bytes and add the field to
+    `NOISE` with its evidence line, or leave them unmasked so the pair FAILs and goes on the OPEN list of
+    W36-0c.1 with the field recorded as not decoded.  Do not widen anything.
+  - Assn Fixed2Data +32..+37 and +41, and Task Fixed2Data +42 and +46..+48, are data by
+    `trace-gate-fields-g0b.md`.  They are never masked.
+  - The control and its null are then used only to tell a new row from an old one.  The gate prints
+    `control-mask <stream> <n>` and counts a problem for any byte the control mask alone would excuse.
+  - Test: for every committed pair, the control mask minus the named fields is empty; and each of the review's
+    seven inverted-byte files FAILs.
+- **W36-0c.6 (R36G0b-6): the test does not read its expectations from the gate.**
+  - The expected noise of the five parsed streams and the font rows are written in the test, from
+    `trace-gate-fields-g0b.md` and the test's own bag parse.
+  - Add a FAIL case for each of the eleven surviving mutations in the review's table, and a
+    `SummaryInformation` case.  Each is seen red with the mutation planted, then green.
+- **W36-0c.7 (R36G0b-9):** in `tools/trace/kvp/host.ps1`, the agent's `ERR` reply reports the agent's error,
+  not a length error.  Settle the wrapping of a reply over 300 characters in the unit test's reply model.
+  The coordinator confirms it on the VM.
+- **W36-0c.8 (R36G0b-10, R36G0b-12):** the head line's "not checked" count is real or is removed.  Correct
+  the overstated sentences in the record.
+- **R36G0b-8** goes to the record as open: it needs a real recording, which the coordinator's re-gate gives.
+- **R36G0b-11:** the G0b commits carry `Co-Authored-By`, not the trailer rule 1 requires.  History is not
+  rewritten.  Record it in the G0c row, and from this group on EVERY commit ends with
+  `Generated-By: Claude Sonnet 5.5 via Claude Code (wave 36)`.
+
+The trace notes are in the private repo beside this one (`../msproject-mac-trace/evidence`).  Cite them by
+file name only.  This group changes no C++ source.
+
+**Acceptance, in `trace_gate_guards`, on the committed file set:**
+- **Negative:** every pair whose edit differs from its control-null outside `SummaryInformation` exits
+  non-zero.  The no-op edits are listed by name with the reason.
+- **Positive:** every control and control-null exits 0, except the OPEN list of W36-0c.1.
+- **Hand-built wrong files:** the review's cases for R36G0b-1 to -4 and the eleven of R36G0b-6 all FAIL.
+- All counts, with their denominators, go in the commit messages and `gates-g0c.md`.
+
+Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0c-COMPLETE`.
+
 ### G2: Props
 
 Writer: `core/mppwrite/props_edit.{h,cpp}`, and the plan layer.  The facts from the trace (`trace-props-framing-r4.md`, `trace-baseline-r4.md`, `trace-calculate-r3.md`):
