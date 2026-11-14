@@ -63,6 +63,27 @@ def pair(stem):
     return [os.path.join(DATA, stem + s) for s in (".mpp", "-control.mpp", "-control-null.mpp")]
 
 
+# The control of a committed control-null save.  Eight nulls were made from a control that is not
+# `<stem>-control.mpp` (scripts/oracle_r7_nulls.py NULLS; the capture specs' `Ctl` in
+# tools/trace/capture/specs6-g5-*.ps1 name the same files); every other null's control is
+# `<stem>-control.mpp`.  A null whose control is not in tests/data is a FAIL line, never a crash.
+CONTROL_OF = {
+    "wave23-flags": "wave23-outline",
+    "wave27-percent-actuals": "synthetic-base",
+    "wave27-priority-750": "wave27-priority-control",
+    "wave28-newtask-auto": "wave28-newtask-manual-control",
+    "wave28-newtask-manual": "wave28-newtask-auto-control",
+    "wave31-resource-sheet": "synthetic-base",
+    "wave31-tables": "synthetic-base",
+    "wave31-usage": "synthetic-base",
+}
+
+
+def control_path(stem):
+    path = os.path.join(DATA, CONTROL_OF.get(stem, stem + "-control") + ".mpp")
+    return path if os.path.exists(path) else None
+
+
 def stream_path(ole, name):
     for s in ole.listdir(streams=True, storages=False):
         n = "/".join("".join(c if " " < c < "\x7f" else "?" for c in part) for part in s)
@@ -214,25 +235,59 @@ try:
         # --- the acceptance sweep over every committed pair (W36-0b.2) --------------------------
         # Positive: the control's own null save, traced against the control, is a PASS.  Negative:
         # the null save traced against the pair's edit is a FAIL when the edit differs from the null
-        # save outside SummaryInformation.  Two pairs are known not to be a same-state control and
-        # null (their records differ in length), so they FAIL the positive case; two edits equal
-        # their control outside the noise (a no-op percent edit), so they PASS the negative one.
-        NOT_SAME_STATE = {"wave30-inactivate", "wave35-g3-assign-remove-port-saved"}
-        NOOP_EDITS = {"wave28-percent-auto100", "wave28-percent-auto40"}
+        # save outside SummaryInformation.  Both run on every control-null in tests/data (W36-0c.1).
+        #
+        # OPEN: the null saves whose records differ from their control's in a field nothing decodes
+        # (the gate reports the stream; the field and the reason are read from the gate's output and
+        # the records, as of 14 November 2026).  An OPEN pair is reported as OPEN, never as a PASS;
+        # the list may only grow with a named field, and a pair that passes again must leave it.
+        CEDL = "???214/CEdl/Var2Data"
+        R24 = {CEDL: "record 0x26400024 (the sort table) is 64 bytes in one save and 128 in the "
+                     "other; what doubles it is not decoded"}
+        R3D = {CEDL: "record 0x2640003d (26 bytes) is in one save only; what adds it is not decoded"}
+        LATER_BUILD = {   # the null was saved by a later Project build than its older control
+            CEDL: "the path record 0x26400031 is absent from the control and present in the null",
+            "???114/TBkndAssn/Var2Data": "one block of key 0x0f400299 (20 bytes) per assignment, in "
+                                         "the null only; not decoded",
+            "???114/TBkndAssn/VarMeta": "the three VarMeta entries of those blocks (36 bytes)",
+            "???214/CFilter/FixedData": "a second filter row (230 bytes) in the null only; not decoded",
+            "???214/CFilter/FixedMeta": "the meta items of that second filter row",
+            "???214/CFilter/Var2Data": "the var block of that second filter row (116 bytes)",
+            "???214/CFilter/VarMeta": "its VarMeta entry, uid 2, key 0x20400006",
+            "Props14": "the canonical forms are 428 and 408 bytes; the record or tail entry that "
+                       "differs is not decoded",
+        }
+        OPEN = {
+            "wave27-priority-750": R24, "wave27-unlink": R24, "wave28-newtask-auto": R24,
+            "wave28-newtask-manual": R24, "wave28-split": R24,
+            "wave35-g3-assign-remove-port-saved": R24,
+            "wave30-inactivate": R3D, "wave36-r7-font-bold-session2": R3D,
+            "wave23-flags": LATER_BUILD, "wave27-percent-actuals": LATER_BUILD,
+            "wave31-resource-sheet": LATER_BUILD, "wave31-tables": LATER_BUILD,
+            "wave31-usage": LATER_BUILD,
+        }
+        # two edits equal their control outside the noise (a no-op percent edit): they PASS the
+        # negative case, and the test shows that they equal the control
+        NOOP_EDITS = {"wave28-percent-auto100": "no task, assignment or view byte differs from its "
+                                                "control; only the path strings and their sizes",
+                      "wave28-percent-auto40": "no task, assignment or view byte differs from its "
+                                               "control; only the path strings and their sizes"}
         stems = sorted(f[:-len("-control-null.mpp")] for f in os.listdir(DATA)
                        if f.endswith("-control-null.mpp"))
-        pos_n = pos_bad = neg_n = neg_bad = 0
-        pos_failed, neg_passed = set(), set()
+        pos_n = neg_n = 0
+        pos_failed, neg_passed, no_control = {}, set(), []
         for stem in stems:
-            e_path, c_path, n_path = pair(stem)
+            c_path = control_path(stem)
+            n_path = os.path.join(DATA, stem + "-control-null.mpp")
+            e_path = os.path.join(DATA, stem + ".mpp")
+            if c_path is None:
+                no_control.append(stem)
+                continue
             SC, SN = load(c_path), load(n_path)
             lines, problems, checked, unchecked = g.compare(SN, SC, SC, SN)
             pos_n += 1
             if problems:
-                pos_failed.add(stem)
-                check("W36-0b.2 positive %s fails only on CEdl/Var2Data size" % stem,
-                      all(ln.startswith("size-differs ???214/CEdl/Var2Data") for ln in lines),
-                      "%r" % (lines,))
+                pos_failed[stem] = sorted({ln.split()[1] for ln in lines if len(ln.split()) > 1})
             if not os.path.exists(e_path):
                 continue
             SE = load(e_path)
@@ -242,18 +297,36 @@ try:
             lines, problems, checked, unchecked = g.compare(SN, SE, SC, SN)
             if not problems:
                 neg_passed.add(stem)
-        print("W36-0b.2 positive: %d pairs, %d FAIL; negative: %d edits, %d PASS" %
-              (pos_n, len(pos_failed), neg_n, len(neg_passed)))
-        check("W36-0b.2 positive sweep: every pair PASSes except the two not-same-state pairs",
-              pos_failed == NOT_SAME_STATE, "%r" % (sorted(pos_failed),))
-        check("W36-0b.2 negative sweep: no edit PASSes except the two no-op edits",
-              neg_passed == NOOP_EDITS, "%r" % (sorted(neg_passed),))
+        print("W36-0c.1 positive: %d control-nulls, %d PASS, %d OPEN; negative: %d edits, %d FAIL, "
+              "%d PASS (no-op)" % (pos_n, pos_n - len(pos_failed), len(pos_failed), neg_n,
+                                   neg_n - len(neg_passed), len(neg_passed)))
+        check("W36-0c.1 every control-null has its control in tests/data",
+              not no_control, "%r" % (no_control,))
+        check("W36-0c.1 every control-null of tests/data was swept (%d)" % len(stems),
+              pos_n == len(stems) and pos_n > 200)
+        unexpected = {s: v for s, v in pos_failed.items() if s not in OPEN}
+        check("W36-0c.1 positive sweep: every control-null PASSes except the OPEN list",
+              not unexpected, "%r" % (unexpected,))
+        stale = sorted(s for s in OPEN if s not in pos_failed)
+        check("W36-0c.1 every OPEN pair still fails (a pair that passes leaves the list)",
+              not stale, "%r" % (stale,))
+        beyond = {s: sorted(set(v) - set(OPEN[s])) for s, v in pos_failed.items()
+                  if s in OPEN and set(v) - set(OPEN[s])}
+        check("W36-0c.1 an OPEN pair fails only in the streams its entry names",
+              not beyond, "%r" % (beyond,))
+        for s in sorted(OPEN):
+            print("OPEN %s: %s" % (s, "; ".join("%s: %s" % (n, OPEN[s][n]) for n in
+                                                  sorted(pos_failed.get(s, [])))))
+        check("W36-0b.2 negative sweep: no edit PASSes except the no-op edits",
+              neg_passed == set(NOOP_EDITS), "%r" % (sorted(neg_passed),))
         for stem in sorted(NOOP_EDITS):
-            e_path, c_path, n_path = pair(stem)
+            c_path = control_path(stem)
+            e_path = os.path.join(DATA, stem + ".mpp")
+            n_path = os.path.join(DATA, stem + "-control-null.mpp")
             lines, problems, checked, unchecked = g.compare(load(e_path), load(c_path),
                                                             load(c_path), load(n_path))
-            check("W36-0b.2 %s: the no-op edit equals its control outside the noise" % stem,
-                  problems == 0, "%r" % (lines,))
+            check("W36-0b.2 %s: the no-op edit equals its control outside the noise (%s)" %
+                  (stem, NOOP_EDITS[stem]), problems == 0, "%r" % (lines,))
 
         # --- W36-0b.7 (R36G0-8): a flip at EVERY offset outside the named noise fields fails -----------
         # The named fields are written out here from the evidence note (FIELDS rows 12 to 24), not
