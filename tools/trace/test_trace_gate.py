@@ -305,11 +305,32 @@ try:
                 for at, want in ((0, len(data) - 4), (4, len(data) - 8), (8, len(data) - 8)):
                     if struct.unpack_from("<I", data, at)[0] == want:
                         out.update(range(at, at + 4))
-                for at, length, rid in records(data, 20):
+                recs_ = records(data, 20)
+                uids_ = {}                       # the slot table's uid count, by record offset
+                for at, length, rid in recs_:
+                    if rid == 0x26400024 and length % 4 == 0 and length <= 1024:
+                        words_ = struct.unpack_from("<%dI" % (length // 4), data, at)
+                        k_ = len(words_)
+                        while k_ and words_[k_ - 1] == 0xFFFFFFFF:
+                            k_ -= 1
+                        uids_[at] = k_
+                for at, length, rid in recs_:
                     if rid == 0x26400031 and text_ok(data[at:at + length]) and \
                             data[at:at + length].endswith(b"!\0\0\0"):
                         out.update(range(at - 12, at - 8))
                         out.update(padded(at, length))
+                    if at in uids_:              # W36-0f.2: the length word and the fill after the uids
+                        out.update(range(at - 12, at - 8))
+                        out.update(range(at + 4 * uids_[at], at + length))
+                    if rid == 0x2640003D and uids_:
+                        n_ = struct.unpack_from("<I", data, at)[0] if length >= 4 else None
+                        if n_ in uids_.values() and data[at:at + length] == \
+                                struct.pack("<II", n_, 0) + b"".join(
+                                    struct.pack("<I", 22 * j) for j in range(1, n_ + 1)) \
+                                + struct.pack("<I", 22) + bytes(2):
+                            out.update(range(at - 12, at + length + (length & 1)))
+                if struct.unpack_from("<I", data, 16)[0] == len(recs_):
+                    out.update(range(16, 20))    # the record count word
             elif name == "???214/CEdl/VarMeta":
                 var2 = streams_.get("???214/CEdl/Var2Data")
                 if var2 is not None and struct.unpack_from("<I", data, 20)[0] == len(var2):
@@ -432,9 +453,8 @@ try:
         # the records, as of 14 November 2026).  An OPEN pair is reported as OPEN, never as a PASS;
         # the list may only grow with a named field, and a pair that passes again must leave it.
         CEDL = "???214/CEdl/Var2Data"
-        R24 = {CEDL: "record 0x26400024 (the sort table) is 64 bytes in one save and 128 in the "
-                     "other; what doubles it is not decoded"}
-        R3D = {CEDL: "record 0x2640003d (26 bytes) is in one save only; what adds it is not decoded"}
+        UIDS = {CEDL: "the slot table (record 0x26400024) holds no uid in the control and the uids 1, 2 "
+                      "and 3 in the null, with the row record of three rows in both (W36-0f.2)"}
         LATER_BUILD = {   # the null was saved by a later Project build than its older control
             CEDL: "the path record 0x26400031 is absent from the control and present in the null",
             "???114/TBkndAssn/Var2Data": "one block of key 0x0f400299 (20 bytes) per assignment, in "
@@ -446,10 +466,7 @@ try:
             "???214/CFilter/VarMeta": "its VarMeta entry, uid 2, key 0x20400006",
         }
         SIZE_OPEN = {
-            "wave27-priority-750": R24, "wave27-unlink": R24, "wave28-newtask-auto": R24,
-            "wave28-newtask-manual": R24, "wave28-split": R24,
-            "wave35-g3-assign-remove-port-saved": R24,
-            "wave30-inactivate": R3D, "wave36-r7-font-bold-session2": R3D,
+            "wave30-inactivate-second": UIDS,
             "wave23-flags": LATER_BUILD, "wave27-percent-actuals": LATER_BUILD,
             "wave31-resource-sheet": LATER_BUILD, "wave31-tables": LATER_BUILD,
             "wave31-usage": LATER_BUILD,
@@ -472,7 +489,8 @@ try:
                                         "baseline +42 00 -> 20 and +46..+48 c0 12 f2 -> 78 1e f1); "
                                         "masking them would also pass an edit of the real field",
             "114/TBkndTask/FixedMeta": "the meta item at +315; not decoded",
-            "214/CEdl/Var2Data": "12 payload bytes of record 0x26400024 (the sort table); not decoded",
+            "214/CEdl/Var2Data": "the date words 0x2640002a, 0x2640002b and 0x2640002d and the view word "
+                                 "0x26400026 +4 (11 payload bytes); not decoded until W36-0f.4",
             "214/CTable/FixedData": "the byte at +447; not decoded",
             "214/CV_iew/Var2Data": "4-byte save words of the view bag (bag block uid 2 +42682; block "
                                    "uid 3 +2270..+2281 and their kin); not decoded",
@@ -489,12 +507,12 @@ try:
                 "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
                 "214/CV_iew/Var2Data", "214/Props",
             ),
-            "wave27-priority-750": ("214/CV_iew/Var2Data",),
-            "wave27-unlink": ("114/TBkndAssn/Fixed2Data", "214/CV_iew/Var2Data"),
+            "wave27-priority-750": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
+            "wave27-unlink": ("114/TBkndAssn/Fixed2Data", "214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
             "wave28-mark-auto": ("214/CV_iew/Var2Data",),
             "wave28-mark-manual": ("214/CV_iew/Var2Data",),
-            "wave28-newtask-auto": ("214/CV_iew/Var2Data",),
-            "wave28-newtask-manual": ("214/CV_iew/Var2Data",),
+            "wave28-newtask-auto": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
+            "wave28-newtask-manual": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
             "wave28-outline-indent": ("214/CV_iew/Var2Data",),
             "wave28-outline-outdent": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
@@ -508,7 +526,7 @@ try:
             "wave28-percent-auto100": ("214/CV_iew/Var2Data",),
             "wave28-percent-auto40": ("214/CV_iew/Var2Data",),
             "wave28-percent-manual0": ("214/CV_iew/Var2Data",),
-            "wave28-split": ("214/CV_iew/Var2Data",),
+            "wave28-split": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
             "wave28-update": ("214/CV_iew/Var2Data",),
             "wave29-outline-auto-indent": ("214/CV_iew/Var2Data",),
             "wave29-outline-auto-outdent": (
@@ -530,7 +548,6 @@ try:
             "wave30-assign-add": ("114/TBkndRsc/FixedMeta",),
             "wave30-assign-delete": ("114/TBkndAssn/Fixed2Data", "114/TBkndRsc/FixedMeta"),
             "wave30-baseline": ("114/TBkndTask/Fixed2Data",),
-            "wave30-inactivate-second": ("214/CEdl/Var2Data",),
             "wave30-level": ("114/TBkndAssn/Fixed2Data", "114/TBkndRsc/FixedMeta"),
             "wave30-resource-add": ("114/TBkndRsc/FixedMeta",),
             "wave30-resource-notes": ("114/TBkndRsc/FixedMeta",),
@@ -564,7 +581,8 @@ try:
             ),
             "wave35-g3-assign-remove-port-saved": (
                 "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
-                "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta", "214/CV_iew/Var2Data",
+                "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta", "214/CEdl/Var2Data",
+                "214/CV_iew/Var2Data",
             ),
             "wave35-viewstate-zoom-custom-narrow": ("214/CEdl/Var2Data",),
             "wave36-r7-calc-assign-1": ("114/TBkndAssn/Fixed2Data",),
@@ -591,7 +609,8 @@ try:
         # `size-differs <a>-><b>`.  A new undecoded byte in a stream a pair already lists changes its
         # count, and the pin fails.  Generated by build/w36/g0d_open.py from the sweep below as of
         # 14 November 2026: 170 rows (122 control-mask, 48 size-differs) in 56 pairs; regenerated at
-        # W36-0f.1 (Props14 reads by its length words and is no longer OPEN): 161 rows (118 control-mask, 43 size-differs) in 56 pairs.
+        # W36-0f.1 (Props14 reads by its length words and is no longer OPEN): 161 rows (118 control-mask, 43 size-differs) in 56 pairs;
+        # at W36-0f.2 (the slot table's fill and the row record are read; two pairs pass): 159 rows in 54 pairs.
         OPEN_PINNED = (
     ('wave23-flags', '???114/Props', 'control-mask 4'),
     ('wave23-flags', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
@@ -600,7 +619,7 @@ try:
     ('wave23-flags', '???114/TBkndAssn/Var2Data', 'size-differs 460->520'),
     ('wave23-flags', '???114/TBkndAssn/VarMeta', 'size-differs 144->180'),
     ('wave23-flags', '???114/TBkndTask/Fixed2Data', 'control-mask 4'),
-    ('wave23-flags', '???214/CEdl/Var2Data', 'size-differs 588->600'),
+    ('wave23-flags', '???214/CEdl/Var2Data', 'size-differs 484->496'),
     ('wave23-flags', '???214/CFilter/FixedData', 'size-differs 230->460'),
     ('wave23-flags', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave23-flags', '???214/CFilter/Var2Data', 'size-differs 108->224'),
@@ -615,23 +634,23 @@ try:
     ('wave27-percent-actuals', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
     ('wave27-percent-actuals', '???114/TBkndTask/Fixed2Data', 'control-mask 4'),
     ('wave27-percent-actuals', '???114/TBkndTask/FixedMeta', 'control-mask 1'),
-    ('wave27-percent-actuals', '???214/CEdl/Var2Data', 'size-differs 474->486'),
+    ('wave27-percent-actuals', '???214/CEdl/Var2Data', 'size-differs 320->332'),
     ('wave27-percent-actuals', '???214/CFilter/FixedData', 'size-differs 230->460'),
     ('wave27-percent-actuals', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave27-percent-actuals', '???214/CFilter/Var2Data', 'size-differs 108->224'),
     ('wave27-percent-actuals', '???214/CFilter/VarMeta', 'size-differs 36->48'),
     ('wave27-percent-actuals', '???214/CV_iew/Var2Data', 'control-mask 106'),
     ('wave27-percent-actuals', '???214/Props', 'control-mask 2'),
-    ('wave27-priority-750', '???214/CEdl/Var2Data', 'size-differs 422->486'),
+    ('wave27-priority-750', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave27-priority-750', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave27-unlink', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
-    ('wave27-unlink', '???214/CEdl/Var2Data', 'size-differs 536->600'),
+    ('wave27-unlink', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave27-unlink', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-mark-auto', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-mark-manual', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-newtask-auto', '???214/CEdl/Var2Data', 'size-differs 422->486'),
+    ('wave28-newtask-auto', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave28-newtask-auto', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-newtask-manual', '???214/CEdl/Var2Data', 'size-differs 422->486'),
+    ('wave28-newtask-manual', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave28-newtask-manual', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-outline-indent', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-outline-outdent', '???114/Props', 'control-mask 2'),
@@ -646,7 +665,7 @@ try:
     ('wave28-percent-auto100', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-percent-auto40', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-percent-manual0', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-split', '???214/CEdl/Var2Data', 'size-differs 422->486'),
+    ('wave28-split', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave28-split', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-update', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave29-outline-auto-indent', '???214/CV_iew/Var2Data', 'control-mask 2'),
@@ -671,8 +690,7 @@ try:
     ('wave30-assign-delete', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
     ('wave30-assign-delete', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
     ('wave30-baseline', '???114/TBkndTask/Fixed2Data', 'control-mask 12'),
-    ('wave30-inactivate', '???214/CEdl/Var2Data', 'size-differs 384->422'),
-    ('wave30-inactivate-second', '???214/CEdl/Var2Data', 'control-mask 12'),
+    ('wave30-inactivate-second', '???214/CEdl/Var2Data', 'size-differs 358->332'),
     ('wave30-level', '???114/TBkndAssn/Fixed2Data', 'control-mask 12'),
     ('wave30-level', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
     ('wave30-resource-add', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
@@ -690,7 +708,7 @@ try:
     ('wave31-resource-sheet', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
     ('wave31-resource-sheet', '???114/TBkndTask/Fixed2Data', 'control-mask 4'),
     ('wave31-resource-sheet', '???114/TBkndTask/FixedMeta', 'control-mask 1'),
-    ('wave31-resource-sheet', '???214/CEdl/Var2Data', 'size-differs 474->486'),
+    ('wave31-resource-sheet', '???214/CEdl/Var2Data', 'size-differs 320->332'),
     ('wave31-resource-sheet', '???214/CFilter/FixedData', 'size-differs 230->460'),
     ('wave31-resource-sheet', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave31-resource-sheet', '???214/CFilter/Var2Data', 'size-differs 108->224'),
@@ -705,7 +723,7 @@ try:
     ('wave31-tables', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
     ('wave31-tables', '???114/TBkndTask/Fixed2Data', 'control-mask 4'),
     ('wave31-tables', '???114/TBkndTask/FixedMeta', 'control-mask 1'),
-    ('wave31-tables', '???214/CEdl/Var2Data', 'size-differs 474->486'),
+    ('wave31-tables', '???214/CEdl/Var2Data', 'size-differs 320->332'),
     ('wave31-tables', '???214/CFilter/FixedData', 'size-differs 230->460'),
     ('wave31-tables', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave31-tables', '???214/CFilter/Var2Data', 'size-differs 108->224'),
@@ -720,7 +738,7 @@ try:
     ('wave31-usage', '???114/TBkndRsc/FixedMeta', 'control-mask 1'),
     ('wave31-usage', '???114/TBkndTask/Fixed2Data', 'control-mask 4'),
     ('wave31-usage', '???114/TBkndTask/FixedMeta', 'control-mask 1'),
-    ('wave31-usage', '???214/CEdl/Var2Data', 'size-differs 474->486'),
+    ('wave31-usage', '???214/CEdl/Var2Data', 'size-differs 320->332'),
     ('wave31-usage', '???214/CFilter/FixedData', 'size-differs 230->460'),
     ('wave31-usage', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave31-usage', '???214/CFilter/Var2Data', 'size-differs 108->224'),
@@ -740,13 +758,12 @@ try:
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/Fixed2Meta', 'control-mask 6'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/FixedMeta', 'control-mask 10'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
-    ('wave35-g3-assign-remove-port-saved', '???214/CEdl/Var2Data', 'size-differs 486->422'),
+    ('wave35-g3-assign-remove-port-saved', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave35-g3-assign-remove-port-saved', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave35-viewstate-zoom-custom-narrow', '???214/CEdl/Var2Data', 'control-mask 7'),
     ('wave36-r7-calc-assign-1', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
     ('wave36-r7-calc-assign-2', '???114/TBkndAssn/Fixed2Data', 'control-mask 8'),
     ('wave36-r7-dsi-total-work', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
-    ('wave36-r7-font-bold-session2', '???214/CEdl/Var2Data', 'size-differs 384->422'),
     ('wave36-r7-note-assignment', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
     ('wave36-r7-table1-column-replace', '???214/CTable/FixedData', 'control-mask 1'),
     ('wave36-r7-table1-date-format', '???214/CTable/FixedData', 'control-mask 1'),
@@ -1126,6 +1143,176 @@ try:
         def v4(n):
             return bytes([n & 255, 0x11, 0x22, 0x33, 0x44, 0x55, 0x41, 0xF1, 0xB9, 0x5B, 0x00, 0x15,
                           0x5D, 1, 2, (n >> 8) & 255])
+
+        # --- W36-0f.2: the CEdl slot table (record 0x26400024) is the task uids in view order -----------
+        # Its uids are compared one by one.  Only the 0xffffffff words after the last uid, the
+        # allocation capacity, are a session field (DOSSIER, "CEdl slot-table capacity": 64 bytes in 280
+        # committed files and 128 in 97 files that hold the same uids, 72 in the VM's saves; a host
+        # control and its null differ in it in 6 of 223 pairs).  The size words follow from the
+        # canonical form.  Record 0x2640003d, the view row positions, is derived from the slot table
+        # (n, 22, 44 .. 22 n, 22 and a u16): present in one save only of 2 of the 223 pairs (DOSSIER,
+        # "CEdl record 0x2640003d"), it is dropped only in that form and with n the number of uids.
+        cedl_n, cedl_meta_n, cedl_props_n = "???214/CEdl/Var2Data", "???214/CEdl/VarMeta", "???214/Props"
+        cd2 = R[cedl_n]
+        recs2 = g.frame_records(cd2, 20)
+        slot_rec = [r for r in recs2 if r[2] == 0x26400024][0]
+        slot_pl = cd2[slot_rec[0] + 12:slot_rec[0] + 12 + slot_rec[1]]
+        slot_words = list(struct.unpack("<%dI" % (len(slot_pl) // 4), slot_pl))
+        slot_uids = [w for w in slot_words if w != 0xFFFFFFFF]
+        check("W36-0f.2 the reference's slot table is its uids and then 0xffffffff fill",
+              slot_words[:len(slot_uids)] == slot_uids and len(slot_uids) >= 2, "%r" % (slot_words,))
+        rows_rec = [r for r in recs2 if r[2] == 0x2640003D]
+
+        def rows_payload(n):
+            return struct.pack("<II", n, 0) + b"".join(struct.pack("<I", 22 * k) for k in range(1, n + 1)) \
+                + struct.pack("<I", 22) + bytes(2)
+
+        def cedl_rebuilt(streams_, swap=None, add=None, count=None, junk=None, drop=()):
+            """The streams with the CEdl stream rebuilt: `swap` {record id: payload} replaces payloads,
+            `add` [(id, payload)] inserts records before the path record, `drop` {id} removes records; the length words, the three
+            size words, the record count (or `count`), VarMeta +20 and the 214/Props length follow."""
+            d_ = streams_[cedl_n]
+            body = bytearray()
+            n_rec = 0
+            for pos, length, rid, kind in g.frame_records(d_, 20):
+                if rid in drop:
+                    continue
+                if rid == g.CEDL_PATH_ID:
+                    for aid, apl in (add or ()):
+                        body += struct.pack("<III", len(apl), aid, 1) + apl + bytes(len(apl) & 1)
+                        n_rec += 1
+                payload = d_[pos + 12:pos + 12 + length]
+                if swap and rid in swap:
+                    payload = swap[rid]
+                body += struct.pack("<III", len(payload), rid, kind) + payload + bytes(len(payload) & 1)
+                n_rec += 1
+            new = bytearray(d_[:20]) + body
+            if junk:
+                new += junk
+            struct.pack_into("<III", new, 0, len(new) - 4, len(new) - 8, len(new) - 8)
+            struct.pack_into("<I", new, 16, n_rec if count is None else count)
+            out_ = dict(streams_)
+            out_[cedl_n] = bytes(new)
+            mm_ = bytearray(streams_[cedl_meta_n])
+            struct.pack_into("<I", mm_, 20, len(new))
+            out_[cedl_meta_n] = bytes(mm_)
+            pp_ = bytearray(streams_[cedl_props_n])
+            for pos, length, rid, kind in g.frame_records(streams_[cedl_props_n], 16):
+                if rid == g.VIEW_CEDL_SIZE_ID:
+                    struct.pack_into("<I", pp_, pos + 12, len(new))
+            out_[cedl_props_n] = bytes(pp_)
+            return out_
+
+        def slots_payload(uids, capacity):
+            return b"".join(struct.pack("<I", u) for u in uids) + b"\xff" * (capacity - 4 * len(uids))
+
+        def cedl_verdict(label, traced_, ref_, want_fail, tag="W36-0f.2"):
+            lines_, problems_, checked_, unchecked_ = g.compare(traced_, ref_, C, N)
+            check("%s %s %s" % (tag, label, "fails" if want_fail else "is noise"),
+                  (problems_ >= 1 and any(cedl_n in ln for ln in lines_)) if want_fail else problems_ == 0,
+                  "%r" % (lines_,))
+
+        cap0 = len(slot_pl)
+        same = cedl_rebuilt(R, swap={0x26400024: slots_payload(slot_uids, cap0)})
+        check("W36-0f.2 the rebuilt stream with the reference's slot table is the reference",
+              same[cedl_n] == R[cedl_n])
+        # a different capacity with equal uids passes, in either direction
+        for cap in (4 * len(slot_uids), 64, 72, 128, 144, 1024):
+            wide = cedl_rebuilt(R, swap={0x26400024: slots_payload(slot_uids, max(cap, 4 * len(slot_uids)))})
+            cedl_verdict("a slot table of %d bytes with the reference's uids, traced" % max(cap, 4 * len(slot_uids)),
+                         wide, R, False)
+            cedl_verdict("a slot table of %d bytes with the reference's uids, reference" % max(cap, 4 * len(slot_uids)),
+                         R, wide, False)
+        # a changed, swapped, added, dropped or emptied uid is data
+        for label, uids in (("a changed uid", [slot_uids[0] + 1] + slot_uids[1:]),
+                            ("the first two uids swapped", [slot_uids[1], slot_uids[0]] + slot_uids[2:]),
+                            ("one uid more", slot_uids + [slot_uids[-1] + 1]),
+                            ("the last uid dropped", slot_uids[:-1]),
+                            ("no uid", [])):
+            for cap in (cap0, 128):
+                cap_ = max(cap, 4 * len(uids))
+                cedl_verdict("%s in a slot table of %d bytes" % (label, cap_),
+                             cedl_rebuilt(R, swap={0x26400024: slots_payload(uids, cap_)}), R, True)
+        # a hole inside the uids (0xffffffff is the fill only after the last uid)
+        holed = list(slot_uids)
+        holed[0] = 0xFFFFFFFF
+        cedl_verdict("a 0xffffffff in place of the first uid",
+                     cedl_rebuilt(R, swap={0x26400024: slots_payload(holed, cap0)}), R, True)
+        # the fill must be the fill: another word after the uids is a uid
+        other_fill = bytearray(slots_payload(slot_uids, 128))
+        other_fill[-4:] = struct.pack("<I", 7)
+        cedl_verdict("a word that is not 0xffffffff at the end of the fill",
+                     cedl_rebuilt(R, swap={0x26400024: bytes(other_fill)}), R, True)
+        # a table that is not a whole number of words, or past the capacity bound, is compared as it is
+        cedl_verdict("a slot table of 66 bytes (not whole words)",
+                     cedl_rebuilt(R, swap={0x26400024: slots_payload(slot_uids, cap0) + b"\xff\xff"}), R, True)
+        cedl_verdict("a slot table of 2048 bytes (past the capacity bound)",
+                     cedl_rebuilt(R, swap={0x26400024: slots_payload(slot_uids, 2048)}), R, True)
+        both = cedl_rebuilt(R, swap={0x26400024: slots_payload(slot_uids, 2048)})
+        cedl_verdict("a slot table of 2048 bytes on both sides", both, both, False)
+        cedl_verdict("a slot table of 2048 bytes against 2052 bytes", both,
+                     cedl_rebuilt(R, swap={0x26400024: slots_payload(slot_uids, 2052)}), True)
+        # the length word of the table is not a field of its own: it follows from the canonical form
+        # (a length word that does not frame the stream is not a table at all and fails)
+        bad_len = bytearray(R[cedl_n])
+        struct.pack_into("<I", bad_len, slot_rec[0], slot_rec[1] + 4)
+        cedl_verdict("a slot table length word of 4 more than its payload",
+                     dict(R, **{cedl_n: bytes(bad_len)}), R, True)
+        # derived on one side only: an emptied table (length 0) is not a table of fill
+        no_table = cedl_rebuilt(R, swap={0x26400024: b""})
+        cedl_verdict("an empty slot table", no_table, R, True)
+        cedl_verdict("an empty slot table on both sides", no_table, no_table, False)
+        # the record 0x2640003d: dropped only as the row-position record of the slot table's uid count
+        n_uid = len(slot_uids)
+        base2 = cedl_rebuilt(R, drop={0x2640003D})
+        # the reference's own row record is the longer form (52 bytes: view date words follow the rows),
+        # which is not the plain form: it is compared, present against absent fails either way
+        check("W36-0f.2 the reference's row record is not the plain form of %d rows, and the built file "
+              "without it is shorter" % n_uid,
+              len(rows_rec) == 1 and
+              R[cedl_n][rows_rec[0][0] + 12:rows_rec[0][0] + 12 + rows_rec[0][1]] != rows_payload(n_uid) and
+              len(base2[cedl_n]) < len(R[cedl_n]), "%r" % (rows_rec,))
+        cedl_verdict("the committed (longer) row record against none, traced", R, base2, True)
+        cedl_verdict("the committed (longer) row record against none, reference", base2, R, True)
+        rows_added = cedl_rebuilt(base2, add=[(0x2640003D, rows_payload(n_uid))])
+        check("W36-0f.2 the built file with the row record is 38 bytes longer",
+              len(rows_added[cedl_n]) == len(base2[cedl_n]) + 12 + len(rows_payload(n_uid)) + (len(rows_payload(n_uid)) & 1))
+        cedl_verdict("the row record in the traced save only", rows_added, base2, False)
+        cedl_verdict("the row record in the reference save only", base2, rows_added, False)
+        cedl_verdict("the row record in both saves", rows_added, rows_added, False)
+        # one row too many or too few against the slot table
+        for n_bad in (n_uid + 1, n_uid - 1, 0):
+            cedl_verdict("the row record of %d rows over %d uids, one side only" % (n_bad, n_uid),
+                         cedl_rebuilt(base2, add=[(0x2640003D, rows_payload(n_bad))]), base2, True)
+        # any other content of the record is compared, also when it is in both saves
+        for label, mut in (("a changed row position", lambda b: b[:8] + struct.pack("<I", 23) + b[12:]),
+                           ("a changed last word", lambda b: b[:-6] + struct.pack("<I", 21) + b[-2:]),
+                           ("a changed pad", lambda b: b[:-1] + b"\x01"),
+                           ("a changed zero word", lambda b: b[:4] + struct.pack("<I", 1) + b[8:]),
+                           ("a trailing word", lambda b: b + struct.pack("<I", 0))):
+            odd_rows = cedl_rebuilt(base2, add=[(0x2640003D, mut(rows_payload(n_uid)))])
+            cedl_verdict("%s of the row record, one side only" % label, odd_rows, base2, True)
+            cedl_verdict("%s of the row record against the plain one" % label, odd_rows, rows_added, True)
+        # the same row record twice with different content on both sides is data
+        other_rows = cedl_rebuilt(base2, add=[(0x2640003D, rows_payload(n_uid)[:-6] + struct.pack("<I", 23) + bytes(2))])
+        cedl_verdict("a row record that differs between the two saves", other_rows, rows_added, True)
+        # with no valid slot table the row record cannot be checked against it, so it is compared
+        cedl_verdict("the row record, one side only, beside a slot table of 66 bytes (not a table)",
+                     cedl_rebuilt(base2, swap={0x26400024: slots_payload(slot_uids, cap0) + b"\xff\xff"},
+                                  add=[(0x2640003D, rows_payload(n_uid))]),
+                     cedl_rebuilt(base2, swap={0x26400024: slots_payload(slot_uids, cap0) + b"\xff\xff"}), True)
+        # the record count word: the number of records or data
+        cedl_verdict("a record count word of 1 more than the records", cedl_rebuilt(R, count=len(recs2) + 1), R, True)
+        cedl_verdict("a record count word of 1 more than the records, on both sides",
+                     cedl_rebuilt(R, count=len(recs2) + 1), cedl_rebuilt(R, count=len(recs2) + 1), False)
+        cedl_verdict("the row record added with the record count word not raised",
+                     cedl_rebuilt(base2, add=[(0x2640003D, rows_payload(n_uid))], count=len(recs2) - 1), base2, True)
+        # the record count word and the size words are derived on each side
+        check("W36-0f.2 the gate names the slot table and the count word as derived",
+              {"slots", "count"} <= g.canonical_all(R)[2][cedl_n])
+        check("W36-0f.2 the canonical form of the slot table is its uids only",
+              g.canonical_all(R)[0][cedl_n][slot_rec[0]:slot_rec[0] + 12 + 4 * len(slot_uids)] ==
+              struct.pack("<III", 4 * len(slot_uids), 0x26400024, 1) + slot_pl[:4 * len(slot_uids)])
 
         def put(streams_, name_, edits):
             out = dict(streams_)

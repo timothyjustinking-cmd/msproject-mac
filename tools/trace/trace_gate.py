@@ -192,6 +192,9 @@ VAR_META = {
 }
 
 CEDL_PATH_ID = 0x26400031        # UTF-16 file path ending "!" and NUL (the last CEdl record)
+CEDL_SLOTS_ID = 0x26400024       # the task uids in view order, then 0xffffffff fill (capacity)
+CEDL_ROWS_ID = 0x2640003D        # view row positions, from the slot table; in one save only at times
+CEDL_SLOTS_MAX = 1024            # bytes: the capacity bound; the committed saves reach 144
 PROPS14_PATH_ID = 0x35400008     # UTF-16 file path
 PROPS14_NAME_ENTRIES = (0xFFFFFFFF, 0x3540000B)   # tail entries, each a UTF-16 user name
 PROPS14_SAVED_ID = 0x3540000A    # u16 0 or 1, session: how the host file was saved (DOSSIER)
@@ -286,6 +289,11 @@ def _canon_cedl_var2(data, streams):
             out[at:at + 4] = bytes(4)
             noise.update(range(at, at + 4))
             derived.add("+%d" % at)
+    slots = None
+    for pos, length, rid, kind in recs:
+        if rid == CEDL_SLOTS_ID:
+            slots = _slot_uids(data[pos + 12:pos + 12 + length])
+    kept = 0
     for pos, length, rid, kind in recs:
         end = pos + 12 + length + (length & 1)
         payload = data[pos + 12:pos + 12 + length]
@@ -294,9 +302,49 @@ def _canon_cedl_var2(data, streams):
             noise.update(range(pos, pos + 4))
             noise.update(range(pos + 12, end))
             derived.add("path")
+        elif rid == CEDL_SLOTS_ID and _slot_uids(payload) is not None:
+            uids = _slot_uids(payload)
+            out += struct.pack("<III", 4 * len(uids), rid, kind) + payload[:4 * len(uids)]
+            noise.update(range(pos, pos + 4))
+            noise.update(range(pos + 12 + 4 * len(uids), end))
+            derived.add("slots")
+        elif rid == CEDL_ROWS_ID and slots is not None and _rows_ok(payload, len(slots)):
+            noise.update(range(pos, end))
+            continue
         else:
             out += data[pos:end]
+        kept += 1
+    if _u32(data, 16) == len(recs):
+        out[16:20] = struct.pack("<I", kept)
+        noise.update(range(16, 20))
+        derived.add("count")
     return bytes(out), noise, derived
+
+
+def _slot_uids(payload):
+    """The uids of the CEdl slot table (record 0x26400024) as a tuple, or None when it is not
+    one.  The table is the task uids in view order and then 0xffffffff words up to an allocation
+    capacity: 64 bytes in 280 committed files, 128 in 97 files with the same three uids, 72 in the
+    VM's saves (W36-0f.2, DOSSIER "CEdl slot-table capacity").  Only that trailing fill is
+    session state; the capacity is bounded at CEDL_SLOTS_MAX bytes (the committed saves reach 144)."""
+    if len(payload) % 4 or len(payload) > CEDL_SLOTS_MAX:
+        return None
+    words = struct.unpack("<%dI" % (len(payload) // 4), payload)
+    k = len(words)
+    while k and words[k - 1] == 0xFFFFFFFF:
+        k -= 1
+    return words[:k]
+
+
+def _rows_ok(payload, n):
+    """True when `payload` is the view-row-position record 0x2640003d in the form it has in 459
+    of the committed saves, [n][0][22][44]..[22 n][22][u16 0], with n the number of slot-table uids.
+    The record is then derived from the slot table, which is compared, so its presence is the
+    session field (it is in one save only of 2 of the 223 control/null pairs, DOSSIER "CEdl record
+    0x2640003d").  Any other content, or another n, is a difference that stays."""
+    want = struct.pack("<II", n, 0) + b"".join(struct.pack("<I", 22 * k) for k in range(1, n + 1)) \
+        + struct.pack("<I", 22) + bytes(2)
+    return payload == want
 
 
 def _canon_cedl_meta(data, streams):
