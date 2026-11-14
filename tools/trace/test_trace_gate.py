@@ -927,6 +927,90 @@ try:
                   rc == 1 and all(("control-mask %s %d" % (s, n)) in out for s, n in expect.items()),
                   out[:400])
 
+        # --- W36-0f.6: the 13 "data" targets of the DOSSIER, each a reference with one field changed ---
+        # DOSSIER "Data fields": the VM's save of each target differs from the host's reference in these
+        # fields, and none is a session or machine field, so none is masked.  Each file here is the
+        # committed reference (the host's save) with the field set to the VM's recorded value, against
+        # the pair's own control and null; the reference's bytes are asserted first, so a wrong offset
+        # is a FAIL of the case and not a quiet pass.  (stem, field, stream, offset in the stream,
+        # reference bytes, recorded bytes.)  The offsets are the `ro` and `runs` of r11/<target>.txt.
+        # The two CEdl slot lists are in pairs that are OPEN (the control and null differ in size), so
+        # the gate's FAIL there is the pair's own; the slot uids themselves are shown by the canonical
+        # form of the stream differing, which does not depend on the pair.
+        DATA_TARGETS = (
+            ("wave30-inactivate-second", "Assn Fixed2Meta +24", "???114/TBkndAssn/Fixed2Meta", 24,
+             "87", "8f"),
+            ("wave30-inactivate-second", "Task FixedMeta +222", "???114/TBkndTask/FixedMeta", 222,
+             "8f", "cf"),
+            ("wave30-inactivate-second", "CEdl slot list", "???214/CEdl/Var2Data", 230,
+             "ffffffffffffffffffffffff", "010000000200000003000000"),
+            ("wave31-usage", "CEdl slot list", "???214/CEdl/Var2Data", 272, "09001000", "ffffffff"),
+            ("wave35-viewstate-sort-flat-name-desc", "CEdl sort order list", "???214/CEdl/Var2Data", 182,
+             "010000000300000002", "030000000200000001"),
+            ("wave35-viewstate-sort-flat-name-desc", "CEdl slot list", "???214/CEdl/Var2Data", 288,
+             "010000000300000002", "030000000200000001"),
+            ("wave35-g3-font-bold-range", "CV_iew bag block size word", "???214/CV_iew/Var2Data", 42580,
+             "f8a60000f8a6", "24a7000024a7"),
+            ("wave35-g3-font-bold-range", "CV_iew font item row", "???214/CV_iew/Var2Data", 85284,
+             "02", "01"),
+            ("wave35-g3-font-bold-range", "CV_iew VarMeta offset", "???214/CV_iew/VarMeta", 20,
+             "8a", "b6"),
+            ("wave35-g3-font-bold-range", "214/Props record 0x10001", "???214/Props", 9962, "8a", "b6"),
+            ("wave36-r7-assign-effort-off", "Rsc Fixed2Meta +279", "???114/TBkndRsc/Fixed2Meta", 279,
+             "0b", "2b"),
+            ("wave36-r7-assign-effort-on", "Rsc Fixed2Meta +279", "???114/TBkndRsc/Fixed2Meta", 279,
+             "0b", "2b"),
+            ("wave36-r7-dsi-total-work", "Rsc Fixed2Meta +279", "???114/TBkndRsc/Fixed2Meta", 279,
+             "0b", "2b"),
+            ("wave36-r7-table-resource-column", "CTable column field id +127", "???214/CTable/Var2Data",
+             1182, "5600400c06", "0800400c0c"),
+            ("wave36-r7-table-resource-column", "CTable column title +140", "???214/CTable/Var2Data",
+             1195, "000000000000000000", "540065007800740031"),
+            ("wave36-r7-table0-column-replace", "CTable column field id +127", "???214/CTable/Var2Data",
+             131, "cd00400b06", "3300400b0c"),
+            ("wave36-r7-table0-column-replace", "CTable column title +140", "???214/CTable/Var2Data",
+             144, "000000000000000000", "540065007800740031"),
+            ("wave36-r7-table0-date-format", "CTable date format +7", "???214/CTable/Var2Data", 11,
+             "ff", "05"),
+            ("wave36-r7-table1-date-format", "CTable date format +7", "???214/CTable/Var2Data", 1062,
+             "ff", "05"),
+            ("wave36-r7-w37-b-interim-1", "Assn Props record 0x4400001 +128", "???114/TBkndAssn/Props",
+             172, "c0", "00"),
+            ("wave36-r7-w37-b-interim-1", "Assn Props record 0x4400001 +216", "???114/TBkndAssn/Props",
+             260, "00", "c0"),
+            ("wave36-r7-w37-b-interim-2", "Assn Props record 0x4400001 +216", "???114/TBkndAssn/Props",
+             260, "00", "c0"),
+        )
+        check("W36-0f.6 the DOSSIER's 13 data targets are all here",
+              len({t_[0] for t_ in DATA_TARGETS}) == 13, "%d" % len({t_[0] for t_ in DATA_TARGETS}))
+        for stem, field_, sname, at, was, now in DATA_TARGETS:
+            e_path, c_path = pair(stem)[0], control_path(stem)
+            n_path = os.path.join(DATA, stem + "-control-null.mpp")
+            DR, DC, DN = load(e_path), load(c_path), load(n_path)
+            seen = DR[sname][at:at + len(was) // 2].hex()
+            check("W36-0f.6 %s %s: the reference holds %s at +%d of the stream" % (stem, field_, was, at),
+                  seen == was, seen)
+            check("W36-0f.6 %s %s: the reference against itself is clean" % (stem, field_),
+                  g.compare(DR, DR, DC, DN)[1] == 0)
+            bad = os.path.join(tmp, "data-%s-%d.mpp" % (stem, at))
+            shutil.copyfile(e_path, bad)
+            ole = olefile.OleFileIO(bad, write_mode=True)
+            try:
+                path_ = stream_path(ole, sname)
+                data_ = bytearray(ole.openstream(path_).read())
+                data_[at:at + len(now) // 2] = bytes.fromhex(now)
+                ole.write_stream(path_, bytes(data_))
+            finally:
+                ole.close()
+            rc, out = run_cli(bad, e_path, c_path, n_path)
+            check("W36-0f.6 %s %s: %s -> %s FAILs in %s" % (stem, field_, was, now, sname),
+                  rc == 1 and sname in out, out[:300])
+            if sname in g.CANON:
+                DT = load(bad)
+                check("W36-0f.6 %s %s: the canonical form of %s differs, so the field is not masked" %
+                      (stem, field_, sname),
+                      g.CANON[sname](DT[sname], DT)[0] != g.CANON[sname](DR[sname], DR)[0])
+
         # --- W36-0b.7 (R36G0-8): a flip at EVERY offset outside the named noise fields fails -----------
         # The named fields are written out here from the evidence note (FIELDS rows 12 to 24), not
         # read back from the gate, so a window that grows past its field, or covers a row, a record
