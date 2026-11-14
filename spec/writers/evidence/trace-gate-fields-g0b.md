@@ -9,8 +9,8 @@ A version-1 GUID (UuidCreateSequential) is stored in RFC byte order: byte 6 >> 4
 
 | Field | Where | Width | Noise because | Earlier note |
 |---|---|---|---|---|
-| Assn Fixed2Data GUIDs | 114/TBkndAssn/Fixed2Data row (48 bytes) +0 and +16 | 16 each | version-1 GUIDs, regenerated at every save; +32..+47 is equal in the VM file and the pair, so it is data | trace-insert-milestone-r4.md:9, :11-14 |
-| Task Fixed2Data GUIDs | 114/TBkndTask/Fixed2Data row (64 bytes) +0 and +24 (some rows hold zeros at +24) | 16 each | version-1 GUIDs; +42 and +46..49 are a flags byte and the Calculate save stamp, data, not masked | trace-insert-summary.md:42 |
+| Assn Fixed2Data GUIDs | 114/TBkndAssn/Fixed2Data row (48 bytes) +0 and +16 | 16 each | version-1 GUIDs, regenerated at every save; +32..+37 and +41 differ between a control and its null with no edit (per-save values nobody decoded: not masked, so the pairs that show them are OPEN in the test; masking them would also pass an edit of the real field) | trace-insert-milestone-r4.md:9, :11-14 |
+| Task Fixed2Data GUIDs | 114/TBkndTask/Fixed2Data row (64 bytes) +0 and +24 (some rows hold zeros at +24) | 16 each | version-1 GUIDs; +42 and +46..49 differ between a control and its null with no edit (wave30-baseline: +42 00 -> 20, +46..48 c0 12 f2 -> 78 1e f1): per-save values nobody decoded, not masked, so the pairs that show them are OPEN in the test | trace-insert-summary.md:42 |
 | Rsc Fixed2Data GUIDs | 114/TBkndRsc/Fixed2Data row (40 bytes) +0 and +24 | 16 each | version-1 GUIDs | trace-insert-summary.md:42 |
 | Cal Fixed2Data GUID | 114/TBkndCal/Fixed2Data row (16 bytes) +0 | 16 | version-1 GUID | trace-insert-summary.md:42 |
 | Cons Fixed2Data GUID | 114/TBkndCons/Fixed2Data row (16 bytes) +0 | 16 | version-1 GUID | trace-insert-summary.md:42 |
