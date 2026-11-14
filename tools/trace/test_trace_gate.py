@@ -3268,6 +3268,25 @@ try:
                     case8("key %#x: two different stale words are %s" % (key_, "noise" if listed_ else "data"),
                           rekey_(stale_set(SB, vname_, off_, w1_)), rekey_(stale_set(SB, vname_, off_, w2_)),
                           not listed_)
+        # --- W36-0f.4.9: the FixedMeta and Fixed2Data bytes the brief named, held as data -----------------
+        # Task FixedMeta +315, Rsc FixedMeta +140 and +177 and Task Fixed2Data row +58 carry no per-save
+        # difference: of the 202 committed control/null pairs, the four that differ at Task FixedMeta +315
+        # and the five that differ at Task Fixed2Data row 0 +58 (0xffffffff against 0) are nulls saved from a
+        # different file than their control (CONTROL_OF), and no pair differs at Rsc FixedMeta +140 or +177
+        # (its +176 and +213 differ in 7 same-file pairs, another byte, no target of the DOSSIER fails at it).
+        # The gate masks none of them; each is a FAIL, a change of the byte on either side.
+        tf_meta, rs_meta, tf_f2d = ("???114/TBkndTask/FixedMeta", "???114/TBkndRsc/FixedMeta",
+                                    "???114/TBkndTask/Fixed2Data")
+        for stream_, at_, label_ in ((tf_meta, 315, "Task FixedMeta +315"), (tf_meta, 316, "Task FixedMeta +316"),
+                                     (rs_meta, 140, "Rsc FixedMeta +140"), (rs_meta, 177, "Rsc FixedMeta +177"),
+                                     (tf_f2d, 250, "Task Fixed2Data row 0 +58"),
+                                     (tf_f2d, 253, "Task Fixed2Data row 0 +61")):
+            check("W36-0f.4.9 the pair holds %s" % label_, len(SB[stream_]) > at_, "%d" % len(SB[stream_]))
+            for new_ in (SB[stream_][at_] ^ 0x04, SB[stream_][at_] ^ 0xFF):
+                slot_verdict("%s changed to %#04x in the traced save fails" % (label_, new_),
+                             put(SB, stream_, [(at_, bytes([new_]))]), SB, True, stream_, "W36-0f.4.9")
+                slot_verdict("%s changed to %#04x in the reference save fails" % (label_, new_),
+                             SB, put(SB, stream_, [(at_, bytes([new_]))]), True, stream_, "W36-0f.4.9")
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
