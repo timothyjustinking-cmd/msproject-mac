@@ -315,6 +315,47 @@ denominators, go in the commit messages and `gates-g0d.md`.
 
 Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0d-COMPLETE`.
 
+**Group order after the G0d review (coordinator, Sat 14 Nov 2026).**  The G0d review found no Critical and 1 High
+in the gate's test, so G0e runs alone next, before G2.
+
+### G0e: the gate's test, made to hold every guard (the G0d review's High, before G2)
+
+Source: `docs/handoff/wave36-verification/review-g0d.md` (R36G0d-1 to -6; each finding has the command that
+showed it and a **Fix:** paragraph).  The review found no Critical.  Its one High is in the test, not the
+gate's verdicts: four guards of the gate are not on the meta-test's list and can be removed with the test
+still green.  The coordinator reproduced one: with the SummaryInformation section-size check removed, the
+test reads 491 PASS, exit 0.
+
+The rule for this group: **the meta-test's list of guards is derived from the gate, not written by hand.**
+
+Items, in this order:
+- **W36-0e.1 (R36G0d-1):** the meta-test derives its candidate guards from `trace_gate.py` itself (for example
+  with `ast`: every condition that leads to a problem line, a FAIL or a refusal), and removes each in turn.
+  A candidate may be left off only on an explicit "redundant, with reason" list in the test, each reason
+  naming the other guard that covers it.  A crash no longer counts as red: a removal that crashes is a FAIL
+  of the meta-test, named.  Add a FAIL case for each of the four guards the review found green (the Props14
+  tail count word, the SummaryInformation section size, the first value following the table, the LastSave
+  type word 0x40), built from the review's wrong files.  Report: candidates derived, removed red, listed
+  redundant, crashed.
+- **W36-0e.2 (R36G0d-2):** a masked value is accepted only inside the range the committed saves show, quoted
+  from them: the creation stamps within the span of the committed control and null stamps; the two 114/Props
+  save words equal to each other (they are equal in all 624 files); LastSave within the span of the
+  committed saves.  Tests: the review's six files (stamp = 1, stamp = 0x7fffffff, both save words = 1, the
+  two words unequal, LastSave in 2600, LastSave in 2001) each FAIL.
+- **W36-0e.3 (R36G0d-3):** an emptied Props14 tail name is not equal to its placeholder (the same `payload
+  and` guard the path record has).  Test: both tail names emptied FAILs.
+- R36G0d-4 to -6 (Low) and R36G0c-9, -10 go to the record as queued, unless the fix is one line.
+
+This group changes no C++ source.  It does not touch the VM, `build/trace-2021/` or `build/r7/`.  The
+coordinator is re-gating every recording with the G0d gate while this group runs; a change here that turns
+any verdict means those targets are re-gated after G0e.
+
+**Acceptance, in `trace_gate_guards`:** everything G0d accepted stays green; every hand-built wrong file of
+review-g0d.md FAILs; the derived meta-test shows every candidate red when removed, or listed redundant with a
+reason, and none crashed.  All counts, with their denominators, in the commit messages and `gates-g0e.md`.
+
+Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0e-COMPLETE`.
+
 ### G2: Props
 
 Writer: `core/mppwrite/props_edit.{h,cpp}`, and the plan layer.  The facts from the trace (`trace-props-framing-r4.md`, `trace-baseline-r4.md`, `trace-calculate-r3.md`):
