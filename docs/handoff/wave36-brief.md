@@ -356,6 +356,77 @@ reason, and none crashed.  All counts, with their denominators, in the commit me
 
 Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0e-COMPLETE`.
 
+**Group order after the first re-gate (coordinator, Sun 15 Nov 2026).**  The re-gate with the G0d gate FAILed
+all 231 recordings on fields the gate does not yet name, so G0f runs next, before G2.
+
+### G0f: the gate names the machine and session fields the re-gate found (before G2)
+
+Source: the first re-gate of every recording with the G0d gate (`b57a87c`) FAILed all 231 recordings with a
+saved copy; none PASSed.  The failure dossier, `build/trace-2021/regate/DOSSIER.md` (git-ignored, private
+evidence: cite it by section name only, never copy its paths or values into a tracked file), takes every
+failure down to the field.  It sorts each differing field into one of four kinds:
+- **machine**: differs because the trace VM is not the host;
+- **session**: differs between any two saves on one machine;
+- **data**: a recorded save holds different content from its reference;
+- **unknown**: not yet decided.
+
+Its prediction, which is arithmetic and not a gate run, is PASS 210, FAIL 13 (a data field remains) and
+UNKNOWN 8, if every machine and session field were masked by name.
+
+The rules stand: **a mask names a field and checks the value it masks; a placeholder never equals a real
+value; every guard has a test that goes red when it is removed.**  G0f adds: **a field is masked only with
+evidence that it is noise**:
+- for a session field, the committed control and control-null (two saves on one host) differ there, or the
+  36 recordings saved with the same path and user name as their references differ there;
+- for a machine field, its decoded value on the VM side is the VM's value (its path, its user "trace", its
+  language id 2057, its rich-text build 16.0.20430) in every recording.
+Each mask's comment cites the DOSSIER section and the decoded values.  Data and unknown fields are never
+masked.
+
+Items, in this order:
+- **W36-0f.1, Props14:** the saved-by user name in the tail entry is read as `[id][byte length][UTF-16
+  name]` of any even byte length with a valid text name, not only length 0x1e.  The name and its length word
+  are a machine field.  The saving path stays a decoded field.  The tail count, the 0xffffffff entry and
+  record 0x3540000a follow the DOSSIER's session evidence, or they are left compared.  Test: a 10-byte name
+  and a 16-byte name are each read; a wrong length word FAILs.
+- **W36-0f.2, the CEdl task-order slot table (record 0x26400024):** its uids are compared one by one; only
+  the trailing 0xffffffff fill, which is the allocation capacity, is a session field.  The size words follow
+  from the canonical form.  Record 0x2640003d, present on one side, is masked only if the DOSSIER's evidence
+  shows it in a host control and null pair; otherwise it stays compared.  Tests: a changed uid FAILs; a
+  different capacity with equal uids passes.
+- **W36-0f.3, the note rich text in Task, Assn and Rsc Var2Data:** `\deflang<n>` and the rich-text generator
+  build string are machine fields, decoded inside the RTF payload, with the value checked as a language id
+  or a build string.  Everything else in the note is compared.  Test: a changed character of note text
+  FAILs.
+- **W36-0f.4, the session fields of the DOSSIER's "session" lists:**
+  - the CEdl date words, as dates within the span of the committed saves;
+  - the view-state records and pad bytes the DOSSIER names;
+  - the 114/Props stamp words and GUID record;
+  - the extra view GUIDs, the third Assn GUID and the creation stamps, as version-1 GUIDs and stamps with
+    value checks;
+  - the stale memory in the baseline sub-records: the module base and the per-process counter at the
+    offsets named, each checked as such;
+  - the FixedMeta and Fixed2Meta bytes the DOSSIER calls session.
+
+  Each mask is one named field with its offset and length, and a test case that FAILs when its value is
+  out of kind.
+- **W36-0f.4b, the Gantt chart pane width (round 12, `build/trace-2021/regate/CAUSES.md`, the zoom
+  section):** the u16 at +1172 of the Gantt view block, and the date words the same section says follow
+  from it, are a machine field (the host references hold 599 at a window width of 966 and 511 at 900; the VM
+  wrote 351 and 355).  Mask them only in that record, with a value check (a plausible pixel width), and
+  keep everything else in the block compared.  Test: the five zoom recordings' shape passes; a changed
+  zoom unit word in the same block FAILs.
+- **W36-0f.5:** the meta-test lists every new guard.  Every one is seen red when removed.
+- **W36-0f.6:** the gate's own acceptance, unchanged (negative sweep all FAIL; positive sweep PASS or pinned
+  OPEN; every hand-built wrong file of review-g0b.md, review-g0c.md and review-g0d.md FAILs), plus a new
+  case.  For each of the 13 "data" targets the DOSSIER lists, a file built from the committed reference
+  with that data field changed to the recorded value FAILs.
+
+This group changes no C++ source.  It does not touch the VM, `build/trace-2021/` (read only) or
+`build/r7/`.  After the marker the coordinator re-gates every recording again.
+
+Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0f-COMPLETE`.
+
 ### G2: Props
 
 Writer: `core/mppwrite/props_edit.{h,cpp}`, and the plan layer.  The facts from the trace (`trace-props-framing-r4.md`, `trace-baseline-r4.md`, `trace-calculate-r3.md`):
