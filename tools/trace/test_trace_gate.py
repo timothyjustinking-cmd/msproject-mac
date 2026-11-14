@@ -807,6 +807,64 @@ try:
             check("W36-0b.2 %s: one flipped data byte fails" % where,
                   any(nm in ln for ln in lines), "%r" % (lines,))
 
+        # --- W36-0c.3 (R36G0b-3): a SummaryInformation string slot is exactly its string --------------
+        # A slot of Author, LastAuthor or RevNumber is accepted as noise only when its length is
+        # 8 + the string length rounded up to 4 and its padding is zero.  Bytes after the string,
+        # nonzero padding and padding of another length FAIL, whatever offsets and section size say.
+        SI = "?SummaryInformation"
+
+        def si_slots(blob):
+            """(section offset, table pids in table order, [(pid, value slot)] in value order)."""
+            sec = _u(blob[44:])
+            count = struct.unpack_from("<I", blob, sec + 4)[0]
+            ents = [struct.unpack_from("<II", blob, sec + 8 + 8 * i) for i in range(count)]
+            order = sorted(ents, key=lambda e: e[1])
+            ends = [e[1] for e in order[1:]] + [len(blob) - sec]
+            return (sec, [pid for pid, off in ents],
+                    [(pid, blob[sec + off:sec + end]) for (pid, off), end in zip(order, ends)])
+
+        def si_build(blob, change):
+            """The stream with the slots `change` {pid: new slot bytes} replaced, the offsets and
+            the section size rebuilt to be consistent."""
+            sec, table_pids, slots = si_slots(blob)
+            slots = [(pid, change.get(pid, raw)) for pid, raw in slots]
+            offs, cur = {}, 8 + 8 * len(slots)
+            for pid, raw in slots:
+                offs[pid] = cur
+                cur += len(raw)
+            table = b"".join(struct.pack("<II", pid, offs[pid]) for pid in table_pids)
+            return blob[:sec] + struct.pack("<II", cur, len(slots)) + table + \
+                b"".join(raw for _, raw in slots)
+
+        def lpstr(text, pad=None):
+            """A VT_LPSTR slot: type, length with its NUL, the bytes, zero padding to 4."""
+            raw = text.encode("ascii") + b"\0"
+            slot = struct.pack("<II", 0x1E, len(raw)) + raw
+            return slot + (bytes((-len(slot)) % 4) if pad is None else pad)
+
+        si_sec, si_table, si_have = si_slots(R[SI])
+        check("W36-0c.3 the reference has Author, LastAuthor and RevNumber strings",
+              all(p in si_table for p in (4, 8, 9)), "%r" % (si_table,))
+        check("W36-0c.3 si_build with nothing changed is the stream itself",
+              si_build(R[SI], {}) == R[SI])
+        for pid, label in ((4, "Author"), (8, "LastAuthor"), (9, "RevNumber")):
+            for text in ("a", "a longer value than the one saved, 33"):
+                mutated = dict(R)
+                mutated[SI] = si_build(R[SI], {pid: lpstr(text)})
+                lines, problems, checked, unchecked = g.compare(mutated, R, C, N)
+                check("W36-0c.3 %s replaced by a well-formed %d-byte string is noise" %
+                      (label, len(text)), problems == 0, "%r" % (lines,))
+            for what, slot in (
+                    ("240 zero bytes after the string", lpstr("abc") + bytes(240)),
+                    ("240 junk bytes after the string", lpstr("abc") + b"\xa5" * 240),
+                    ("one nonzero padding byte", lpstr("abcd", b"\xff\0\0")),
+                    ("zero padding of another length", lpstr("abcd", bytes(7)))):
+                mutated = dict(R)
+                mutated[SI] = si_build(R[SI], {pid: slot})
+                lines, problems, checked, unchecked = g.compare(mutated, R, C, N)
+                check("W36-0c.3 %s: %s fails" % (label, what),
+                      problems >= 1 and any(SI in ln for ln in lines), "%r" % (lines,))
+
         # W36-0.2: a mask is built only from equal-length control and null, and per record
         # for a fixed-stride stream
         stride_name = "???114/TBkndTask/Fixed2Data"

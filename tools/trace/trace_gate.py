@@ -319,6 +319,16 @@ def _canon_props14(data, streams):
     return bytes(out), noise
 
 
+def _lpstr_slot_ok(raw):
+    """A VT_LPSTR value slot exactly: type 0x1e, the length word, the string, and zero padding to
+    a 4-byte boundary, so the slot is 8 + the length rounded up to 4 bytes (W36-0c.3 / R36G0b-3).
+    Bytes after the string, nonzero padding and padding of another length are not a string slot."""
+    if len(raw) < 8 or _u32(raw, 0) != 0x1E:
+        return False
+    length = _u32(raw, 4)
+    return len(raw) == 8 + ((length + 3) & ~3) and not any(raw[8 + length:])
+
+
 def _canon_summary(data, streams):
     """?SummaryInformation (a property set, one section at the offset in the header): the
     Author, LastAuthor and RevNumber strings and the LastSave FILETIME are noise; the offsets and
@@ -349,11 +359,11 @@ def _canon_summary(data, streams):
     for i, (pid, _) in enumerate(ents):
         lo, hi = values[i]
         raw = data[lo:hi]
-        if pid in (SI_AUTHOR, SI_LASTAUTHOR, SI_REVNUMBER) and len(raw) >= 8 and \
-                _u32(raw, 0) == 0x1E and 8 + _u32(raw, 4) <= len(raw):
-            # a VT_LPSTR: type, length (with its NUL), bytes, padding to a 4-byte boundary
+        if pid in (SI_AUTHOR, SI_LASTAUTHOR, SI_REVNUMBER) and _lpstr_slot_ok(raw):
+            # a VT_LPSTR: type, length (with its NUL), bytes, zero padding to a 4-byte boundary;
+            # only the length word and the string are noise (W36-0c.3)
             raw = struct.pack("<II", 0x1E, 0)
-            noise.update(range(lo + 4, hi))
+            noise.update(range(lo + 4, lo + 8 + _u32(data, lo + 4)))
         elif pid == SI_LASTSAVE and len(raw) == 12 and _u32(raw, 0) == 0x40:
             raw = struct.pack("<I", 0x40) + bytes(8)
             noise.update(range(lo + 4, hi))
