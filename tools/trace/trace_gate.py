@@ -155,8 +155,12 @@ NOISE = {
     "???114/TBkndTask/FixedData": {"new_row": (128, 132)},
     # FIELDS:18-19  the per-save words and GUIDs; 0x02401394 is per-file identity, not noise
     # (FIELDS:20), so it is not listed
+    # W36-0f.4.4: 0x024013BD is a third GUID of the save; 0x02401395, 0x02401396, 0x02401397 and
+    # 0x0240139F are the baseline-slot words, each a copy of the save word once Set Baseline wrote it
     "???114/Props": {"props": {0x02400007: "word", 0x024013B1: "word", 0x02400029: "guid",
-                               0x024013C2: "guid"}},
+                               0x024013C2: "guid", 0x024013BD: "guid",
+                               0x02401395: "slot", 0x02401396: "slot", 0x02401397: "slot",
+                               0x0240139F: "slot"}},
     # FIELDS:21  the view GUID string.  (The typed record 0x00010007, the length of
     # 214/CEdl/Var2Data, is canonicalised with that stream's other size words.)
     "???214/Props": {"props": {0x03400001: "guidstr"}},
@@ -840,6 +844,18 @@ def _save_words_equal(blob):
     return len(set(words.values())) <= 1
 
 
+def _slot_word_ok(blob, at):
+    """A 114/Props baseline-slot word (the 4 bytes at `at`) is noise only as a value that equals both
+    save words of its own file: Set Baseline copies the save word into the slot (19 of 19 set slots
+    of the 624 committed files, DOSSIER "Props stamp word 0x2401395"), and an unset slot (0xffffffff)
+    or one holding any other value is data.  The save words' own span bound is not repeated: a slot
+    equal to a save word that lies outside it differs only where the save words do (W36-0f.4.4)."""
+    word = blob[at:at + 4]
+    words = {rid: blob[pos + 12:pos + 16] for pos, length, rid, kind in frame_records(blob, 16) or []
+             if rid in SAVE_WORD_IDS and length == 4}
+    return len(words) == 2 and set(words.values()) == {word}
+
+
 def noise_windows(name, data, meta=None, ctl=None, other=None):
     """The set of offsets of the named noise fields of one stream's bytes.  `meta` is the
     companion VarMeta of a Var2Data stream, `ctl` the control's streams (a field that only a new
@@ -881,6 +897,9 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
             at = pos + 12
             if cls == "word" and length == 4 and words_one_value and _stamp_ok(data[at:at + 4]) and \
                     _stamp_ok(other[at:at + 4]):
+                offs.update(range(at, at + 4))
+            elif cls == "slot" and length == 4 and _slot_word_ok(data, at) and \
+                    _slot_word_ok(other, at):
                 offs.update(range(at, at + 4))
             elif cls == "guid" and length == 16 and _guid_ok(data[at:at + 16]) and \
                     _guid_ok(other[at:at + 16]):

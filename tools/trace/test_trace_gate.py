@@ -633,8 +633,6 @@ try:
             "wave36-r7-table1-date-format": ("214/CTable/FixedData",),
             "wave36-r7-w37-b-assign-one": ("114/TBkndAssn/Fixed2Data",),
             "wave36-r7-w37-b-assign-two": ("114/TBkndAssn/Fixed2Data",),
-            "wave36-r7-w37-b-rebaseline-changed": ("114/Props",),
-            "wave36-r7-w37-b-rebaseline-same": ("114/Props",),
         }
         def stream_key(short):   # the gate's name of a stream: the storage prefix is three "?"
             return short if short == "Props14" else "???" + short
@@ -653,6 +651,7 @@ try:
         # at W36-0f.2 (the slot table's fill and the row record are read; two pairs pass): 159 rows in 54 pairs.
         # at W36-0f.4.1 (the CEdl date words and the view word are read; one pair passes): 152 rows in 53 pairs.
         # at W36-0f.4.2 (the CV_iew view stamp and view date words are read; fourteen pairs pass): 130 rows in 39 pairs.
+        # at W36-0f.4.4 (the Props baseline-slot words and the third GUID are read; two pairs pass): 128 rows in 37 pairs.
         OPEN_PINNED = (
     ('wave23-flags', '???114/Props', 'control-mask 4'),
     ('wave23-flags', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
@@ -782,8 +781,6 @@ try:
     ('wave36-r7-table1-date-format', '???214/CTable/FixedData', 'control-mask 1'),
     ('wave36-r7-w37-b-assign-one', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
     ('wave36-r7-w37-b-assign-two', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
-    ('wave36-r7-w37-b-rebaseline-changed', '???114/Props', 'control-mask 1'),
-    ('wave36-r7-w37-b-rebaseline-same', '???114/Props', 'control-mask 2'),
         )
         # three edits equal their control outside the noise (a no-op percent edit, a task mode set to
         # the mode the task has).  Before W36-0c.5 they PASSed the negative case because the control
@@ -975,7 +972,8 @@ try:
         ABS_GUIDS = {"???214/CEdl/FixedData": (144,), "???214/CFilter/FixedData": (214, 444),
                      "???214/CGrouping/FixedData": (214, 444), "???214/CTable/FixedData": (214,),
                      "???214/CV_iew/FixedData": (122, 260, 398)}
-        PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2)
+        PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2, 0x024013BD)
+        PROPS_SLOTS = (0x02401395, 0x02401396, 0x02401397, 0x0240139F)   # W36-0f.4.4
 
         def spec_windows(name, data, meta, ctl):
             """The offsets of the named noise fields of one stream, by the evidence note."""
@@ -994,6 +992,11 @@ try:
                         out.update(range(at, at + 4))
                     if rid in PROPS_GUIDS and is_v1(data[at:at + length]):
                         out.update(range(at, at + 16))
+                save_ = {r_: data[p_:p_ + 4] for p_, l_, r_ in records(data, 16) if r_ in PROPS_WORDS and l_ == 4}
+                for at, length, rid in records(data, 16):
+                    if rid in PROPS_SLOTS and length == 4 and len(save_) == 2 and \
+                            set(save_.values()) == {data[at:at + 4]}:
+                        out.update(range(at, at + 4))
             if name == "???214/Props":
                 for at, length, rid in records(data, 16):
                     if rid == 0x03400001 and length >= 76:
@@ -1910,9 +1913,14 @@ try:
         in_span = struct.pack("<I", 0x3D200000)
         word_rids = [rid for rid, cls in sorted(g.NOISE[props_n]["props"].items()) if cls == "word"]
         for rid, cls in sorted(g.NOISE[props_n]["props"].items()):
+            if cls == "slot":   # a slot is noise only as a copy of the save word: the W36-0f.4.4 block
+                continue
             at, length = recs[rid]
             edits_ = [(recs[r_][0], in_span) for r_ in word_rids] if cls == "word" else [(at, v1(99))]
-            problems, lines = verdict(put(AR, props_n, edits_), AR)
+            base_ = AR
+            if cls == "guid" and not is_v1(AR[props_n][at:at + 16]):   # a GUID the file does not carry (0x24013bd)
+                base_ = put(AR, props_n, [(at, v1(98))])
+            problems, lines = verdict(put(base_, props_n, edits_), base_)
             check("W36-0b.4 114/Props record %#x (%s) changed is noise" % (rid, cls),
                   problems == 0, "%r" % (lines,))
         for rid in (0x02401394, 0x02400003):
@@ -2420,7 +2428,7 @@ try:
                 v4_cases += 1
                 fails("114/Props record %#x holding a version-4 GUID" % rid,
                       put(R, props114, [(hits[0][0], v4(5))]), R, props114)
-        check("W36-0c.6 114/Props holds the two save GUID records (%d)" % v4_cases, v4_cases == 2)
+        check("W36-0c.6 114/Props holds the three save GUID records (%d)" % v4_cases, v4_cases == 3)
 
         # the view GUID string is noise only when BOTH sides hold a GUID string
         vg_at = [pos for pos, length, rid in records(R[view_props], 16) if rid == 0x03400001][0]
@@ -2869,6 +2877,8 @@ try:
             for vname, bad_ in (("0", zero4), ("0xffffffff", ones4)):
                 for which in ("traced", "reference"):
                     badf = put(R, props114, [(hits[0][0], bad_)])
+                    if badf[props114] == R[props114]:   # an unset baseline slot already holds 0xffffffff
+                        continue
                     tr, rf = (badf, R) if which == "traced" else (R, badf)
                     problems_, lines_ = verdict(tr, rf)
                     check("W36-0d.6 114/Props save word %#x of %s in the %s save fails" %
@@ -2989,6 +2999,85 @@ try:
                 problems_, lines_ = verdict(tr, rf)
                 check("W36-0f.4.3 both 114/Props save words at %s in the %s save are noise" % (vname, which),
                       problems_ == 0 and badf[props114] != othr[props114], "%r" % (lines_,))
+        # --- W36-0f.4.4: the Props baseline-slot words and the third GUID --------------------------------
+        # 0x02401395, 0x02401396, 0x02401397 and 0x0240139f hold 0xffffffff until Set Baseline copies the
+        # save word into one (19 of 19 set slots of the 624 committed files equal both save words;
+        # DOSSIER, Props stamp word 0x2401395 and the three that follow it).  A slot is noise only as a
+        # stamp that equals both save words of its own file, on both sides; an unset slot, another value
+        # and a slot set on one side only are data.  Record 0x024013bd is a version-1 GUID in the saves
+        # that carry one (19 of 624), a host control and its null differing in it (DOSSIER, Props GUID).
+        slot_ids = (0x02401395, 0x02401396, 0x02401397, 0x0240139F)
+        slot_at = {r_: pos for pos, length, r_ in records(R[props114], 16) if r_ in slot_ids and length == 4}
+        guid3 = [(pos, length) for pos, length, r_ in records(R[props114], 16) if r_ == 0x024013BD]
+        check("W36-0f.4.4 the pair's Props holds the four slot words, unset, and one 16-byte third GUID",
+              len(slot_at) == 4 and all(R[props114][p_:p_ + 4] == b"\xff" * 4 for p_ in slot_at.values()) and
+              len(guid3) == 1 and guid3[0][1] == 16, "%r %r" % (slot_at, guid3))
+
+        def slotted(base_, stamp_, slot_ids_=(), slot_value_=None):
+            edits_ = [(w_a, struct.pack("<I", stamp_)), (w_b, struct.pack("<I", stamp_))]
+            edits_ += [(slot_at[i_], struct.pack("<I", stamp_ if slot_value_ is None else slot_value_))
+                       for i_ in slot_ids_]
+            return put(base_, props114, edits_)
+
+        def slot_verdict(label_, tr_, rf_, want_fail):
+            problems_, lines_ = verdict(tr_, rf_)
+            ok_ = (problems_ >= 1 and any(props114 in ln for ln in lines_)) if want_fail else \
+                (problems_ == 0 and tr_[props114] != rf_[props114])
+            check("W36-0f.4.4 %s" % label_, ok_, "%r" % (lines_,))
+
+        for rid_ in slot_ids:
+            for vname, a_, b_ in (("committed stamps", 0x3D200000, 0x3D200001),
+                                  ("a committed and a VM stamp", 0x3D282DB4, 0x3D283516)):
+                slot_verdict("slot %#x copying the save word, %s on the two sides, is noise" % (rid_, vname),
+                             slotted(R, a_, (rid_,)), slotted(R, b_, (rid_,)), False)
+            slot_verdict("slot %#x set on one side only fails" % rid_,
+                         slotted(R, 0x3D200000, (rid_,)), slotted(R, 0x3D200001), True)
+            slot_verdict("slot %#x set on the other side only fails" % rid_,
+                         slotted(R, 0x3D200000), slotted(R, 0x3D200001, (rid_,)), True)
+            slot_verdict("slot %#x holding another stamp than the save word, on both sides, fails" % rid_,
+                         slotted(R, 0x3D200000, (rid_,), 0x3D200010), slotted(R, 0x3D200001, (rid_,), 0x3D200011), True)
+            slot_verdict("slot %#x a copy on one side and another stamp on the other fails" % rid_,
+                         slotted(R, 0x3D200000, (rid_,)), slotted(R, 0x3D200001, (rid_,), 0x3D200011), True)
+        two_ = put(R, props114, [(w_a, struct.pack("<I", 0x3D200000)), (w_b, struct.pack("<I", 0x3D200001)),
+                                 (slot_at[0x02401395], struct.pack("<I", 0x3D200000))])
+        slot_verdict("a slot equal to one save word on each side, the two save words differing, fails",
+                     two_, put(two_, props114, [(slot_at[0x02401395], struct.pack("<I", 0x3D200001))]), True)
+        # a file with no save words has no value a slot could copy: two slots that differ fail
+        def no_words(streams_):
+            return put(streams_, props114, [(w_a - 8, struct.pack("<I", 0x02400009)),
+                                            (w_b - 8, struct.pack("<I", 0x0240000A))])
+
+        slot_verdict("slots that differ in a file with no save word records fail",
+                     no_words(slotted(R, 0x3D200000, (0x02401395,))),
+                     no_words(slotted(R, 0x3D200000, (0x02401395,), 0x3D200003)), True)
+        # another record id is not a slot, and the slot record must be 4 bytes
+        moved_ = slotted(R, 0x3D200000, (0x02401396,))
+        moved_ = put(moved_, props114, [(slot_at[0x02401396] - 8, struct.pack("<I", 0x02401398))])
+        moved_b = slotted(R, 0x3D200001, (0x02401396,))
+        moved_b = put(moved_b, props114, [(slot_at[0x02401396] - 8, struct.pack("<I", 0x02401398))])
+        slot_verdict("a record of id 0x02401398 holding the save word is not a slot", moved_, moved_b, True)
+
+        def widened(streams_, at_):
+            blob_ = bytearray(streams_[props114])
+            struct.pack_into("<I", blob_, at_ - 12, 8)
+            blob_[at_ + 4:at_ + 4] = bytes(4)
+            out_ = dict(streams_)
+            out_[props114] = bytes(blob_)
+            return out_
+
+        wide_a = widened(slotted(R, 0x3D200000, (0x02401397,)), slot_at[0x02401397])
+        wide_b = widened(slotted(R, 0x3D200001, (0x02401397,)), slot_at[0x02401397])
+        slot_verdict("a slot record of 8 bytes holding the save word is not a slot", wide_a, wide_b, True)
+        # the third GUID: version 1 on both sides is noise, zeros and another version are data
+        g3_at = guid3[0][0]
+        for what_, a_, b_, want_ in (
+                ("two different version-1 GUIDs", v1(1), v1(2), False),
+                ("a version-1 GUID against zeros", v1(1), bytes(16), True),
+                ("zeros against a version-1 GUID", bytes(16), v1(1), True),
+                ("a version-4 GUID against a version-1 GUID", v4(1), v1(2), True),
+                ("two different version-4 GUIDs", v4(1), v4(2), True)):
+            slot_verdict("the third GUID: %s" % what_, put(R, props114, [(g3_at, a_)]),
+                         put(R, props114, [(g3_at, b_)]), want_)
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
