@@ -136,6 +136,8 @@ IDENT = {
 #                both sides hold a stamp inside the committed span (W36-0f.4.7)
 #   varkey       {key: (lo, hi)} bytes of the Var2Data block of that key (located through the
 #                VarMeta), masked on the same condition
+#   stale        {key: (address, lo, hi)} the stale memory of the 76-byte baseline sub-record of that
+#                key: its +18 and +38 words and bytes lo..hi (W36-0f.4.8)
 # A GUID is masked only when both sides hold a version-1 GUID (all zeros against a real GUID FAILs: W36-0c.2).  Every row cites its
 # line of spec/writers/evidence/trace-gate-fields-g0b.md (FIELDS) for the decoded field.
 # There is no ceiling on how many bytes of the named fields may differ: a field is noise or it
@@ -179,8 +181,14 @@ NOISE = {
     "???214/CV_iew/FixedData": {"guid": (122, 260, 398), "guid_rows": (122, 138)},
     # FIELDS:23  the assignment creation stamp is a var block located through VarMeta; W36-0f.4.7: of
     # every assignment (6 targets) and, key 0x0C4002D6, of every resource (5 targets)
-    "???114/TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)}},
-    "???114/TBkndRsc/Var2Data": {"varkey": {0x0C4002D6: (0, 4)}},
+    # FIELDS:43  W36-0f.4.8: the stale memory of a baseline sub-record (stale: {key: (address, lo, hi)}; DOSSIER,
+    # "stale memory in a baseline sub-record"): the 76-byte block's +18 and +38 words, one value, and the
+    # bytes lo..hi (a heap pointer's low bytes) beside the 0x0100 count at +56
+    "???114/TBkndTask/Var2Data": {"stale": {0x0B4000AE: (True, 58, 60)}},
+    "???114/TBkndAssn/Var2Data": {"varkey": {0x0F40027A: (0, 4)},
+                                  "stale": {0x0F400035: (True, 58, 62), 0x0F400124: (True, 58, 62),
+                                            0x0F40012D: (True, 58, 62), 0x0F400175: (True, 58, 62)}},
+    "???114/TBkndRsc/Var2Data": {"varkey": {0x0C4002D6: (0, 4)}, "stale": {0x0C400045: (False, 0, 0)}},
 }
 
 # Streams that carry a file path or a user name, whose length the machine moves (null run:
@@ -203,6 +211,7 @@ VAR_META = {
     CVIEW_VAR2: "???214/CV_iew/VarMeta",
     "???114/TBkndAssn/Var2Data": "???114/TBkndAssn/VarMeta",
     "???114/TBkndRsc/Var2Data": "???114/TBkndRsc/VarMeta",
+    "???114/TBkndTask/Var2Data": "???114/TBkndTask/VarMeta",
 }
 
 CEDL_PATH_ID = 0x26400031        # UTF-16 file path ending "!" and NUL (the last CEdl record)
@@ -858,6 +867,18 @@ def _slot_word_ok(blob, at):
     return len(words) == 2 and set(words.values()) == {word}
 
 
+STALE_BASE_HIGH = (0x7FF6, 0x7FF7)   # the high half of an x64 image base: the committed baseline records
+
+
+def _stale_ok(blob, off, address):
+    """The 76-byte baseline sub-record whose length word is at `off`, with its +18 and +38 words one
+    value, as the process leaves them (a copy of one stale word); for a Task or an assignment that
+    word's high half is an image base's, 0x7ff6 or 0x7ff7 (W36-0f.4.8)."""
+    block = blob[off + 4:off + 80]
+    return len(block) == 76 and _u32(blob, off) == 76 and block[18:22] == block[38:42] and \
+        (not address or struct.unpack_from("<H", block, 20)[0] in STALE_BASE_HIGH)
+
+
 def noise_windows(name, data, meta=None, ctl=None, other=None):
     """The set of offsets of the named noise fields of one stream's bytes.  `meta` is the
     companion VarMeta of a Var2Data stream, `ctl` the control's streams (no rule reads it since
@@ -921,6 +942,15 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
                 at = off + 4 + lo
                 if _stamp_ok(data[at:off + 4 + hi]) and _stamp_ok(other[at:off + 4 + hi]):
                     offs.update(range(at, min(off + 4 + hi, len(data))))
+    if "stale" in rule:
+        for uid, off, key in _meta_blocks(meta):
+            spec = rule["stale"].get(key)
+            if spec is not None and off != 0xFFFFFFFF and _stale_ok(data, off, spec[0]) and \
+                    _stale_ok(other, off, spec[0]):
+                at = off + 4
+                offs.update(range(at + 18, at + 22))
+                offs.update(range(at + 38, at + 42))
+                offs.update(range(at + spec[1], at + spec[2]))
     return offs
 
 

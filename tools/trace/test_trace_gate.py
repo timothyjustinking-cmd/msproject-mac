@@ -940,6 +940,11 @@ try:
         GUID_ROWS = {"???214/CTable/FixedData": (214, 230), "???214/CV_iew/FixedData": (122, 138)}
         PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2, 0x024013BD)
         PROPS_SLOTS = (0x02401395, 0x02401396, 0x02401397, 0x0240139F)   # W36-0f.4.4
+        # W36-0f.4.8: the stale words of a 76-byte baseline sub-record: key -> (address-shaped, extra lo, hi)
+        STALE_BLOCKS = {"???114/TBkndTask/Var2Data": {0x0B4000AE: (True, 58, 60)},
+                        "???114/TBkndAssn/Var2Data": {0x0F400035: (True, 58, 62), 0x0F400124: (True, 58, 62),
+                                                      0x0F40012D: (True, 58, 62), 0x0F400175: (True, 58, 62)},
+                        "???114/TBkndRsc/Var2Data": {0x0C400045: (False, 0, 0)}}
         STAMP_BLOCKS = (("???114/TBkndAssn/Var2Data", 0x0F40027A), ("???114/TBkndRsc/Var2Data", 0x0C4002D6))
 
         def spec_windows(name, data, meta, ctl):
@@ -983,6 +988,14 @@ try:
                         if key == stamp_key and off != 0xFFFFFFFF and \
                                 0x3D141482 <= struct.unpack_from("<I", data, off + 4)[0] <= 0x3D28352A:
                             out.update(range(off + 4, off + 8))
+            for key_, (addr_, lo_, hi_) in STALE_BLOCKS.get(name, {}).items():
+                for uid, off, key in blocks(meta):
+                    blk_ = data[off + 4:off + 80] if off != 0xFFFFFFFF else b""
+                    if key == key_ and len(blk_) == 76 and struct.unpack_from("<I", data, off)[0] == 76 and \
+                            blk_[18:22] == blk_[38:42] and (not addr_ or blk_[20:22] in (b"\xf6\x7f", b"\xf7\x7f")):
+                        out.update(range(off + 4 + 18, off + 4 + 22))
+                        out.update(range(off + 4 + 38, off + 4 + 42))
+                        out.update(range(off + 4 + lo_, off + 4 + hi_))
             if name == "???214/CV_iew/Var2Data":
                 out.update(bag_font_bytes(data, meta))
             return out
@@ -1059,7 +1072,7 @@ try:
             return found, flipped_streams
 
         for stem in ("wave30-calculate", "wave34-assign-add-second",
-                     "wave35-g3-insert-milestone-first"):
+                     "wave35-g3-insert-milestone-first", "wave36-r7-w37-b-assign-one"):
             found, flipped_streams = window_audit(stem)
             check("W36-0b.7 %s: every offset outside the named fields fails, in %d streams" %
                   (stem, flipped_streams), not found and flipped_streams > 50, "%r" % (found,))
@@ -3144,6 +3157,117 @@ try:
                      third((v4(1),)), third((v1(2),)), True, a2_, "W36-0f.4.6")
         slot_verdict("Assn Fixed2Data: two different version-4 third GUIDs fail",
                      third((v4(1),)), third((v4(2),)), True, a2_, "W36-0f.4.6")
+        # --- W36-0f.4.8: the stale memory of a baseline sub-record ----------------------------------------
+        # A 76-byte baseline block of a Task (key 0xb4000ae), an assignment (0xf400035, 0xf400124, 0xf40012d,
+        # 0xf400175) or a resource (0xc400045) holds, at +18 and +38, one stale word of the process (an image
+        # base 0x7ff6.... in the committed saves and the VM's 0x7ff60530; four bytes of heap in the resource
+        # block) and, for a Task at +58..59 and an assignment at +58..61, a heap pointer's low bytes (DOSSIER,
+        # "stale memory in a baseline sub-record").  Noise only as a block whose two words are one value on both
+        # sides (and, for a Task and an assignment, an image base's high half); the count at +56, the data
+        # beside the window and the other keys are data.
+        sb_ref, sb_ctl, sb_nul = pair("wave36-r7-w37-b-assign-one")
+        SB = load(sb_ref)
+
+        def stale_at(streams_, fam_, key_):
+            v_, m_ = streams_["???114/TBknd%s/Var2Data" % fam_], streams_["???114/TBknd%s/VarMeta" % fam_]
+            return [off for uid, off, key in g._meta_blocks(m_)
+                    if key == key_ and off != 0xFFFFFFFF and struct.unpack_from("<I", v_, off)[0] == 76]
+
+        def stale_set(streams_, vname_, off_, words_=None, extra_=(), length_=None):
+            """streams_ with the block at off_: the +18 and +38 words (a pair, one value each when a single
+            word), bytes at (offset, value) in extra_ and the length word."""
+            edits_ = []
+            if words_ is not None:
+                w18_, w38_ = (words_, words_) if isinstance(words_, bytes) else words_
+                edits_ += [(off_ + 4 + 18, w18_), (off_ + 4 + 38, w38_)]
+            edits_ += [(off_ + 4 + at_, bytes([val_])) for at_, val_ in extra_]
+            if length_ is not None:
+                edits_.append((off_, struct.pack("<I", length_)))
+            return put(streams_, vname_, edits_)
+
+        for fam_, keys_, addr_, lo_, hi_ in (("Task", (0x0B4000AE,), True, 58, 60),
+                                             ("Assn", (0x0F400035, 0x0F400124, 0x0F40012D, 0x0F400175), True, 58, 62),
+                                             ("Rsc", (0x0C400045,), False, 0, 0)):
+            vname_, mname_ = "???114/TBknd%s/Var2Data" % fam_, "???114/TBknd%s/VarMeta" % fam_
+            offs_ = stale_at(SB, fam_, keys_[0] if fam_ != "Assn" else 0x0F400035)
+            check("W36-0f.4.8 the pair has a baseline block of %s" % fam_, len(offs_) >= 1, "%r" % (offs_,))
+            if not offs_:
+                continue
+            off_ = offs_[0]
+            w1_, w2_ = ((struct.pack("<I", 0x7FF60530), struct.pack("<I", 0x7FF7ABCD)) if addr_ else
+                        (struct.pack("<I", 0x025679DD), struct.pack("<I", 0x01331C1C)))
+            tag8_ = "W36-0f.4.8"
+
+            def case8(label_, tr_, rf_, want_fail_, vname_=vname_, tag8_=tag8_, fam_=fam_):
+                slot_verdict("%s: %s" % (fam_, label_), tr_, rf_, want_fail_, vname_, tag8_)
+
+            case8("two different stale words in the block are noise",
+                  stale_set(SB, vname_, off_, w1_), stale_set(SB, vname_, off_, w2_), False)
+            case8("+18 changed alone fails", stale_set(SB, vname_, off_, (w1_, SB[vname_][off_ + 4 + 38:off_ + 4 + 42])),
+                  SB, True)
+            case8("+38 changed alone fails", stale_set(SB, vname_, off_, (SB[vname_][off_ + 4 + 18:off_ + 4 + 22], w1_)),
+                  SB, True)
+            case8("a block whose two words differ on the other side fails",
+                  stale_set(SB, vname_, off_, w1_), stale_set(SB, vname_, off_, (w2_, w1_)), True)
+            case8("a block whose two words differ on this side fails",
+                  stale_set(SB, vname_, off_, (w2_, w1_)), stale_set(SB, vname_, off_, w1_), True)
+            case8("the same two different words on both sides is data (the words are not one value)",
+                  stale_set(SB, vname_, off_, (w2_, w1_)), stale_set(SB, vname_, off_, (w1_, w2_)), True)
+            case8("a length word other than 76 reads no stale words",
+                  stale_set(SB, vname_, off_, w1_, length_=75), stale_set(SB, vname_, off_, w2_, length_=75), True)
+            for cut_, what_ in ((60, "+60"), (75, "+75")):
+                # a stream that ends inside the block: the 76 bytes are not there, the words are not noise
+                short_a_, short_b_ = (stale_set(SB, vname_, off_, w_) for w_ in (w1_, w2_))
+                for s_ in (short_a_, short_b_):
+                    s_[vname_] = s_[vname_][:off_ + 4 + cut_]
+                case8("a stream ending at %s of the block reads no stale words" % what_, short_a_, short_b_, True)
+            if addr_:
+                for what_, bad_ in (("a high half of 0", struct.pack("<I", 0x00005678)),
+                                    ("a high half of 0x7ff5", struct.pack("<I", 0x7FF51234)),
+                                    ("a high half of 0x7ff8", struct.pack("<I", 0x7FF81234))):
+                    case8("a word with %s on this side fails" % what_,
+                          stale_set(SB, vname_, off_, bad_), stale_set(SB, vname_, off_, w2_), True)
+                    case8("a word with %s on the other side fails" % what_,
+                          stale_set(SB, vname_, off_, w2_), stale_set(SB, vname_, off_, bad_), True)
+                case8("a word with the image base's other high half, 0x7ff7, is noise",
+                      stale_set(SB, vname_, off_, struct.pack("<I", 0x7FF71234)),
+                      stale_set(SB, vname_, off_, struct.pack("<I", 0x7FF60001)), False)
+            else:
+                case8("an address-free word is noise (heap bytes: no image base)",
+                      stale_set(SB, vname_, off_, struct.pack("<I", 0x12345678)),
+                      stale_set(SB, vname_, off_, struct.pack("<I", 0x87654321)), False)
+            if hi_ > lo_:
+                for at_ in range(lo_, hi_):
+                    case8("the heap byte at +%d is noise" % at_,
+                          stale_set(SB, vname_, off_, extra_=((at_, SB[vname_][off_ + 4 + at_] ^ 0x5A),)),
+                          SB, False)
+                    case8("the heap byte at +%d changed on a block with unequal words fails" % at_,
+                          stale_set(SB, vname_, off_, (w1_, w2_), extra_=((at_, SB[vname_][off_ + 4 + at_] ^ 0x5A),)),
+                          stale_set(SB, vname_, off_, (w1_, w2_)), True)
+                    case8("the heap byte at +%d changed on a block of another length fails" % at_,
+                          stale_set(SB, vname_, off_, extra_=((at_, SB[vname_][off_ + 4 + at_] ^ 0x5A),), length_=75),
+                          stale_set(SB, vname_, off_, length_=75), True)
+            for at_ in (17, 22, 37, 42, 56, 57, hi_, 63, 64, 75):
+                if at_ == hi_ and hi_ <= lo_:
+                    continue
+                case8("the byte at +%d beside the stale fields is data" % at_,
+                      stale_set(SB, vname_, off_, extra_=((at_, SB[vname_][off_ + 4 + at_] ^ 0x5A),)),
+                      SB, True)
+            if hi_ <= lo_:
+                case8("the byte at +58 of a resource block is data",
+                      stale_set(SB, vname_, off_, extra_=((58, SB[vname_][off_ + 4 + 58] ^ 0x5A),)), SB, True)
+            # the keys: each listed key reads its block; another key of the family does not
+            meta_ = SB[mname_]
+            at_k = [24 + 12 * k_ + 8 for k_ in range(struct.unpack_from("<I", meta_, 8)[0])
+                    if struct.unpack_from("<III", meta_, 24 + 12 * k_)[1] == off_]
+            check("W36-0f.4.8 %s: the block's VarMeta entry is found" % fam_, len(at_k) == 1, "%r" % (at_k,))
+            if len(at_k) == 1:
+                for key_ in keys_ + (0x0B40015E if fam_ == "Task" else 0x0F400032 if fam_ == "Assn" else 0x0C40015F,):
+                    rekey_ = lambda s_, key_=key_: put(s_, mname_, [(at_k[0], struct.pack("<I", key_))])
+                    listed_ = key_ in keys_
+                    case8("key %#x: two different stale words are %s" % (key_, "noise" if listed_ else "data"),
+                          rekey_(stale_set(SB, vname_, off_, w1_)), rekey_(stale_set(SB, vname_, off_, w2_)),
+                          not listed_)
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
