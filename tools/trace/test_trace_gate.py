@@ -396,6 +396,11 @@ try:
                             for lo_ in (1176, 1182, 1186):
                                 if 220968000 <= struct.unpack_from("<I", data, at_ + lo_)[0] <= 226137600:
                                     out.update(range(at_ + lo_, at_ + lo_ + 4))
+                            wide_ = struct.unpack_from("<H", data, at_ + 1172)[0]
+                            if len_ == 41363 and 128 <= wide_ <= 4096:
+                                out.update(range(at_ + 1172, at_ + 1174))
+                                if 1 <= struct.unpack_from("<H", data, at_ + 1180)[0] <= wide_:
+                                    out.update(range(at_ + 1180, at_ + 1182))
             elif name in NOTE_SPEC:
                 meta_, key_ = NOTE_SPEC[name]
                 seen_ = set()
@@ -3287,6 +3292,106 @@ try:
                              put(SB, stream_, [(at_, bytes([new_]))]), SB, True, stream_, "W36-0f.4.9")
                 slot_verdict("%s changed to %#04x in the reference save fails" % (label_, new_),
                              SB, put(SB, stream_, [(at_, bytes([new_]))]), True, stream_, "W36-0f.4.9")
+        # --- W36-0f.4b: the Gantt chart pane width ------------------------------------------------------------
+        # The u16 at +1172 of the 41363-byte view-state record (0x22400008) is the pane width in pixels a zoom
+        # call writes, and the u16 at +1180 follows from it (DOSSIER "CV_iew rec 0x22400008 +1172 u16
+        # (timescale width in the zoom targets)"; CAUSES.md, the zoom section): the host references hold 599
+        # and 511 (window widths 966 and 900), the VM's recordings 351 (0x015f) and 355 (0x0163).  The five
+        # zoom saves' shape: width 351 or 355 and a unit of 0.297 of it against the reference's 599 and its
+        # unit, dates moved.  Masked as a width of 128 to 4096 on this side, the unit only beside it and up to it.
+        zoom_stems = (("wave35-viewstate-zoom-custom", 351), ("wave35-viewstate-zoom-custom-10d", 351),
+                      ("wave35-viewstate-zoom-custom-narrow", 355), ("wave35-viewstate-zoom-entire", 355),
+                      ("wave35-viewstate-zoom-reset", 351))
+        zoom_ = {}
+        for stem_, vm_width_ in zoom_stems:
+            zr_, zc_, zn_ = (load(p_) for p_ in pair(stem_))
+            recs_ = [r_ for r_ in bag_records(zr_[cv_n], zr_[cv_meta_n]) if r_[2] == 0x22400008 and r_[1] == 41363]
+            zat_ = [r_[0] for r_ in recs_ if struct.unpack_from("<H", zr_[cv_n], r_[0] + 1172)[0] != 100]
+            check("W36-0f.4b %s: the reference holds one zoomed 41363-byte record" % stem_,
+                  len(recs_) == 2 and len(zat_) == 1, "%r" % (recs_,))
+            if len(zat_) != 1:
+                continue
+            ref_w_ = struct.unpack_from("<H", zr_[cv_n], zat_[0] + 1172)[0]
+            ref_u_ = struct.unpack_from("<H", zr_[cv_n], zat_[0] + 1180)[0]
+            zoom_[stem_] = (zr_, zc_, zn_, zat_[0], ref_w_, ref_u_, vm_width_)
+
+            def zv(label_, traced_, want_fail_, zr_=zr_, zc_=zc_, zn_=zn_, stem_=stem_):
+                lines_, problems_, checked_, unchecked_ = g.compare(traced_, zr_, zc_, zn_)
+                check("W36-0f.4b %s: %s %s" % (stem_, label_, "fails" if want_fail_ else "is noise"),
+                      (problems_ >= 1 and any(cv_n in ln for ln in lines_)) if want_fail_ else problems_ == 0,
+                      "%r" % (lines_,))
+
+            def zput(w_=None, u_=None, extra_=None, zr_=zr_, at_=zat_[0]):
+                edits_ = {}
+                if w_ is not None:
+                    edits_[at_ + 1172] = struct.pack("<H", w_)
+                if u_ is not None:
+                    edits_[at_ + 1180] = struct.pack("<H", u_)
+                edits_.update({at_ + o_: v_ for o_, v_ in (extra_ or {}).items()})
+                b_ = bytearray(zr_[cv_n])
+                for p_, raw_ in edits_.items():
+                    b_[p_:p_ + len(raw_)] = raw_
+                return dict(zr_, **{cv_n: bytes(b_)})
+
+            vm_unit_ = max(1, round(ref_u_ * vm_width_ / ref_w_))
+            moved_date_ = struct.pack("<I", cv_u32(zr_[cv_n], zat_[0] + 1176) + 28800)
+            zv("the reference against itself", zr_, False)
+            zv("the VM's shape: width %d, unit %d, the first date moved" % (vm_width_, vm_unit_),
+               zput(vm_width_, vm_unit_, {1176: moved_date_}), False)
+            zv("the VM's width and unit, the dates as the reference's", zput(vm_width_, vm_unit_), False)
+            zv("the VM's width alone, the reference's unit (up to the width)", zput(vm_width_), False)
+            zv("a width of the control's 100, the zoom not applied", zput(100, vm_unit_), True)
+            for bad_w_, what_ in ((0, "0"), (1, "1"), (127, "one under 128"), (4097, "one over 4096"),
+                                  (0xFFFF, "0xffff")):
+                zv("a width of %s" % what_, zput(bad_w_, 1), True)
+            for good_w_ in (128, 4096):
+                zv("a width of %d (the span's end), its unit 1" % good_w_, zput(good_w_, 1), False)
+            zv("a unit of 0 beside the width", zput(vm_width_, 0), True)
+            zv("a unit above the width", zput(vm_width_, vm_width_ + 1), True)
+            zv("a unit equal to the width", zput(vm_width_, vm_width_), False)
+            for lo_ in (1162, 1164, 1166, 1168, 1170, 1174, 1178, 1190, 1192):
+                zv("the u16 at +%d changed beside the VM's width" % lo_,
+                   zput(vm_width_, vm_unit_, {lo_: struct.pack("<H", struct.unpack_from("<H", zr_[cv_n], zat_[0] + lo_)[0] ^ 0x0101)}),
+                   True)
+        if "wave35-viewstate-zoom-custom" in zoom_:
+            zr_, zc_, zn_, zat_, ref_w_, ref_u_, vm_width_ = zoom_["wave35-viewstate-zoom-custom"]
+
+            def zbytes(streams_, edits_):
+                b_ = bytearray(streams_[cv_n])
+                for p_, raw_ in edits_.items():
+                    b_[p_:p_ + len(raw_)] = raw_
+                return dict(streams_, **{cv_n: bytes(b_)})
+
+            def zv2(label_, traced_, ref2_, want_fail_):
+                lines_, problems_, checked_, unchecked_ = g.compare(traced_, ref2_, zc_, zn_)
+                check("W36-0f.4b %s %s" % (label_, "fails" if want_fail_ else "is noise"),
+                      (problems_ >= 1 and any(cv_n in ln for ln in lines_)) if want_fail_ else problems_ == 0,
+                      "%r" % (lines_,))
+
+            # the other 41363-byte record is the same kind: its width 100 compared against a pane width fails,
+            # two pane widths are noise
+            other_at_ = [r_[0] for r_ in bag_records(zr_[cv_n], zr_[cv_meta_n])
+                         if r_[2] == 0x22400008 and r_[1] == 41363 and r_[0] != zat_][0]
+            zv2("the other 41363-byte record's width 100 against 351",
+                zbytes(zr_, {other_at_ + 1172: struct.pack("<H", 351)}), zr_, True)
+            zv2("the other 41363-byte record's width 351 against 599",
+                zbytes(zr_, {other_at_ + 1172: struct.pack("<H", 351)}),
+                zbytes(zr_, {other_at_ + 1172: struct.pack("<H", 599)}), False)
+            zv2("the other 41363-byte record's unit 60 against 70 beside the default width, two saves",
+                zbytes(zr_, {other_at_ + 1180: struct.pack("<H", 60)}),
+                zbytes(zr_, {other_at_ + 1180: struct.pack("<H", 70)}), True)
+            zv2("the other 41363-byte record's unit 60 against 70 beside the default width, one save",
+                zbytes(zr_, {other_at_ + 1180: struct.pack("<H", 60)}), zr_, True)
+            # a width in the other records, of another size, is data
+            short_at_ = [r_[0] for r_ in bag_records(R[cv_n], R[cv_meta_n]) if r_[2] == 0x22400008 and r_[1] == 1530][0]
+            for w_ in (351, 599):
+                cv_verdict("the 1530-byte record's width %d" % w_, cv_put(R, {short_at_ + 1172: struct.pack("<H", w_)}), R, True)
+            cv_verdict("the 1530-byte record's width 351 against 599 on the two sides",
+                       cv_put(R, {short_at_ + 1172: struct.pack("<H", 351)}),
+                       cv_put(R, {short_at_ + 1172: struct.pack("<H", 599)}), True)
+            check("W36-0f.4b the gate names the width and unit of a zoomed record as derived",
+                  {"view pane width uid 2", "view pane unit uid 2"} <= g.canonical_all(zr_)[2][cv_n],
+                  "%r" % (sorted(g.canonical_all(zr_)[2][cv_n]),))
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)

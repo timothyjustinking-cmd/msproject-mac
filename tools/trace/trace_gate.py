@@ -255,6 +255,21 @@ BAG_KEY = 0x20400006
 # span (the 630 non-default words run 220968000 to 225989400).  A date word of 14400, 14400 and
 # 0x340a75ff is the view's unset value, equal in the other 1245 records, and is compared, as is the
 # u16 at +1190 (0 or 0x8080).  The u16 words at +1172 and +1180 are not these fields.
+# FIELDS:45  W36-0f.4b: they are another one, the Gantt chart pane's width (DOSSIER "CV_iew rec 0x22400008 +1172 u16
+# (timescale width in the zoom targets)"; CAUSES.md, "wave35-viewstate-zoom-custom ..."): a pixel width a
+# zoom call writes, the default 100 (0x64) in 1869 of the 1875 committed view-state records (one holds 0)
+# and 599 or 511 in the five host zoom references (the window width the oracle had: 966 against 900
+# points, 88 px for 66),
+# 351 and 355 in the VM's recordings (traced +1172 0x015f and 0x0163).  The u16 at +1180 follows from it and
+# from the zoom's span (reference 178, 185, 249, 100 and 152 at the widths 599 and 511; the VM's 104 at 351:
+# 0.297 of the width in both custom saves), so it is masked only beside a masked width, as a value up to
+# that width.  A width is a value of 128 to 4096 pixels; the default 100 is compared.
+# Only the 41363-byte record, the Gantt chart view's, is read: the evidence is in it alone (the 1530-byte
+# records hold 100, and 0 in one file).
+CVIEW_GANTT_LEN = 41363
+CVIEW_WIDTH_AT = 1172
+CVIEW_UNIT_AT = 1180
+CVIEW_WIDTH_SPAN = (128, 4096)
 CVIEW_STAMP_ID = 0x22400015
 CVIEW_STAMP_SPAN = (0x3D1412C0, 0x3D282DB4)
 CVIEW_STATE_ID = 0x22400008
@@ -723,6 +738,15 @@ def _canon_cview_var2(data, streams):
                         out[at + lo:at + lo + 4] = bytes(4)
                         noise.update(range(at + lo, at + lo + 4))
                         derived.add("view date uid %d +%d" % (uid, lo))
+                width = struct.unpack_from("<H", data, at + CVIEW_WIDTH_AT)[0]
+                if length == CVIEW_GANTT_LEN and CVIEW_WIDTH_SPAN[0] <= width <= CVIEW_WIDTH_SPAN[1]:
+                    out[at + CVIEW_WIDTH_AT:at + CVIEW_WIDTH_AT + 2] = bytes(2)
+                    noise.update(range(at + CVIEW_WIDTH_AT, at + CVIEW_WIDTH_AT + 2))
+                    derived.add("view pane width uid %d" % uid)
+                    if 1 <= struct.unpack_from("<H", data, at + CVIEW_UNIT_AT)[0] <= width:
+                        out[at + CVIEW_UNIT_AT:at + CVIEW_UNIT_AT + 2] = bytes(2)
+                        noise.update(range(at + CVIEW_UNIT_AT, at + CVIEW_UNIT_AT + 2))
+                        derived.add("view pane unit uid %d" % uid)
     return bytes(out), noise, derived
 
 
