@@ -22,6 +22,16 @@ A version-1 GUID (UuidCreateSequential) is stored in RFC byte order: byte 6 >> 4
 | New Task row creation stamp | 114/TBkndTask/FixedData row (202 bytes from 48) +128, 4 bytes | 4 | the creation date-time of a row; only a row whose uid (row +0) is not in the control; an existing row's is stable between a control and its null save | trace-insert-summary.md:42 |
 | New assignment creation stamp | 114/TBkndAssn/Var2Data, the key 0x0f40027a block (4 bytes) located through VarMeta | 4 | the creation date-time of an assignment; only a block whose VarMeta uid is not in the control | trace-insert-milestone-r4.md:16-20 |
 | Font word top byte | 214/CV_iew/Var2Data font item (0x2240000c) payload +43 of each 44-byte row | 1 | uninitialised allocator byte | trace-font-item-r6.md |
+| CEdl path record | 214/CEdl/Var2Data record 0x26400031, the last record: the length word and the payload plus its pad | 4 + payload | the file path, UTF-16 text ending `!` and NUL; the machine's, never the document's; noise only as printable text with that ending | trace-null.md:28 (602 -> 500) |
+| CEdl size words | 214/CEdl/Var2Data +0, +4, +8 | 4 each | derived from the stream length: +0 = length - 4, +4 and +8 = length - 8; noise only when they say so | trace-null.md:28 |
+| CEdl length word | 214/CEdl/VarMeta +20 | 4 | the length of 214/CEdl/Var2Data; noise only when it equals it | trace-null.md:29 |
+| View CEdl length | 214/Props typed record 0x00010007 (4 bytes), payload +0 | 4 | the length of 214/CEdl/Var2Data again; noise only when it equals it | trace-null.md:28 |
+| Props14 blob size words | Props14 +0 and +4 | 4 each | the blob size, derived (`size` = blob end - 4, both words, the blob header `0x10000` at +8); noise only when framed so | trace-null.md:37 (530 -> 464) |
+| Props14 path record | Props14 record 0x35400008: the length word and the payload plus its pad | 4 + payload | a file path, UTF-16 text; noise only as printable text | trace-null.md:37 |
+| Props14 tail names | Props14 tail `[count]` then entries `[id][0x1e][UTF-16 name, no length]`, ids 0xffffffff and 0x3540000b: the name bytes | the name | a user name; the 8-byte header of each entry is data; noise only as printable text.  The count word is noise only when the 0xffffffff entry is absent on one side and the other tail is exactly one 0x3540000b entry with a text name (W36-0c.4) | trace-null.md:37 |
+| SummaryInformation strings | ?SummaryInformation properties 4 (Author), 8 (LastAuthor), 9 (RevNumber): the length word and the string | 4 + string | the user name; the slot is exactly type 0x1e, the length, the string, zero padding to 4 (W36-0c.3); the type word is data | trace-null.md:36, :46 |
+| SummaryInformation LastSave | ?SummaryInformation property 13: the 8 bytes after the type word 0x40 of a 12-byte slot | 8 | the save FILETIME; property 12 (CreateTime) and every other property are data | trace-null.md:48 |
+| SummaryInformation offsets | ?SummaryInformation section size word (section +0) and each table entry's offset word (+4 of the 8-byte entry) | 4 each | derived from the values laid back to back | trace-null.md:36 |
 
 ## Row identity of the fixed-stride streams (W36-0b.8, R36G0-9)
 

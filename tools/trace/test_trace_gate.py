@@ -12,11 +12,12 @@ Runs the gate on committed pairs (tests/data) and asserts it FAILS where it must
            and the noise windows do not cover) is a FAIL, with `checked > 0` and an equal stream
            set; the unflipped pair is a PASS.
 
-    python test_trace_gate.py [--gate PATH] [--cli-only]
+    python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only]
 
 --gate runs the command-line cases against another copy of the gate (a red run against an older
-version); --cli-only skips the cases that import the gate's functions.  Exit 0 all pass, 1 a case
-failed, 77 olefile is not installed (ctest SKIP).
+version); --gate-dir runs every case, in-process ones too, against DIR/trace_gate.py (a gate
+with one guard removed); --cli-only skips the cases that import the gate's functions.  Exit 0
+all pass, 1 a case failed, 77 olefile is not installed (ctest SKIP).
 """
 
 import os
@@ -38,12 +39,17 @@ except ImportError:
 
 gate_path = os.path.join(HERE, "trace_gate.py")
 cli_only = False
+gate_dir = HERE
 args = sys.argv[1:]
 while args:
     a = args.pop(0)
     if a == "--gate":
         gate_path = args.pop(0)
         cli_only = True
+    elif a == "--gate-dir":
+        # another copy of the gate for the command line AND the in-process cases (a mutant)
+        gate_dir = os.path.abspath(args.pop(0))
+        gate_path = os.path.join(gate_dir, "trace_gate.py")
     elif a == "--cli-only":
         cli_only = True
     else:
@@ -185,13 +191,136 @@ try:
 
     # --- W36-0.4: one flipped byte in every stream, at an offset nothing covers ----------------
     if not cli_only:
-        sys.path.insert(0, HERE)
+        sys.path.insert(0, gate_dir)
         import trace_gate as g
 
         def load(path):
             return g.streams(path)
 
         R, C, N = load(ref), load(ctl), load(nul)
+
+        def is_v1(raw):
+            return len(raw) == 16 and raw[6] >> 4 == 1 and raw[8] >> 6 == 2
+
+        def records(data, base):
+            pos, out = base, []
+            while pos + 12 <= len(data):
+                length, rid = struct.unpack_from("<II", data, pos)
+                out.append((pos + 12, length, rid))
+                pos += 12 + length + (length & 1)
+            return out
+
+        def blocks(meta):
+            if not meta or len(meta) < 24:
+                return []
+            return [struct.unpack_from("<III", meta, 24 + 12 * k)
+                    for k in range(struct.unpack_from("<I", meta, 8)[0])]
+
+        def task_uids(blob):
+            return {struct.unpack_from("<I", blob, 48 + 202 * r)[0]
+                    for r in range(max(0, (len(blob or b"") - 48) // 202))}
+
+        # --- W36-0c.6 (R36G0b-6): the noise of the parsed streams and the font rows, written here -----
+        # From the rows of trace-gate-fields-g0b.md and the test's own parse of the bag and of the
+        # property records; nothing below calls the gate's canonical forms or font parser.
+        def text_ok(raw):
+            """Printable UTF-16LE with at most one trailing NUL: a path or a user name."""
+            if len(raw) % 2 or len(raw) > 2048:
+                return False
+            try:
+                s = raw.decode("utf-16le")
+            except UnicodeDecodeError:
+                return False
+            s = s[:-1] if s.endswith("\0") else s
+            return all(c >= " " and c != "\x7f" for c in s)
+
+        CANON_STREAMS = ("???214/CEdl/Var2Data", "???214/CEdl/VarMeta", "???214/Props", "Props14",
+                         "?SummaryInformation")
+
+        def padded(at, length):
+            return range(at, at + length + (length & 1))
+
+        def spec_canon(name, data, streams_):
+            """The offsets replaced in the canonical form of `data`, by the evidence note."""
+            out = set()
+            if name == "???214/CEdl/Var2Data":
+                for at, want in ((0, len(data) - 4), (4, len(data) - 8), (8, len(data) - 8)):
+                    if struct.unpack_from("<I", data, at)[0] == want:
+                        out.update(range(at, at + 4))
+                for at, length, rid in records(data, 20):
+                    if rid == 0x26400031 and text_ok(data[at:at + length]) and \
+                            data[at:at + length].endswith(b"!\0\0\0"):
+                        out.update(range(at - 12, at - 8))
+                        out.update(padded(at, length))
+            elif name == "???214/CEdl/VarMeta":
+                var2 = streams_.get("???214/CEdl/Var2Data")
+                if var2 is not None and struct.unpack_from("<I", data, 20)[0] == len(var2):
+                    out.update(range(20, 24))
+            elif name == "???214/Props":
+                var2 = streams_.get("???214/CEdl/Var2Data")
+                for at, length, rid in records(data, 16):
+                    if rid == 0x00010007 and length == 4 and var2 is not None and \
+                            struct.unpack_from("<I", data, at)[0] == len(var2):
+                        out.update(range(at, at + 4))
+            elif name == "Props14":
+                end = _u(data) + 4
+                out.update(range(0, 8))
+                for at, length, rid in records(data[:end], 16):
+                    if rid == 0x35400008 and text_ok(data[at:at + length]):
+                        out.update(range(at - 12, at - 8))
+                        out.update(padded(at, length))
+                tail = data[end:]
+                marks = [i for i in range(4, len(tail) - 7, 2)
+                         if struct.unpack_from("<I", tail, i)[0] in (0xFFFFFFFF, 0x3540000B) and
+                         struct.unpack_from("<I", tail, i + 4)[0] == 0x1E]
+                names = [(m, e) for m, e in zip(marks, marks[1:] + [len(tail)])]
+                if len(names) == 1 and struct.unpack_from("<I", tail, names[0][0])[0] == 0x3540000B \
+                        and text_ok(tail[names[0][0] + 8:names[0][1]]):
+                    out.update(range(end, end + 4))   # the count word, the named absent case
+                for m, e in names:
+                    if text_ok(tail[m + 8:e]):
+                        out.update(range(end + m + 8, end + e))
+            elif name == "?SummaryInformation":
+                sec = _u(data[44:])
+                count = struct.unpack_from("<I", data, sec + 4)[0]
+                ents = [struct.unpack_from("<II", data, sec + 8 + 8 * i) for i in range(count)]
+                out.update(range(sec, sec + 4))
+                for i in range(count):
+                    out.update(range(sec + 8 + 8 * i + 4, sec + 8 + 8 * i + 8))
+                order = sorted(ents, key=lambda e: e[1])
+                ends = [e[1] for e in order[1:]] + [len(data) - sec]
+                for (pid, off), stop in zip(order, ends):
+                    lo, hi = sec + off, sec + stop
+                    slen = struct.unpack_from("<I", data, lo + 4)[0] if hi - lo >= 8 else 0
+                    if pid in (4, 8, 9) and hi - lo >= 8 and _u(data[lo:]) == 0x1E and \
+                            hi - lo == 8 + ((slen + 3) & ~3) and not any(data[lo + 8 + slen:hi]):
+                        out.update(range(lo + 4, lo + 8 + slen))
+                    elif pid == 13 and hi - lo == 12 and _u(data[lo:]) == 0x40:
+                        out.update(range(lo + 4, hi))
+            return out
+
+        def bag_records(data, meta):
+            """[(payload offset, length, id, kind)] of the records of every bag block (VarMeta key
+            0x20400006): a 4-byte length, a 16-byte header, then [len][id][kind][payload] padded."""
+            out = []
+            for uid, off, key in blocks(meta):
+                if key != 0x20400006 or off == 0xFFFFFFFF or off + 4 > len(data):
+                    continue
+                stop = min(off + 4 + _u(data[off:]), len(data))
+                pos = off + 20
+                while pos + 12 <= stop:
+                    length, rid, kind = struct.unpack_from("<III", data, pos)
+                    if pos + 12 + length > stop:
+                        break
+                    out.append((pos + 12, length, rid, kind))
+                    pos += 12 + length + (length & 1)
+            return out
+
+        def bag_font_bytes(data, meta):
+            """Payload +43 of each 44-byte row of every font item (0x2240000c, kind 1)."""
+            return [at + 44 * row + 43 for at, length, rid, kind in bag_records(data, meta)
+                    if rid == 0x2240000C and kind == 1 and length % 44 == 0
+                    for row in range(length // 44)]
 
         # the CLI path once, on a stream class the gate checks plainly
         bad = os.path.join(tmp, "flip3.mpp")
@@ -209,7 +338,7 @@ try:
         f_ref, f_ctl, f_nul = pair("wave35-g3-font-bold-off")
         FR, FC, FN = load(f_ref), load(f_ctl), load(f_nul)
         view, view_meta = "???214/CV_iew/Var2Data", "???214/CV_iew/VarMeta"
-        found = g.font_item_garbage(FR[view], FR[view_meta])
+        found = bag_font_bytes(FR[view], FR[view_meta])
         check("W36-0b.1 the bold-off edit has one font item row, found by parsing the bag",
               len(found) == 1, "%r" % (found,))
         for delta, want in ((0, 0), (-3, 1)):   # +43 passes, +40 fails
@@ -543,27 +672,6 @@ try:
                      "???214/CV_iew/FixedData": (122, 260, 398)}
         PROPS_WORDS, PROPS_GUIDS = (0x02400007, 0x024013B1), (0x02400029, 0x024013C2)
 
-        def is_v1(raw):
-            return len(raw) == 16 and raw[6] >> 4 == 1 and raw[8] >> 6 == 2
-
-        def records(data, base):
-            pos, out = base, []
-            while pos + 12 <= len(data):
-                length, rid = struct.unpack_from("<II", data, pos)
-                out.append((pos + 12, length, rid))
-                pos += 12 + length + (length & 1)
-            return out
-
-        def blocks(meta):
-            if not meta or len(meta) < 24:
-                return []
-            return [struct.unpack_from("<III", meta, 24 + 12 * k)
-                    for k in range(struct.unpack_from("<I", meta, 8)[0])]
-
-        def task_uids(blob):
-            return {struct.unpack_from("<I", blob, 48 + 202 * r)[0]
-                    for r in range(max(0, (len(blob or b"") - 48) // 202))}
-
         def spec_windows(name, data, meta, ctl):
             """The offsets of the named noise fields of one stream, by the evidence note."""
             out = set()
@@ -597,15 +705,23 @@ try:
                     if key == 0x0F40027A and off != 0xFFFFFFFF and uid not in known:
                         out.update(range(off + 4, off + 8))
             if name == "???214/CV_iew/Var2Data":
-                out.update(g.font_item_garbage(data, meta))
+                out.update(bag_font_bytes(data, meta))
             return out
 
         def window_audit(stem, only=None):
             """Problems found in the gate's windows of one pair, by name; the empty list is clean."""
             rp, cp, np_ = pair(stem)
             RS, CS = load(rp), load(cp)
-            canon_noise = g.canonical(RS, with_noise=True)[1]
+            gate_canon = g.canonical(RS, with_noise=True)[1]
+            canon_noise = {n_: spec_canon(n_, RS[n_], RS) for n_ in CANON_STREAMS if n_ in RS}
             found = []
+            for n_ in CANON_STREAMS:
+                if n_ in RS and gate_canon.get(n_, set()) != canon_noise[n_]:
+                    got_, want_ = gate_canon.get(n_, set()), canon_noise[n_]
+                    found.append("%s: the canonical form replaces %d bytes, the evidence note "
+                                 "%d (%d extra, %d missing)" % (n_, len(got_), len(want_),
+                                                                len(got_ - want_),
+                                                                len(want_ - got_)))
             flipped_streams = 0
             for name in sorted(RS):
                 data = RS[name]
@@ -633,7 +749,7 @@ try:
                     mutated[name] = bytes(blob)
                     lines, problems, checked, unchecked = g.compare(mutated, RS, CS, dict(CS))
                     mine = [ln for ln in lines if name in ln]
-                    if name in g.CANON:
+                    if name in CANON_STREAMS:
                         # a flip that breaks the framing leaves the stream raw: the gate reports a
                         # size change, or at least the flipped bytes (the placeholders add a few)
                         ok = any(ln.startswith("size-differs") or (
@@ -929,7 +1045,7 @@ try:
             if key == 0x0F40027A and off != 0xFFFFFFFF and uid not in known:
                 want(var_n, off + 4, bytes(b ^ 0x33 for b in AR[var_n][off + 4:off + 8]))
         cview = "???214/CV_iew/Var2Data"
-        for at in g.font_item_garbage(AR[cview], AR["???214/CV_iew/VarMeta"]):
+        for at in bag_font_bytes(AR[cview], AR["???214/CV_iew/VarMeta"]):
             want(cview, at, bytes([AR[cview][at] ^ 0xFF]))
         every = dict(AR)
         n_fields = 0
@@ -1131,6 +1247,114 @@ try:
                                ("both absent", [])):
             p14_verdict("the 0xffffffff entry %s" % label, entries)
 
+        # --- W36-0c.6 (R36G0b-6): the guards the review removed, one wrong file each --------------------
+        # Each case is a file the real gate FAILs and a gate with the named guard removed PASSes
+        # (the review's table, R36G0b-6).  Every guard was removed in a copy of the gate and the
+        # case seen red (build/w36/mutants.py; logs build/w36/*-W36-0c.6-mutant-*.log).
+        def swapped(streams_, name_, blob):
+            out = dict(streams_)
+            out[name_] = blob
+            return out
+
+        def fails(label, mutated, ref_, stream):
+            problems_, lines_ = verdict(mutated, ref_)
+            check("W36-0c.6 %s fails" % label,
+                  problems_ >= 1 and any(stream in ln for ln in lines_), "%r" % (lines_,))
+
+        def passes(label, mutated, ref_):
+            problems_, lines_ = verdict(mutated, ref_)
+            check("W36-0c.6 %s is noise" % label, problems_ == 0, "%r" % (lines_,))
+
+        # SummaryInformation: Title, CreateTime and the rest are data; LastSave and the three
+        # user-name strings are noise (trace-gate-fields-g0b.md, the SummaryInformation rows)
+        si_have = dict(si_slots(R[SI])[2])
+        check("W36-0c.6 the reference holds Title, CreateTime and LastSave slots",
+              all(p in si_have for p in (2, 12, 13)) and len(si_have[12]) == 12 and
+              len(si_have[13]) == 12, "%r" % (sorted(si_have),))
+        title = bytearray(si_have[2])
+        title[8] ^= 1
+        fails("SummaryInformation Title changed by one byte",
+              swapped(R, SI, si_build(R[SI], {2: bytes(title)})), R, SI)
+        fails("SummaryInformation Title replaced by a longer string",
+              swapped(R, SI, si_build(R[SI], {2: lpstr("another title altogether")})), R, SI)
+        created = bytearray(si_have[12])
+        created[5] ^= 1
+        fails("SummaryInformation CreateTime changed",
+              swapped(R, SI, si_build(R[SI], {12: bytes(created)})), R, SI)
+        saved = bytearray(si_have[13])
+        saved[5] ^= 1
+        passes("SummaryInformation LastSave changed",
+               swapped(R, SI, si_build(R[SI], {13: bytes(saved)})), R)
+        for pid, label, at in ((18, "the application name", -1), (1, "the code page", 4),
+                               (19, "property 19", -1)):
+            slot = bytearray(si_have[pid])
+            slot[at] ^= 1
+            fails("SummaryInformation %s changed" % label,
+                  swapped(R, SI, si_build(R[SI], {pid: bytes(slot)})), R, SI)
+
+        # CEdl path record: printable text ending "!" and NUL; anything else is compared as it is
+        cedl, view_props = "???214/CEdl/Var2Data", "???214/Props"
+        cd6 = R[cedl]
+        p_at, p_len = [(pos, length) for pos, length, rid in records(cd6, 20)
+                       if rid == 0x26400031][0]
+        ctl_chars = bytes([1, 0, 2, 0]) * 10
+        fails("CEdl path record: 20 control characters in the path",
+              put(R, cedl, [(p_at, ctl_chars)]), R, cedl)
+        fails("CEdl path record: printable text that does not end with the exclamation mark",
+              put(R, cedl, [(p_at + p_len - 4, b"?\0\0\0")]), R, cedl)
+        for at in (0, 4, 8):
+            fails("CEdl size word +%d off by one" % at,
+                  put(R, cedl, [(at, struct.pack("<I", struct.unpack_from("<I", cd6, at)[0] + 1))]),
+                  R, cedl)
+        # 214/Props record 0x00010007 is the length of the CEdl stream: another value is data
+        vp_at = [pos for pos, length, rid in records(R[view_props], 16) if rid == 0x00010007][0]
+        check("W36-0c.6 214/Props record 0x00010007 holds the CEdl stream length",
+              struct.unpack_from("<I", R[view_props], vp_at)[0] == len(cd6))
+        fails("214/Props record 0x00010007 that is not the CEdl length",
+              put(R, view_props, [(vp_at, struct.pack("<I", len(cd6) + 2))]), R, view_props)
+
+        # Props14 path record 0x35400008: control characters
+        p14_path = [pos for pos, length, rid in records(R[P14][:_u(R[P14]) + 4], 16)
+                    if rid == 0x35400008][0]
+        fails("Props14 path record: 20 control characters in the path",
+              put(R, P14, [(p14_path, ctl_chars)]), R, P14)
+
+        # 114/Props save GUIDs: a version-4 GUID is not noise, wherever the record is
+        props114 = "???114/Props"
+        v4_cases = 0
+        for rid in sorted(g.NOISE[props114]["props"]):
+            hits = [(pos, length) for pos, length, r_ in records(R[props114], 16) if r_ == rid]
+            if hits and hits[0][1] == 16:
+                v4_cases += 1
+                fails("114/Props record %#x holding a version-4 GUID" % rid,
+                      put(R, props114, [(hits[0][0], v4(5))]), R, props114)
+        check("W36-0c.6 114/Props holds the two save GUID records (%d)" % v4_cases, v4_cases == 2)
+
+        # the view GUID string is noise only when BOTH sides hold a GUID string
+        vg_at = [pos for pos, length, rid in records(R[view_props], 16) if rid == 0x03400001][0]
+        z = b"Z" if R[view_props][vg_at + 2:vg_at + 3] != b"Z" else b"Y"
+        fails("214/Props view GUID string: a hex digit that is not hex, in the traced save",
+              put(R, view_props, [(vg_at + 2, z)]), R, view_props)
+        fails("214/Props view GUID string: a hex digit that is not hex, in the reference",
+              R, put(R, view_props, [(vg_at + 2, z)]), view_props)
+        fails("214/Props view GUID string: the traced save holds text, the reference a GUID",
+              put(R, view_props, [(vg_at, "x".encode("utf-16le") * 38)]), R, view_props)
+
+        # the font byte is payload +43 of a 44-byte row of the font item 0x2240000c, kind 1, only
+        fview, fmeta = "???214/CV_iew/Var2Data", "???214/CV_iew/VarMeta"
+        font_recs = [(at, length, rid, kind) for at, length, rid, kind in
+                     bag_records(FR[fview], FR[fmeta]) if rid == 0x2240000C]
+        check("W36-0c.6 the bold-off edit's bag holds one font item of 44-byte rows",
+              len(font_recs) == 1 and font_recs[0][1] % 44 == 0 and font_recs[0][3] == 1,
+              "%r" % (font_recs,))
+        f_at = font_recs[0][0]
+        for label, hdr_at, other in (("another record id", f_at - 8, struct.pack("<I", 0x2240000D)),
+                                     ("kind 2", f_at - 4, struct.pack("<I", 2))):
+            ref_f = put(FR, fview, [(hdr_at, other)])
+            edit_f = put(ref_f, fview, [(f_at + 43, bytes([ref_f[fview][f_at + 43] ^ 0xFF]))])
+            problems_, lines_ = verdict(edit_f, ref_f, FC)
+            check("W36-0c.6 a 44-byte-row record of %s is no font item: its +43 byte fails" % label,
+                  problems_ >= 1 and any(fview in ln for ln in lines_), "%r" % (lines_,))
         # W36-0.2: a mask is built only from equal-length control and null, and per record
         # for a fixed-stride stream
         stride_name = "???114/TBkndTask/Fixed2Data"
