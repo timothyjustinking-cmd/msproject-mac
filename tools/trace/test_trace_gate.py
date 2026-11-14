@@ -294,7 +294,7 @@ try:
 
         CANON_STREAMS = ("???214/CEdl/Var2Data", "???214/CEdl/VarMeta", "???214/Props", "Props14",
                          "?SummaryInformation", "???114/TBkndTask/Var2Data", "???114/TBkndAssn/Var2Data",
-                         "???114/TBkndRsc/Var2Data")
+                         "???114/TBkndRsc/Var2Data", "???214/CV_iew/Var2Data")
         # W36-0f.3: the note rich text, the Var2Data block of this key in each of the three streams
         NOTE_SPEC = {"???114/TBkndTask/Var2Data": ("???114/TBkndTask/VarMeta", 0x0B40000F),
                      "???114/TBkndAssn/Var2Data": ("???114/TBkndAssn/VarMeta", 0x0F400047),
@@ -371,6 +371,35 @@ try:
                 for m, e in names:
                     if e > m + 8 and text_ok(tail[m + 8:e]):
                         out.update(range(end + m + 4, end + e))     # the length word and the name
+            elif name == "???214/CV_iew/Var2Data":    # W36-0f.4.2: the view stamp and the view date words
+                seen_ = set()
+                for uid_, off_, k_ in blocks(streams_.get("???214/CV_iew/VarMeta")):
+                    if k_ != 0x20400006 or off_ == 0xFFFFFFFF or off_ in seen_ or off_ + 4 > len(data):
+                        continue
+                    seen_.add(off_)
+                    stop_ = off_ + 4 + struct.unpack_from("<I", data, off_)[0]
+                    pos_, chain_, ok_ = off_ + 20, [], stop_ <= len(data)
+                    while ok_ and pos_ < stop_:
+                        if pos_ + 12 > stop_:
+                            ok_ = False
+                            break
+                        len_, rid_, kind_ = struct.unpack_from("<III", data, pos_)
+                        if pos_ + 12 + len_ > stop_:
+                            ok_ = False
+                            break
+                        chain_.append((pos_ + 12, len_, rid_, kind_))
+                        pos_ += 12 + len_ + (len_ & 1)
+                    if not ok_ or pos_ != stop_:
+                        continue
+                    for at_, len_, rid_, kind_ in chain_:
+                        if rid_ == 0x22400015 and kind_ == 1 and len_ == 20 and \
+                                struct.unpack_from("<I", data, at_)[0] == 0 and \
+                                0x3D1412C0 <= struct.unpack_from("<I", data, at_ + 4)[0] <= 0x3D282DB4:
+                            out.update(range(at_ + 4, at_ + 8))
+                        if rid_ == 0x22400008 and kind_ == 1 and len_ >= 1194:
+                            for lo_ in (1176, 1182, 1186):
+                                if 220968000 <= struct.unpack_from("<I", data, at_ + lo_)[0] <= 226137600:
+                                    out.update(range(at_ + lo_, at_ + lo_ + 4))
             elif name in NOTE_SPEC:
                 meta_, key_ = NOTE_SPEC[name]
                 seen_ = set()
@@ -524,8 +553,8 @@ try:
                                         "masking them would also pass an edit of the real field",
             "114/TBkndTask/FixedMeta": "the meta item at +315; not decoded",
             "214/CTable/FixedData": "the byte at +447; not decoded",
-            "214/CV_iew/Var2Data": "4-byte save words of the view bag (bag block uid 2 +42682; block "
-                                   "uid 3 +2270..+2281 and their kin); not decoded",
+            "214/CV_iew/Var2Data": "97 bytes at +42613..+95702 outside the records the bag parse finds, "
+                                   "in the five later-build pairs (W36-0f.4.2); not decoded",
             "214/Props": "the words at +10358 and +10406 of the canonical form; not decoded",
         }
         MASKED_IN = {
@@ -539,42 +568,24 @@ try:
                 "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
                 "214/CV_iew/Var2Data", "214/Props",
             ),
-            "wave27-priority-750": ("214/CV_iew/Var2Data",),
-            "wave27-unlink": ("114/TBkndAssn/Fixed2Data", "214/CV_iew/Var2Data"),
-            "wave28-mark-auto": ("214/CV_iew/Var2Data",),
-            "wave28-mark-manual": ("214/CV_iew/Var2Data",),
-            "wave28-newtask-auto": ("214/CV_iew/Var2Data",),
-            "wave28-newtask-manual": ("214/CV_iew/Var2Data",),
-            "wave28-outline-indent": ("214/CV_iew/Var2Data",),
+            "wave27-unlink": ("114/TBkndAssn/Fixed2Data",),
             "wave28-outline-outdent": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
-                "214/CV_iew/Var2Data",
             ),
             "wave28-outline-summary": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
-                "214/CV_iew/Var2Data",
             ),
-            "wave28-percent-auto0": ("214/CV_iew/Var2Data",),
-            "wave28-percent-auto100": ("214/CV_iew/Var2Data",),
-            "wave28-percent-auto40": ("214/CV_iew/Var2Data",),
-            "wave28-percent-manual0": ("214/CV_iew/Var2Data",),
-            "wave28-split": ("214/CV_iew/Var2Data",),
-            "wave28-update": ("214/CV_iew/Var2Data",),
-            "wave29-outline-auto-indent": ("214/CV_iew/Var2Data",),
             "wave29-outline-auto-outdent": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
-                "214/CV_iew/Var2Data",
             ),
             "wave29-outline-auto-summary": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
-                "214/CV_iew/Var2Data",
             ),
             "wave29-outline-manual-parent": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
-                "214/CV_iew/Var2Data",
             ),
             "wave29-percent-leaf": ("114/TBkndAssn/Fixed2Data",),
-            "wave29-percent-mid25": ("114/TBkndAssn/Fixed2Data", "214/CV_iew/Var2Data"),
+            "wave29-percent-mid25": ("114/TBkndAssn/Fixed2Data",),
             "wave29-percent-milestone": ("114/TBkndAssn/Fixed2Data",),
             "wave29-percent-work": ("114/TBkndAssn/Fixed2Data",),
             "wave30-assign-add": ("114/TBkndRsc/FixedMeta",),
@@ -586,7 +597,6 @@ try:
             "wave30-resource-rename": ("114/TBkndRsc/FixedMeta",),
             "wave30-respect-links-auto": ("114/TBkndAssn/Fixed2Data",),
             "wave30-respect-links-manual": ("114/TBkndAssn/Fixed2Data",),
-            "wave30-task-mode-auto": ("214/CV_iew/Var2Data",),
             "wave30-wbs": ("114/TBkndTask/Fixed2Data",),
             "wave31-resource-sheet": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
@@ -613,7 +623,7 @@ try:
             ),
             "wave35-g3-assign-remove-port-saved": (
                 "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
-                "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta", "214/CV_iew/Var2Data",
+                "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta",
             ),
             "wave36-r7-calc-assign-1": ("114/TBkndAssn/Fixed2Data",),
             "wave36-r7-calc-assign-2": ("114/TBkndAssn/Fixed2Data",),
@@ -642,6 +652,7 @@ try:
         # W36-0f.1 (Props14 reads by its length words and is no longer OPEN): 161 rows (118 control-mask, 43 size-differs) in 56 pairs;
         # at W36-0f.2 (the slot table's fill and the row record are read; two pairs pass): 159 rows in 54 pairs.
         # at W36-0f.4.1 (the CEdl date words and the view word are read; one pair passes): 152 rows in 53 pairs.
+        # at W36-0f.4.2 (the CV_iew view stamp and view date words are read; fourteen pairs pass): 130 rows in 39 pairs.
         OPEN_PINNED = (
     ('wave23-flags', '???114/Props', 'control-mask 4'),
     ('wave23-flags', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
@@ -655,7 +666,7 @@ try:
     ('wave23-flags', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave23-flags', '???214/CFilter/Var2Data', 'size-differs 108->224'),
     ('wave23-flags', '???214/CFilter/VarMeta', 'size-differs 36->48'),
-    ('wave23-flags', '???214/CV_iew/Var2Data', 'control-mask 107'),
+    ('wave23-flags', '???214/CV_iew/Var2Data', 'control-mask 97'),
     ('wave23-flags', '???214/Props', 'control-mask 2'),
     ('wave27-percent-actuals', '???114/Props', 'control-mask 1'),
     ('wave27-percent-actuals', '???114/TBkndAssn/Fixed2Meta', 'control-mask 3'),
@@ -670,46 +681,26 @@ try:
     ('wave27-percent-actuals', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave27-percent-actuals', '???214/CFilter/Var2Data', 'size-differs 108->224'),
     ('wave27-percent-actuals', '???214/CFilter/VarMeta', 'size-differs 36->48'),
-    ('wave27-percent-actuals', '???214/CV_iew/Var2Data', 'control-mask 106'),
+    ('wave27-percent-actuals', '???214/CV_iew/Var2Data', 'control-mask 97'),
     ('wave27-percent-actuals', '???214/Props', 'control-mask 2'),
-    ('wave27-priority-750', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave27-unlink', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
-    ('wave27-unlink', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-mark-auto', '???214/CV_iew/Var2Data', 'control-mask 6'),
-    ('wave28-mark-manual', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-newtask-auto', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-newtask-manual', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-outline-indent', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-outline-outdent', '???114/Props', 'control-mask 2'),
     ('wave28-outline-outdent', '???114/TBkndAssn/Fixed2Meta', 'control-mask 4'),
     ('wave28-outline-outdent', '???114/TBkndAssn/FixedMeta', 'control-mask 6'),
-    ('wave28-outline-outdent', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-outline-summary', '???114/Props', 'control-mask 2'),
     ('wave28-outline-summary', '???114/TBkndAssn/Fixed2Meta', 'control-mask 3'),
     ('wave28-outline-summary', '???114/TBkndAssn/FixedMeta', 'control-mask 5'),
-    ('wave28-outline-summary', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-percent-auto0', '???214/CV_iew/Var2Data', 'control-mask 6'),
-    ('wave28-percent-auto100', '???214/CV_iew/Var2Data', 'control-mask 6'),
-    ('wave28-percent-auto40', '???214/CV_iew/Var2Data', 'control-mask 6'),
-    ('wave28-percent-manual0', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-split', '???214/CV_iew/Var2Data', 'control-mask 6'),
-    ('wave28-update', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave29-outline-auto-indent', '???214/CV_iew/Var2Data', 'control-mask 2'),
     ('wave29-outline-auto-outdent', '???114/Props', 'control-mask 2'),
     ('wave29-outline-auto-outdent', '???114/TBkndAssn/Fixed2Meta', 'control-mask 6'),
     ('wave29-outline-auto-outdent', '???114/TBkndAssn/FixedMeta', 'control-mask 6'),
-    ('wave29-outline-auto-outdent', '???214/CV_iew/Var2Data', 'control-mask 2'),
     ('wave29-outline-auto-summary', '???114/Props', 'control-mask 2'),
     ('wave29-outline-auto-summary', '???114/TBkndAssn/Fixed2Meta', 'control-mask 5'),
     ('wave29-outline-auto-summary', '???114/TBkndAssn/FixedMeta', 'control-mask 5'),
-    ('wave29-outline-auto-summary', '???214/CV_iew/Var2Data', 'control-mask 2'),
     ('wave29-outline-manual-parent', '???114/Props', 'control-mask 2'),
     ('wave29-outline-manual-parent', '???114/TBkndAssn/Fixed2Meta', 'control-mask 8'),
     ('wave29-outline-manual-parent', '???114/TBkndAssn/FixedMeta', 'control-mask 6'),
-    ('wave29-outline-manual-parent', '???214/CV_iew/Var2Data', 'control-mask 2'),
     ('wave29-percent-leaf', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
     ('wave29-percent-mid25', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
-    ('wave29-percent-mid25', '???214/CV_iew/Var2Data', 'control-mask 2'),
     ('wave29-percent-milestone', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
     ('wave29-percent-work', '???114/TBkndAssn/Fixed2Data', 'control-mask 5'),
     ('wave30-assign-add', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
@@ -724,7 +715,6 @@ try:
     ('wave30-resource-rename', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
     ('wave30-respect-links-auto', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
     ('wave30-respect-links-manual', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
-    ('wave30-task-mode-auto', '???214/CV_iew/Var2Data', 'control-mask 2'),
     ('wave30-wbs', '???114/TBkndTask/Fixed2Data', 'control-mask 12'),
     ('wave31-resource-sheet', '???114/Props', 'control-mask 1'),
     ('wave31-resource-sheet', '???114/TBkndAssn/Fixed2Meta', 'control-mask 3'),
@@ -739,7 +729,7 @@ try:
     ('wave31-resource-sheet', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave31-resource-sheet', '???214/CFilter/Var2Data', 'size-differs 108->224'),
     ('wave31-resource-sheet', '???214/CFilter/VarMeta', 'size-differs 36->48'),
-    ('wave31-resource-sheet', '???214/CV_iew/Var2Data', 'control-mask 106'),
+    ('wave31-resource-sheet', '???214/CV_iew/Var2Data', 'control-mask 97'),
     ('wave31-resource-sheet', '???214/Props', 'control-mask 2'),
     ('wave31-tables', '???114/Props', 'control-mask 1'),
     ('wave31-tables', '???114/TBkndAssn/Fixed2Meta', 'control-mask 3'),
@@ -754,7 +744,7 @@ try:
     ('wave31-tables', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave31-tables', '???214/CFilter/Var2Data', 'size-differs 108->224'),
     ('wave31-tables', '???214/CFilter/VarMeta', 'size-differs 36->48'),
-    ('wave31-tables', '???214/CV_iew/Var2Data', 'control-mask 106'),
+    ('wave31-tables', '???214/CV_iew/Var2Data', 'control-mask 97'),
     ('wave31-tables', '???214/Props', 'control-mask 2'),
     ('wave31-usage', '???114/Props', 'control-mask 1'),
     ('wave31-usage', '???114/TBkndAssn/Fixed2Meta', 'control-mask 3'),
@@ -769,7 +759,7 @@ try:
     ('wave31-usage', '???214/CFilter/FixedMeta', 'size-differs 26->36'),
     ('wave31-usage', '???214/CFilter/Var2Data', 'size-differs 108->224'),
     ('wave31-usage', '???214/CFilter/VarMeta', 'size-differs 36->48'),
-    ('wave31-usage', '???214/CV_iew/Var2Data', 'control-mask 106'),
+    ('wave31-usage', '???214/CV_iew/Var2Data', 'control-mask 97'),
     ('wave31-usage', '???214/Props', 'control-mask 2'),
     ('wave34-assign-add-second', '???114/Props', 'control-mask 2'),
     ('wave34-assign-add-second', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
@@ -784,7 +774,6 @@ try:
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/Fixed2Meta', 'control-mask 6'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/FixedMeta', 'control-mask 10'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
-    ('wave35-g3-assign-remove-port-saved', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave36-r7-calc-assign-1', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
     ('wave36-r7-calc-assign-2', '???114/TBkndAssn/Fixed2Data', 'control-mask 8'),
     ('wave36-r7-dsi-total-work', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
@@ -796,13 +785,17 @@ try:
     ('wave36-r7-w37-b-rebaseline-changed', '???114/Props', 'control-mask 1'),
     ('wave36-r7-w37-b-rebaseline-same', '???114/Props', 'control-mask 2'),
         )
-        # two edits equal their control outside the noise (a no-op percent edit).  Before W36-0c.5
-        # they PASSed the negative case because the control mask excused the view-bag bytes in which
-        # their null differs from the control; now they FAIL it like every other edit, and the test
-        # still shows that they equal their control
+        # three edits equal their control outside the noise (a no-op percent edit, a task mode set to
+        # the mode the task has).  Before W36-0c.5 they PASSed the negative case because the control
+        # mask excused the view-bag bytes in which their null differs from the control; then they
+        # FAILed it on those bytes (the view stamp and the view date words, session fields); since
+        # W36-0f.4.2 those are masked, so they PASS it again as the no-op edits they are, and the test
+        # shows that each equals its control
         NOOP_EDITS = {"wave28-percent-auto100": "no task, assignment or view byte differs from its "
                                                 "control; only the path strings and their sizes",
                       "wave28-percent-auto40": "no task, assignment or view byte differs from its "
+                                               "control; only the path strings and their sizes",
+                      "wave30-task-mode-auto": "no task, assignment or view byte differs from its "
                                                "control; only the path strings and their sizes"}
         # W36-0f.1: five edits equal their null save in every field the gate checks, so that only
         # session fields tell them apart: the Props14 record 0x3540000a (1 in the edit, 0 in the
@@ -891,8 +884,9 @@ try:
               "%r" % ([s for s, v in pos_kind.items() if any(k == "bytes-differ" for k, n in v)],))
         check("W36-0c.5 every MASKED stream has a recorded reason",
               all(n in MASKED for v in MASKED_IN.values() for n in v))
-        check("W36-0c.5 the negative sweep: no edit PASSes but the pinned no-op edits (W36-0f.1)",
-              neg_passed == set(NOOP_NULL), "%r" % (sorted(set(neg_passed) ^ set(NOOP_NULL)),))
+        check("W36-0c.5 the negative sweep: no edit PASSes but the pinned no-op edits (W36-0f.1, 0f.4.2)",
+              neg_passed == set(NOOP_NULL) | set(NOOP_EDITS),
+              "%r" % (sorted(set(neg_passed) ^ (set(NOOP_NULL) | set(NOOP_EDITS))),))
         for stem in sorted(NOOP_NULL):
             flags = []
             for path_ in (os.path.join(DATA, stem + ".mpp"), os.path.join(DATA, stem + "-control-null.mpp")):
@@ -926,9 +920,13 @@ try:
              {"???114/TBkndRsc/FixedMeta": 2}),
             ("wave36-r7-table1-column-replace", "wave36-r7-table1-column-replace",
              {"???214/CTable/FixedData": 1}),
-            ("wave28-mark-auto", "wave28-mark-auto", {"???214/CV_iew/Var2Data": 6}),
+            ("wave28-mark-auto", "wave28-mark-auto", {"???214/CV_iew/Var2Data": 6}, "named"),
         )
-        for stem, edit, expect in INVERTED:
+        # W36-0f.4.2: the sixth file's six bytes are now fields of a mask (the view stamp and a view date
+        # word, session fields), so inverting them is no longer unnamed bytes: the file still FAILs, by
+        # derived lines (an inverted stamp or date is out of its span, so it is no longer replaced on one
+        # side) and by the bytes themselves
+        for stem, edit, expect, *named_ in INVERTED:
             e_path, c_path = os.path.join(DATA, edit + ".mpp"), control_path(stem)
             n_path = os.path.join(DATA, stem + "-control-null.mpp")
             IE, IC, IN = load(e_path), load(c_path), load(n_path)
@@ -943,17 +941,21 @@ try:
                     mask = g.control_mask(sname, len(IE[sname]), IC[sname], IN[sname], ids) or set()
                     meta = IE.get(g.VAR_META[sname]) if sname in g.VAR_META else None
                     win = g.noise_windows(sname, IE[sname], meta, IC, IE[sname])
-                    found[sname] = sorted(mask - win)
+                    found[sname] = sorted(mask if named_ else mask - win)
                     data = bytearray(IE[sname])
                     for k in found[sname]:
                         data[k] ^= 0xFF
                     ole.write_stream(stream_path(ole, sname), bytes(data))
             finally:
                 ole.close()
-            check("W36-0c.5 %s: the unnamed control/null bytes are the review's %r" %
-                  (stem, tuple(expect.values())),
+            check("W36-0c.5 %s: the %s control/null bytes are the review's %r" %
+                  (stem, "named" if named_ else "unnamed", tuple(expect.values())),
                   {s: len(v) for s, v in found.items()} == expect, "%r" % (found,))
             rc, out = run_cli(bad, e_path, c_path, n_path)
+            if named_:
+                check("W36-0f.4.2 %s: the inverted file FAILs, by derived lines in the stream" % stem,
+                      rc == 1 and all(("derived %s " % s) in out for s in expect), out[:400])
+                continue
             check("W36-0c.5 %s: the inverted file FAILs, one control-mask line per stream" % stem,
                   rc == 1 and all(("control-mask %s %d" % (s, n)) in out for s, n in expect.items()),
                   out[:400])
@@ -1435,6 +1437,235 @@ try:
         check("W36-0f.4.1 the gate names the date words and the view word as derived",
               {"date 0x2640002a", "date 0x2640002b", "date 0x2640002d", "view 0x26400026"} <=
               g.canonical_all(R)[2][cedl_n])
+
+        # --- W36-0f.4.2: the CV_iew view stamp and the view date words are session fields --------------
+        # The view-stamp record (0x22400015: a zero u32, the stamp, 12 constant bytes) and the view-state
+        # record (0x22400008) of a CV_iew bag block hold a stamp, and three date words from +1176, +1182
+        # and +1186, that a host control and its null differ in (DOSSIER, "CV_iew view stamp word (rec
+        # 0x22400015 +4..7)" and "CV_iew view date words (rec 0x22400008 +1176..1190)": 21 and 17 to 21 of
+        # 202 pairs, always one stamp or date against another).  Each is masked as a value a save writes
+        # and only in a bag block whose records chain exactly; the unset value of a date word, the u16
+        # words around them and every other byte are compared.
+        cv_n, cv_meta_n = "???214/CV_iew/Var2Data", "???214/CV_iew/VarMeta"
+        stamp_span = (0x3D1412C0, 0x3D282DB4)
+        cv_recs = bag_records(R[cv_n], R[cv_meta_n])
+        stamp_recs = [r_ for r_ in cv_recs if r_[2] == 0x22400015]
+        state_recs = [r_ for r_ in cv_recs if r_[2] == 0x22400008]
+        check("W36-0f.4.2 the reference holds one stamp record (20 bytes, kind 1) and three view-state records",
+              len(stamp_recs) == 1 and stamp_recs[0][1:] == (20, 0x22400015, 1) and
+              sorted(r_[1] for r_ in state_recs) == [1530, 41363, 41363], "%r" % (cv_recs[:12],))
+        stamp_at = stamp_recs[0][0]
+        date_at = [r_ for r_ in state_recs if r_[1] == 1530][0][0]
+        unset_at = [r_ for r_ in state_recs if r_[1] == 41363][0][0]
+
+        def cv_u32(data_, at_):
+            return struct.unpack_from("<I", data_, at_)[0]
+
+        check("W36-0f.4.2 the reference's stamp and date words are inside the spans, its unset words are not dates",
+              stamp_span[0] <= cv_u32(R[cv_n], stamp_at + 4) <= stamp_span[1] and
+              all(date_span[0] <= cv_u32(R[cv_n], date_at + o_) <= date_span[1] for o_ in (1176, 1182, 1186)) and
+              [cv_u32(R[cv_n], unset_at + o_) for o_ in (1176, 1182, 1186)] == [14400, 14400, 0x340A75FF],
+              "%r" % ([cv_u32(R[cv_n], date_at + o_) for o_ in (1176, 1182, 1186)],))
+
+        def cv_put(streams_, edits_):
+            b_ = bytearray(streams_[cv_n])
+            for at_, raw_ in edits_.items():
+                b_[at_:at_ + len(raw_)] = raw_
+            return dict(streams_, **{cv_n: bytes(b_)})
+
+        def cv_rebuilt(streams_, uid_, edit_, rekey_=None):
+            """The streams with bag block `uid_` re-serialised after `edit_(records)` (records are
+            [id, kind, payload, pad]; it may return bytes to append): the block's length word and the two
+            header words that follow it, the later VarMeta offsets, and VarMeta +20 follow."""
+            var_, meta_ = streams_[cv_n], bytearray(streams_[cv_meta_n])
+            ents_ = blocks(streams_[cv_meta_n])
+            k_ = [i_ for i_, (u_, o_, key_) in enumerate(ents_) if u_ == uid_ and key_ == 0x20400006][0]
+            off_ = ents_[k_][1]
+            old_ = cv_u32(var_, off_)
+            head_ = bytearray(var_[off_ + 4:off_ + 20])
+            recs_, pos_ = [], off_ + 20
+            while pos_ < off_ + 4 + old_:
+                len_, rid_, kind_ = struct.unpack_from("<III", var_, pos_)
+                recs_.append([rid_, kind_, bytearray(var_[pos_ + 12:pos_ + 12 + len_]),
+                              var_[pos_ + 12 + len_:pos_ + 13 + len_] if len_ & 1 else b""])
+                pos_ += 12 + len_ + (len_ & 1)
+            tail_ = edit_(recs_)
+            tail_ = tail_ if isinstance(tail_, bytes) else b""
+            data_ = b"".join(struct.pack("<III", len(p_), r_, kd_) + bytes(p_) + ((pd_ or b"\0") if len(p_) & 1 else b"")
+                             for r_, kd_, p_, pd_ in recs_) + tail_
+            new_ = 16 + len(data_)
+            for w_ in (0, 4):
+                if cv_u32(head_, w_) == old_ - 4:
+                    head_[w_:w_ + 4] = struct.pack("<I", new_ - 4)
+            var2_ = var_[:off_] + struct.pack("<I", new_) + bytes(head_) + data_ + var_[off_ + 4 + old_:]
+            for i_, (u_, o_, key_) in enumerate(ents_):
+                if o_ != 0xFFFFFFFF and o_ > off_:
+                    struct.pack_into("<I", meta_, 24 + 12 * i_ + 4, o_ + new_ - old_)
+            if cv_u32(meta_, 20) == len(var_):
+                struct.pack_into("<I", meta_, 20, len(var2_))
+            if rekey_ is not None:
+                struct.pack_into("<I", meta_, 24 + 12 * k_ + 8, rekey_)
+            return dict(streams_, **{cv_n: var2_, cv_meta_n: bytes(meta_)})
+
+        def cv_verdict(label_, traced_, ref_, want_fail_):
+            lines_, problems_, checked_, unchecked_ = g.compare(traced_, ref_, C, N)
+            check("W36-0f.4.2 %s %s" % (label_, "fails" if want_fail_ else "is noise"),
+                  (problems_ >= 1 and any(cv_n in ln for ln in lines_)) if want_fail_ else problems_ == 0,
+                  "%r" % (lines_,))
+
+        same_ = cv_rebuilt(R, 2, lambda recs_: None)
+        check("W36-0f.4.2 the re-serialised bag block with no edit is the reference",
+              same_[cv_n] == R[cv_n] and same_[cv_meta_n] == R[cv_meta_n])
+
+        # the stamp: a value in the span passes either way, a value out of kind fails either way
+        for what_, v_ in (("another stamp", stamp_span[0] + 0x80000), ("the span's first value", stamp_span[0]),
+                          ("the span's last value", stamp_span[1])):
+            moved = cv_put(R, {stamp_at + 4: struct.pack("<I", v_)})
+            cv_verdict("the view stamp: %s (%#x), traced" % (what_, v_), moved, R, False)
+            cv_verdict("the view stamp: %s (%#x), reference" % (what_, v_), R, moved, False)
+        here_ = cv_u32(R[cv_n], stamp_at + 4)
+        for what_, v_ in (("0", 0), ("1", 1), ("0xffffffff", 0xFFFFFFFF), ("0x7fffffff", 0x7FFFFFFF),
+                          ("one under the span", stamp_span[0] - 1), ("one over the span", stamp_span[1] + 1)):
+            out_ = cv_put(R, {stamp_at + 4: struct.pack("<I", v_)})
+            cv_verdict("the view stamp: %s, traced" % what_, out_, R, True)
+            cv_verdict("the view stamp: %s, reference" % what_, R, out_, True)
+            cv_verdict("the view stamp: %s against another stamp" % what_, out_,
+                       cv_put(R, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), True)
+            cv_verdict("the view stamp: %s on both sides is equal" % what_, out_, out_, False)
+        # the bytes around the stamp are compared, also beside a stamp that moved
+        moved = cv_put(R, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)})
+        for what_, edit_ in (("the leading zero word set to 1", {stamp_at: struct.pack("<I", 1)}),
+                             ("a constant byte at +8 changed", {stamp_at + 8: b"\x15"}),
+                             ("the last constant byte changed", {stamp_at + 19: b"\x01"})):
+            cv_verdict("the view stamp record: %s" % what_, cv_put(R, edit_), R, True)
+            cv_verdict("the view stamp record: %s beside a moved stamp" % what_, cv_put(moved, edit_), R, True)
+        # a stamp is masked only after the zero word the record has: a nonzero word on both sides leaves it compared
+        lead_ = cv_put(R, {stamp_at: struct.pack("<I", 1)})
+        cv_verdict("a stamp record with a nonzero leading word on both sides, the stamps differing",
+                   cv_put(lead_, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), lead_, True)
+        cv_verdict("a stamp record with a nonzero leading word on both sides, the stamps equal", lead_, lead_, False)
+        # another kind, another length or another record id is not the stamp record
+        cv_verdict("the view stamp record with kind 2 beside a moved stamp",
+                   cv_put(moved, {stamp_at - 4: struct.pack("<I", 2)}), R, True)
+        both_ = cv_put(R, {stamp_at - 4: struct.pack("<I", 2)})
+        cv_verdict("a stamp record of kind 2 whose stamp differs between the saves",
+                   cv_put(both_, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), both_, True)
+        cv_verdict("a stamp record of kind 2 on both sides is equal", both_, both_, False)
+        wide_ = cv_rebuilt(R, 2, lambda recs_: recs_[-1][2].extend(bytes(4)))
+        wide_b = cv_put(wide_, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)})
+        cv_verdict("a stamp record of 24 bytes whose stamp differs between the saves", wide_b, wide_, True)
+        cv_verdict("a stamp record of 24 bytes on both sides is equal", wide_, wide_, False)
+        short_ = cv_rebuilt(R, 2, lambda recs_: recs_[-1].__setitem__(2, recs_[-1][2][:16]))
+        cv_verdict("a stamp record of 16 bytes whose stamp differs between the saves",
+                   cv_put(short_, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), short_, True)
+        other_id = cv_rebuilt(R, 2, lambda recs_: recs_[-1].__setitem__(0, 0x22400016))
+        cv_verdict("a record of another id with the stamp record's payload, a stamp differing",
+                   cv_put(other_id, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), other_id, True)
+        # a stamp is noise only in a bag block that chains exactly, and only in a block of the bag key
+        jam_ = cv_rebuilt(R, 2, lambda recs_: b"\x01\x02\x03\x04\x05")
+        cv_verdict("a bag block that does not chain: a moved stamp",
+                   cv_put(jam_, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), jam_, True)
+        cv_verdict("a bag block that does not chain, on both sides, is equal", jam_, jam_, False)
+        plain_ = cv_rebuilt(R, 2, lambda recs_: None, rekey_=0x20400007)
+        cv_verdict("a block that is not of the bag key: a moved stamp",
+                   cv_put(plain_, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), plain_, True)
+        # the stamp moved in the bag block of another uid is a different field of another block
+        check("W36-0f.4.2 the gate names the stamp of block 2 and the date words of block 3 as derived",
+              {"view stamp uid 2", "view date uid 3 +1176", "view date uid 3 +1182", "view date uid 3 +1186"} <=
+              g.canonical_all(R)[2][cv_n])
+
+        # the three date words of a view-state record
+        for lo_ in (1176, 1182, 1186):
+            here_ = cv_u32(R[cv_n], date_at + lo_)
+            for what_, v_ in (("another date", date_span[0] + 14400 * 3), ("the span's first value", date_span[0]),
+                              ("the span's last value", date_span[1])):
+                moved = cv_put(R, {date_at + lo_: struct.pack("<I", v_)})
+                cv_verdict("view date +%d: %s (%d), traced" % (lo_, what_, v_), moved, R, False)
+                cv_verdict("view date +%d: %s (%d), reference" % (lo_, what_, v_), R, moved, False)
+            for what_, v_ in (("0", 0), ("1", 1), ("0xffffffff", 0xFFFFFFFF), ("0x7fffffff", 0x7FFFFFFF),
+                              ("the unset 14400", 14400), ("the unset 0x340a75ff", 0x340A75FF),
+                              ("one under the span", date_span[0] - 1), ("one over the span", date_span[1] + 1),
+                              ("a 1990 date", 60000000)):
+                out_ = cv_put(R, {date_at + lo_: struct.pack("<I", v_)})
+                cv_verdict("view date +%d: %s, traced" % (lo_, what_), out_, R, True)
+                cv_verdict("view date +%d: %s, reference" % (lo_, what_), R, out_, True)
+                cv_verdict("view date +%d: %s against another date" % (lo_, what_), out_,
+                           cv_put(R, {date_at + lo_: struct.pack("<I", here_ + 14400)}), True)
+                cv_verdict("view date +%d: %s on both sides is equal" % (lo_, what_), out_, out_, False)
+        triple = R
+        for k_, lo_ in enumerate((1176, 1182, 1186)):
+            triple = cv_put(triple, {date_at + lo_: struct.pack("<I", date_span[0] + 14400 * (k_ + 1))})
+        cv_verdict("the three view dates changed", triple, R, False)
+        # the unset words of the other view-state records are not noise: a date against the unset value
+        for lo_ in (1176, 1182, 1186):
+            cv_verdict("view date +%d: a date against the unset value in the 41363-byte record" % lo_,
+                       cv_put(R, {unset_at + lo_: struct.pack("<I", date_span[0] + 14400)}), R, True)
+        both_ = cv_put(R, {unset_at + 1176: struct.pack("<I", date_span[0] + 14400)})
+        cv_verdict("view date +1176: two different dates in the 41363-byte record",
+                   cv_put(R, {unset_at + 1176: struct.pack("<I", date_span[0] + 28800)}), both_, False)
+        # the bytes around the words are compared, also beside a date that moved
+        moved = cv_put(R, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)})
+        for what_, edit_ in (("the u16 at +1172", {date_at + 1172: b"\x65\x00"}),
+                             ("the u16 at +1180", {date_at + 1180: b"\x65\x00"}),
+                             ("the u16 at +1190", {date_at + 1190: b"\x80\x80"}),
+                             ("the byte at +1175", {date_at + 1175: b"\x55"}),
+                             ("the byte at +1100", {date_at + 1100: b"\x55"}),
+                             ("a word at +1100 set to a date", {date_at + 1100: struct.pack("<I", date_span[0] + 14400)}),
+                             ("the byte at +1194", {date_at + 1194: b"\x55"})):
+            cv_verdict("the view-state record: %s" % what_, cv_put(R, edit_), R, True)
+            cv_verdict("the view-state record: %s beside a moved date" % what_, cv_put(moved, edit_), R, True)
+        # a date-sized word at +1100 is data: two different dates there on both sides fail
+        d1_ = cv_put(R, {date_at + 1100: struct.pack("<I", date_span[0] + 14400)})
+        d2_ = cv_put(R, {date_at + 1100: struct.pack("<I", date_span[0] + 28800)})
+        cv_verdict("a word at +1100 holding two different dates in the view-state record", d1_, d2_, True)
+        cv_verdict("a word at +1100 holding the same date on both sides", d1_, d1_, False)
+        # a view-state record is one of kind 1, of id 0x22400008 and of at least 1194 bytes
+        kind2_ = cv_rebuilt(R, 3, lambda recs_: [r_.__setitem__(1, 2) for r_ in recs_ if r_[0] == 0x22400008])
+        cv_verdict("a view-state record of kind 2 whose dates differ between the saves",
+                   cv_put(kind2_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), kind2_, True)
+        cv_verdict("a view-state record of kind 2 on both sides is equal", kind2_, kind2_, False)
+        other_ = cv_rebuilt(R, 3, lambda recs_: [r_.__setitem__(0, 0x22400009) for r_ in recs_ if r_[0] == 0x22400008])
+        cv_verdict("a record of another id with the view-state record's payload, its dates differing",
+                   cv_put(other_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), other_, True)
+        for size_, want_ in ((1193, True), (1194, False), (1202, False)):
+            def cut_(recs_, size_=size_):
+                for r_ in recs_:
+                    if r_[0] == 0x22400008:
+                        r_[2] = r_[2][:size_] + bytearray(max(0, size_ - len(r_[2])))
+            sized_ = cv_rebuilt(R, 3, cut_)
+            cv_verdict("a view-state record of %d bytes whose dates differ" % size_,
+                       cv_put(sized_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), sized_, want_)
+        # and, as the stamp, in a bag block that chains exactly
+        jam_ = cv_rebuilt(R, 3, lambda recs_: b"\x01\x02\x03\x04\x05")
+        cv_verdict("a bag block that does not chain: a moved date",
+                   cv_put(jam_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), jam_, True)
+        plain_ = cv_rebuilt(R, 3, lambda recs_: None, rekey_=0x20400007)
+        cv_verdict("a block that is not of the bag key: a moved date",
+                   cv_put(plain_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), plain_, True)
+        # a block whose length word runs past the end of the stream is not read to the stream's end
+        blk3_ = [o_ for u_, o_, k_ in blocks(R[cv_meta_n]) if u_ == 3 and k_ == 0x20400006][0]
+        cut_b = bytearray(R[cv_n][:blk3_ + 4 + struct.unpack_from("<I", R[cv_n], blk3_)[0]])
+        struct.pack_into("<I", cut_b, blk3_, len(cut_b) - blk3_ - 4 + 100)
+        cut_s = dict(R, **{cv_n: bytes(cut_b)})
+        cv_verdict("a bag block whose length word runs 100 bytes past the stream: a moved date",
+                   cv_put(cut_s, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), cut_s, True)
+        cv_verdict("a bag block whose length word runs past the stream, on both sides, is equal", cut_s, cut_s, False)
+        # a stamp is named by its block: a raw 0 in one block is not made equal by a stamp in another
+        dup_ = cv_rebuilt(R, 1, lambda recs_: recs_.append([0x22400015, 1, bytearray(R[cv_n][stamp_at:stamp_at + 20]), b""]))
+        dup_at = 4 + cv_u32(R[cv_n], 0) + 12
+        check("W36-0f.4.2 the stream with a second stamp record in block 1 holds it at the end of that block",
+              dup_[cv_n][dup_at:dup_at + 20] == R[cv_n][stamp_at:stamp_at + 20] and
+              len(dup_[cv_n]) == len(R[cv_n]) + 32)
+        cv_verdict("a second stamp record in block 1, on both sides", dup_, dup_, False)
+        cv_verdict("view stamp: a raw 0 in block 1 against a stamp there",
+                   cv_put(dup_, {dup_at + 4: bytes(4)}), dup_, True)
+        cv_verdict("view stamp: a stamp in block 1 moved, in span",
+                   cv_put(dup_, {dup_at + 4: struct.pack("<I", stamp_span[0] + 0x80000)}), dup_, False)
+        # a date is named by its block: a raw 0 in one block is not made equal by a date in another
+        for lo_ in (1176, 1182, 1186):
+            cv_verdict("view date +%d: a raw 0 in the 41363-byte record against a date there" % lo_,
+                       cv_put(R, {unset_at + lo_: bytes(4)}),
+                       cv_put(R, {unset_at + lo_: struct.pack("<I", date_span[0] + 14400)}), True)
 
         # --- W36-0f.3: the note rich text's language id and generator build -------------------------------
         # The Var2Data block of a note (key 0x0b40000f of a Task, 0x0f400047 of an Assn, 0x0c400014 of a

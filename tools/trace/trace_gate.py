@@ -223,6 +223,21 @@ FONT_ITEM_ID = 0x2240000C
 FONT_ROW = 44
 FONT_GARBAGE = 43
 BAG_KEY = 0x20400006
+# The view stamp (rec 0x22400015, 20 bytes: u32 0, the stamp, 12 constant bytes) and the three date
+# words of a view-state record (rec 0x22400008, from +1176, +1182, +1186) are session fields (W36-0f.4.2;
+# DOSSIER "CV_iew view stamp word (rec 0x22400015 +4..7)" and "CV_iew view date words (rec 0x22400008
+# +1176..1190)"): a host control and its null differ in the stamp in 21 of 202 pairs and in a date word
+# in 17 to 21, always one date against another.  A stamp lies in the span of the 627 committed ones (the
+# 0x3d1412c0 to 0x3d2812c0 of the saves, widened to the top of STAMP_SPAN); a date lies in the CEdl date
+# span (the 630 non-default words run 220968000 to 225989400).  A date word of 14400, 14400 and
+# 0x340a75ff is the view's unset value, equal in the other 1245 records, and is compared, as is the
+# u16 at +1190 (0 or 0x8080).  The u16 words at +1172 and +1180 are not these fields.
+CVIEW_STAMP_ID = 0x22400015
+CVIEW_STAMP_SPAN = (0x3D1412C0, 0x3D282DB4)
+CVIEW_STATE_ID = 0x22400008
+CVIEW_STATE_MIN = 1194
+CVIEW_DATE_AT = (1176, 1182, 1186)
+CVIEW_DATE_SPAN = (220968000, 226137600)
 
 
 def _stride(name):
@@ -653,7 +668,39 @@ def _canon_summary(data, streams):
     return bytes(out), noise, derived
 
 
+def _canon_cview_var2(data, streams):
+    """CV_iew/Var2Data: the view stamp of a view-stamp record and the three date words of a view-state
+    record are session fields, each replaced in place (the length does not change, so the font-row
+    windows still find their offsets) and each named in the third result with its block's uid, only in
+    a bag block whose records chain exactly to the block's end and only as a value a save writes
+    (W36-0f.4.2)."""
+    out = bytearray(data)
+    noise = set()
+    derived = set()
+    meta = streams.get(VAR_META[CVIEW_VAR2])
+    for uid, off, key in _meta_blocks(meta):
+        if key != BAG_KEY or off == 0xFFFFFFFF or off + 4 > len(data):
+            continue
+        end = off + 4 + _u32(data, off)
+        recs = frame_records(data[:end], off + 20) if end <= len(data) else None
+        for pos, length, rid, kind in recs or []:
+            at = pos + 12
+            if rid == CVIEW_STAMP_ID and kind == 1 and length == 20 and _u32(data, at) == 0 and \
+                    CVIEW_STAMP_SPAN[0] <= _u32(data, at + 4) <= CVIEW_STAMP_SPAN[1]:
+                out[at + 4:at + 8] = bytes(4)
+                noise.update(range(at + 4, at + 8))
+                derived.add("view stamp uid %d" % uid)
+            elif rid == CVIEW_STATE_ID and kind == 1 and length >= CVIEW_STATE_MIN:
+                for lo in CVIEW_DATE_AT:
+                    if CVIEW_DATE_SPAN[0] <= _u32(data, at + lo) <= CVIEW_DATE_SPAN[1]:
+                        out[at + lo:at + lo + 4] = bytes(4)
+                        noise.update(range(at + lo, at + lo + 4))
+                        derived.add("view date uid %d +%d" % (uid, lo))
+    return bytes(out), noise, derived
+
+
 CANON = {
+    CVIEW_VAR2: _canon_cview_var2,
     CEDL_VAR2: _canon_cedl_var2,
     CEDL_META: _canon_cedl_meta,
     VIEW_PROPS: _canon_view_props,
