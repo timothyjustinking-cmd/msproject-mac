@@ -1577,6 +1577,69 @@ try:
                   problems_ >= 1 and any(ln.endswith("Props14") or "Props14 " in ln for ln in lines_),
                   "%r" % (lines_,))
 
+        # --- W36-0d.2 (R36G0c-2): streams are keyed by their raw directory name ---------------------
+        # The printable rendering of a name is lossy: \x05SummaryInformation and \x06SummaryInformation
+        # both render as "?SummaryInformation", and a dict keyed by the rendering kept only one.  A
+        # directory entry is patched in place (its UTF-16 name and its length word), so the file stays
+        # a valid compound file.
+        def rename_entry(src, dst, old, new):
+            shutil.copyfile(src, dst)
+            ole_ = olefile.OleFileIO(dst)
+            try:
+                sid_ = [i for i, e in enumerate(ole_.direntries) if e is not None and e.name == old][0]
+                chain_, sect_ = [], ole_.first_dir_sector
+                while sect_ < 0xFFFFFFFA:
+                    chain_.append(sect_)
+                    sect_ = ole_.fat[sect_]
+                per_ = ole_.sectorsize // 128
+                at_ = (chain_[sid_ // per_] + 1) * ole_.sectorsize + (sid_ % per_) * 128
+            finally:
+                ole_.close()
+            raw_ = bytearray(open(dst, "rb").read())
+            enc_ = (new + "\0").encode("utf-16le")
+            raw_[at_:at_ + 64] = enc_.ljust(64, b"\0")
+            struct.pack_into("<H", raw_, at_ + 64, len(enc_))
+            open(dst, "wb").write(bytes(raw_))
+
+        def entry_count(path):
+            ole_ = olefile.OleFileIO(path)
+            try:
+                return len(ole_.listdir(streams=True, storages=False))
+            finally:
+                ole_.close()
+
+        dsi_old, si_old = "\x05DocumentSummaryInformation", "\x05SummaryInformation"
+        clash = os.path.join(tmp, "clash.mpp")       # DocumentSummaryInformation renamed to render
+        rename_entry(ref, clash, dsi_old, "\x06SummaryInformation")   # as SummaryInformation does
+        n_clash = entry_count(clash)
+        check("W36-0d.2 the patched file has the same number of entries and two that render alike",
+              n_clash == entry_count(ref))
+        for label, tr, rf in (("on both sides", clash, clash), ("in the traced", clash, ref),
+                              ("in the reference", ref, clash)):
+            rc, out = run_cli(tr, rf, ctl, nul)
+            check("W36-0d.2 a stream name collision %s FAILs and is named" % label,
+                  rc == 1 and "stream name collision ?SummaryInformation" in out, "rc=%d %r" % (rc, out[:200]))
+        rc, out = run_cli(clash, clash, ctl, nul)
+        check("W36-0d.2 the head line counts the %d raw entries, not the printable names" % n_clash,
+              head_counts(out)[0] == n_clash, out.splitlines()[0])
+        # a raw name that differs but renders alike (no collision): not the same stream
+        moved = os.path.join(tmp, "moved.mpp")
+        rename_entry(ref, moved, si_old, "\x06SummaryInformation")
+        for label, tr, rf in (("traced", moved, ref), ("reference", ref, moved)):
+            rc, out = run_cli(tr, rf, ctl, nul)
+            check("W36-0d.2 a stream whose raw name differs in the %s FAILs" % label,
+                  rc == 1 and "stream name differs ?SummaryInformation" in out, "rc=%d %r" % (rc, out[:200]))
+        rc, out = run_cli(moved, moved, ctl, nul)
+        check("W36-0d.2 the same renamed stream on both sides is equality and passes",
+              rc == 0, "rc=%d %r" % (rc, out[:200]))
+        # a stream on one side only is a FAIL (the name is kept, not merged into another)
+        gone = os.path.join(tmp, "gone.mpp")
+        rename_entry(ref, gone, dsi_old, "\x05ZzzNewStream")
+        for label, tr, rf in (("traced", gone, ref), ("reference", ref, gone)):
+            rc, out = run_cli(tr, rf, ctl, nul)
+            check("W36-0d.2 a stream on one side only (%s) FAILs" % label,
+                  rc == 1 and ("only-in-" + label) in out, "rc=%d %r" % (rc, out[:200]))
+
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
         check("W36-0.3 compare with no null: one problem 'no null'",

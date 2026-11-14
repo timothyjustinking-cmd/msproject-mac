@@ -54,11 +54,38 @@ except ImportError:  # the importer (the ctest) reports SKIP; the command line n
     olefile = None
 
 
+class Streams(dict):
+    """One file's streams, stream name -> bytes.  The name every rule of this file uses is the
+    printable form of the directory name (a character outside " " < c < "\x7f" is "?"), which is
+    lossy, so the raw directory entries are kept beside it (W36-0d.2 / R36G0c-2):
+      raw         {name: the raw entry name}, to compare the two sides' raw names
+      raw_names   every raw entry name, so the head line counts directory entries
+      collisions  the names that two or more entries render alike; the later entries are kept
+                  under `name#<n>` so that none is dropped or overwritten"""
+
+    def __init__(self):
+        super().__init__()
+        self.raw = {}
+        self.raw_names = []
+        self.collisions = []
+
+
 def streams(path):
     ole = olefile.OleFileIO(path)
     try:
-        return {"/".join("".join(ch if " " < ch < "\x7f" else "?" for ch in part) for part in s):
-                ole.openstream(s).read() for s in ole.listdir(streams=True, storages=False)}
+        out = Streams()
+        for entry in ole.listdir(streams=True, storages=False):
+            raw = "/".join(entry)
+            name = "/".join("".join(ch if " " < ch < "\x7f" else "?" for ch in part)
+                            for part in entry)
+            out.raw_names.append(raw)
+            if name in out:
+                if name not in out.collisions:
+                    out.collisions.append(name)
+                name = "%s#%d" % (name, out.raw_names.index(raw))
+            out[name] = ole.openstream(entry).read()
+            out.raw[name] = raw
+        return out
     finally:
         ole.close()
 
@@ -648,6 +675,12 @@ def compare(traced, ref, ctl, nul):
     names = sorted(set(traced) | set(ref))
     if nul is None:
         return ["no null"], 1, 0, len(names)
+    # two directory entries that render the same name are a collision, whichever side holds them
+    # (W36-0d.2); a stream whose raw name differs between the two sides is not the same stream
+    for key in sorted(set(getattr(traced, "collisions", ())) | set(getattr(ref, "collisions", ()))):
+        lines.append("stream name collision %s" % key)
+        problems += 1
+    raw_t, raw_r = getattr(traced, "raw", {}), getattr(ref, "raw", {})
     (traced, _, d_traced), (ref, _, d_ref) = canonical_all(traced), canonical_all(ref)
     ctl, nul = canonical(ctl), canonical(nul)
     for name in names:
@@ -658,6 +691,11 @@ def compare(traced, ref, ctl, nul):
             continue
         if name not in traced:
             lines.append("only-in-reference %s %d" % (name, len(ref[name])))
+            problems += 1
+            unchecked += 1
+            continue
+        if name in raw_t and name in raw_r and raw_t[name] != raw_r[name]:
+            lines.append("stream name differs %s" % name)
             problems += 1
             unchecked += 1
             continue
@@ -713,9 +751,10 @@ def main(argv):
     if nul is not None and nul == ctl:
         nul = None   # the control passed as its own null: no noise was measured
     lines, problems, checked, unchecked = compare(traced, ref, ctl, nul)
-    names = set(traced) | set(ref)
-    head = "%d streams, %d checked, %d not checked, %d problems" % (len(names), checked, unchecked,
-                                                                    problems)
+    # the count is of raw directory entries, not of printable names (W36-0d.2)
+    entries = set(traced.raw_names) | set(ref.raw_names)
+    head = "%d streams, %d checked, %d not checked, %d problems" % (len(entries), checked,
+                                                                    unchecked, problems)
     text = "\n".join([head] + lines) + "\n"
     sys.stdout.write(text)
     print("sha256 " + hashlib.sha256(text.encode("ascii")).hexdigest())
