@@ -263,6 +263,58 @@ file name only.  This group changes no C++ source.
 
 Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0c-COMPLETE`.
 
+**Group order after the G0c review (coordinator, Sat 14 Nov 2026).**  The G0c review found 2 Critical and 3 High
+in the gate and its test, so G0d runs alone next, before G2.
+
+### G0d: the gate, third fix (the G0c review's two Critical and three High, before G2)
+
+Source: `docs/handoff/wave36-verification/review-g0c.md` (R36G0c-1 to -11; each finding has the command
+that showed it and a **Fix:** paragraph; read each before its item).  The coordinator reproduced R36G0c-1
+by command line: `wave30-calculate` with `214/CEdl/Var2Data` +0 set from 586 to 0 exits 0; set to 587 it
+exits 1.
+
+The G0b and G0c rules stand: **a mask names a field, and checks the value it masks.**  G0d adds: **a
+placeholder in the canonical form can never equal a value a real field can hold**, and **every guard in the
+gate has a test that goes red when the guard is removed.**
+
+Items, in this order:
+- **W36-0d.1 (R36G0c-1):** derived size words are not replaced by 0.  Keep a separate "equals the derived
+  value" flag per derived field (CEdl Var2Data +0, +4, +8; CEdl VarMeta +20; 214/Props record 0x00010007), or
+  a sentinel no raw word can take, and print `derived <stream> +n` when only one side is derived.  Tests:
+  each of the five set to 0 FAILs on a pair whose true value is not 0; an emptied CEdl path record FAILs.
+- **W36-0d.2 (R36G0c-2):** streams are keyed by their full raw name, never a printable rendering.  Two
+  directory entries that render the same are a FAIL named `stream name collision`.  A stream present on one
+  side only is a FAIL.  The "N streams" count is the count of raw entries.  Test: the review's patched
+  directory FAILs.
+- **W36-0d.3 (R36G0c-3):** the view GUID string is parsed to its 16 bytes and accepted only as a version-1
+  GUID with a non-zero timestamp, the same as the binary GUIDs.  Tests: all-zero digits FAIL; a changed
+  version digit FAILs.
+- **W36-0d.4 (R36G0c-4):** a test case for each `_lpstr_slot_ok` type check: the Author, LastAuthor and
+  RevNumber type words set to 0x1F and to 0 each FAIL.  Seen red with the check removed.
+- **W36-0d.5 (R36G0c-5):** test cases for the three G0b-era guards (`marks[0] != 4`, the Props14 blob
+  size-word cross-check, the 2048-byte text cap), each seen red with the guard removed.
+- **W36-0d.6 (R36G0c-6):** each masked noise field checks its value as well as its place: the two creation
+  stamps are non-zero and not all-ones; the Props noise words and LastSave are of their decoded kind; the
+  Author strings pass the text test.  Take the accepted range of each from the committed control and null
+  saves, and quote the evidence line in a comment.
+- **W36-0d.7 (R36G0c-7):** each OPEN entry is pinned as (pair, stream, count of differing bytes), and the
+  test FAILs when a count grows or a pair joins the list.  Correct the two "data, never masked" reasons that
+  the null saves contradict (Assn Fixed2Data +32..+37 and Task Fixed2Data +42, +46..+48 differ between a
+  control and its null with no edit): say they are OPEN, not masked, and why.
+- **Meta-test:** a committed script, run by `trace_gate_guards`, that removes each named guard of the gate
+  in turn (in a temporary copy) and asserts the test goes red.  Every guard the review names, and every guard
+  G0d adds, is on its list.  Report the count: guards listed, guards red when removed.
+- R36G0c-8 to -11 (Low) go to the record as queued, unless the fix is one line.
+
+This group changes no C++ source.  It does not touch the VM, `build/trace-2021/` or `build/r7/`.
+
+**Acceptance, in `trace_gate_guards`:** the G0c acceptance stays green (negative sweep all FAIL, positive
+sweep PASS or pinned OPEN, every hand-built wrong file of review-g0b.md FAILs); every hand-built wrong file
+of review-g0c.md FAILs; the meta-test shows every listed guard red when removed.  All counts, with their
+denominators, go in the commit messages and `gates-g0d.md`.
+
+Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0d-COMPLETE`.
+
 ### G2: Props
 
 Writer: `core/mppwrite/props_edit.{h,cpp}`, and the plan layer.  The facts from the trace (`trace-props-framing-r4.md`, `trace-baseline-r4.md`, `trace-calculate-r3.md`):
