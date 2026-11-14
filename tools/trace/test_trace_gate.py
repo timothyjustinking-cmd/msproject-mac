@@ -1505,6 +1505,78 @@ try:
         check("W36-0b.8 every stride stream of every committed file has named rows",
               not undecoded, "%r" % (undecoded[:5],))
 
+        # --- W36-0d.1 (R36G0c-1): a placeholder never equals a value a real field can hold ------------
+        # The canonical form replaces a derived size word, and the CEdl path record, with a
+        # placeholder of zeros.  A traced word that is itself 0 (and wrong) used to equal it.  Each
+        # derived field is now named, so a field derived on one side only is `derived <stream> <field>`.
+        cedl, cmeta, vprops = "???214/CEdl/Var2Data", "???214/CEdl/VarMeta", "???214/Props"
+        rec_at = {rid: pos for pos, length, rid, kind in g.frame_records(R[vprops], 16)}
+        check("W36-0d.1 the pair's five derived words are not 0",
+              all(struct.unpack_from("<I", R[cedl], at)[0] != 0 for at in (0, 4, 8)) and
+              struct.unpack_from("<I", R[cmeta], 20)[0] != 0 and
+              struct.unpack_from("<I", R[vprops], rec_at[0x00010007] + 12)[0] != 0)
+        for label, sname, at in (("CEdl Var2Data +0", cedl, 0), ("CEdl Var2Data +4", cedl, 4),
+                                 ("CEdl Var2Data +8", cedl, 8), ("CEdl VarMeta +20", cmeta, 20),
+                                 ("214/Props record 0x00010007", vprops,
+                                  rec_at[0x00010007] + 12)):
+            zero = put(R, sname, [(at, bytes(4))])
+            for which, (tr, rf) in (("traced", (zero, R)), ("reference", (R, zero))):
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0d.1 %s set to 0 in the %s fails, and names the field as derived on one "
+                      "side only" % (label, which),
+                      problems_ >= 1 and any(ln.startswith("derived " + sname) for ln in lines_),
+                      "%r" % (lines_,))
+            both = put(R, sname, [(at, bytes(4))])
+            problems_, lines_ = verdict(both, both)
+            check("W36-0d.1 %s set to 0 on both sides is equality and passes" % label,
+                  problems_ == 0, "%r" % (lines_,))
+
+        def emptied_path(streams_):
+            """The CEdl path record emptied (length 0, no payload), with the three size words, the
+            VarMeta length and 0x00010007 all made consistent with the shorter stream."""
+            d_ = streams_[cedl]
+            p_at, p_len = [(pos - 12, length) for pos, length, rid in records(d_, 20)
+                           if rid == 0x26400031][0]
+            kept = d_[:p_at] + struct.pack("<III", 0, 0x26400031, struct.unpack_from("<I", d_, p_at + 8)[0]) + \
+                d_[p_at + 12 + p_len + (p_len & 1):]
+            kept = bytearray(kept)
+            struct.pack_into("<III", kept, 0, len(kept) - 4, len(kept) - 8, len(kept) - 8)
+            out_ = dict(streams_)
+            out_[cedl] = bytes(kept)
+            mm_ = bytearray(streams_[cmeta])
+            struct.pack_into("<I", mm_, 20, len(kept))
+            out_[cmeta] = bytes(mm_)
+            pp_ = bytearray(streams_[vprops])
+            struct.pack_into("<I", pp_, rec_at[0x00010007] + 12, len(kept))
+            out_[vprops] = bytes(pp_)
+            return out_
+
+        emptied = emptied_path(R)
+        check("W36-0d.1 the emptied-path file is shorter and its path record has no payload",
+              len(emptied[cedl]) < len(R[cedl]))
+        for which, (tr, rf) in (("traced", (emptied, R)), ("reference", (R, emptied))):
+            problems_, lines_ = verdict(tr, rf)
+            check("W36-0d.1 an emptied CEdl path record in the %s fails (derived on one side only)"
+                  % which, problems_ >= 1 and ("derived %s path" % cedl) in lines_, "%r" % (lines_,))
+        problems_, lines_ = verdict(emptied, emptied)
+        check("W36-0d.1 the same emptied path on both sides is equality and passes",
+              problems_ == 0, "%r" % (lines_,))
+        # the Props14 path record: an empty path is not a path
+        p14_at, p14_len = [(pos - 12, length) for pos, length, rid in
+                           records(R["Props14"][:_u(R["Props14"]) + 4], 16) if rid == 0x35400008][0]
+        p14_blob = R["Props14"]
+        p14_empty = bytearray(p14_blob[:p14_at] + struct.pack("<III", 0, 0x35400008, 0) +
+                              p14_blob[p14_at + 12 + p14_len + (p14_len & 1):])
+        struct.pack_into("<II", p14_empty, 0, len(p14_empty) - len(p14_blob) + _u(p14_blob),
+                         len(p14_empty) - len(p14_blob) + _u(p14_blob))
+        emptied14 = dict(R)
+        emptied14["Props14"] = bytes(p14_empty)
+        for which, (tr, rf) in (("traced", (emptied14, R)), ("reference", (R, emptied14))):
+            problems_, lines_ = verdict(tr, rf)
+            check("W36-0d.1 an empty Props14 path record in the %s fails" % which,
+                  problems_ >= 1 and any(ln.endswith("Props14") or "Props14 " in ln for ln in lines_),
+                  "%r" % (lines_,))
+
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
         check("W36-0.3 compare with no null: one problem 'no null'",

@@ -222,16 +222,20 @@ def frame_records(data, base):
 
 def _canon_cedl_var2(data, streams):
     """214/CEdl/Var2Data: the path record (length word, payload, pad) and the three size words
-    derived from the stream length (+0 = len-4, +4 and +8 = len-8) are noise."""
+    derived from the stream length (+0 = len-4, +4 and +8 = len-8) are noise.  Each replaced field
+    is also named in the third result, so a raw word of 0 (or an emptied path record), which the
+    placeholder would equal, is told from a derived one (W36-0d.1)."""
     recs = frame_records(data, 20) if len(data) >= 20 else None
     if recs is None:
-        return data, set()
+        return data, set(), set()
     out = bytearray(data[:20])
     noise = set()
+    derived = set()
     for at, want in ((0, len(data) - 4), (4, len(data) - 8), (8, len(data) - 8)):
         if _u32(data, at) == want:
             out[at:at + 4] = bytes(4)
             noise.update(range(at, at + 4))
+            derived.add("+%d" % at)
     for pos, length, rid, kind in recs:
         end = pos + 12 + length + (length & 1)
         payload = data[pos + 12:pos + 12 + length]
@@ -239,17 +243,18 @@ def _canon_cedl_var2(data, streams):
             out += struct.pack("<III", 0, rid, kind)
             noise.update(range(pos, pos + 4))
             noise.update(range(pos + 12, end))
+            derived.add("path")
         else:
             out += data[pos:end]
-    return bytes(out), noise
+    return bytes(out), noise, derived
 
 
 def _canon_cedl_meta(data, streams):
     """214/CEdl/VarMeta +20 is the length of 214/CEdl/Var2Data: noise when it says so."""
     var2 = streams.get(CEDL_VAR2)
     if var2 is None or len(data) < 24 or _u32(data, 20) != len(var2):
-        return data, set()
-    return data[:20] + bytes(4) + data[24:], set(range(20, 24))
+        return data, set(), set()
+    return data[:20] + bytes(4) + data[24:], set(range(20, 24)), {"+20"}
 
 
 def _canon_view_props(data, streams):
@@ -258,14 +263,16 @@ def _canon_view_props(data, streams):
     var2 = streams.get(CEDL_VAR2)
     recs = frame_records(data, 16) if len(data) >= 16 and var2 is not None else None
     if recs is None:
-        return data, set()
+        return data, set(), set()
     out = bytearray(data)
     noise = set()
+    derived = set()
     for pos, length, rid, kind in recs:
         if rid == VIEW_CEDL_SIZE_ID and length == 4 and _u32(data, pos + 12) == len(var2):
             out[pos + 12:pos + 16] = bytes(4)
             noise.update(range(pos + 12, pos + 16))
-    return bytes(out), noise
+            derived.add("rec %#010x" % rid)
+    return bytes(out), noise, derived
 
 
 def _tail_entries(tail):
@@ -290,24 +297,26 @@ def _canon_props14(data, streams):
     user-name text of each tail entry.  The 0xffffffff entry, which the committed controls and
     edits carry and the committed null saves do not, is a named case below."""
     if len(data) < 16 or _u32(data, 8) != 0x10000:
-        return data, set()
+        return data, set(), set()
     end = _u32(data, 0) + 4
     if _u32(data, 4) != end - 4 or end > len(data):
-        return data, set()
+        return data, set(), set()
     recs = frame_records(data[:end], 16)
     entries = _tail_entries(data[end:])
     if recs is None or entries is None:
-        return data, set()
+        return data, set(), set()
     out = bytearray(data[:16])
     out[0:8] = bytes(8)
     noise = set(range(0, 8))
+    derived = set()
     for pos, length, rid, kind in recs:
         stop = pos + 12 + length + (length & 1)
         payload = data[pos + 12:pos + 12 + length]
-        if rid == PROPS14_PATH_ID and _text_ok(payload):
+        if rid == PROPS14_PATH_ID and payload and _text_ok(payload):
             out += struct.pack("<III", 0, rid, kind)
             noise.update(range(pos, pos + 4))
             noise.update(range(pos + 12, stop))
+            derived.add("path")
         else:
             out += data[pos:stop]
     # The two committed shapes are a lone 0x3540000b entry (98 of 99 committed null saves) and
@@ -332,7 +341,7 @@ def _canon_props14(data, streams):
         out += struct.pack("<II", 0xFFFFFFFF, 0x1E)
     for eid, name in entries:
         out += struct.pack("<II", eid, 0x1E) + (b"" if _text_ok(name) else name)
-    return bytes(out), noise
+    return bytes(out), noise, derived
 
 
 def _lpstr_slot_ok(raw):
@@ -351,24 +360,24 @@ def _canon_summary(data, streams):
     the section size follow from the values and are rebuilt.  The section must lay its values
     out back to back, else the stream stays raw."""
     if len(data) < 56:
-        return data, set()
+        return data, set(), set()
     sec = _u32(data, 44)
     if sec + 8 > len(data) or _u32(data, sec) != len(data) - sec:
-        return data, set()
+        return data, set(), set()
     count = _u32(data, sec + 4)
     table = sec + 8
     if table + 8 * count > len(data):
-        return data, set()
+        return data, set(), set()
     ents = [(_u32(data, table + 8 * i), _u32(data, table + 8 * i + 4)) for i in range(count)]
     order = sorted(range(count), key=lambda i: ents[i][1])
     if count == 0 or ents[order[0]][1] != 8 + 8 * count:
-        return data, set()
+        return data, set(), set()
     values = {}
     for k, i in enumerate(order):
         lo = sec + ents[i][1]
         hi = sec + ents[order[k + 1]][1] if k + 1 < count else len(data)
         if hi < lo:
-            return data, set()
+            return data, set(), set()
         values[i] = (lo, hi)
     noise = set()
     canon = {}
@@ -398,7 +407,7 @@ def _canon_summary(data, streams):
     noise.update(range(sec, sec + 4))
     for i in range(count):
         noise.update(range(table + 8 * i + 4, table + 8 * i + 8))
-    return bytes(out), noise
+    return bytes(out), noise, set()
 
 
 CANON = {
@@ -410,17 +419,28 @@ CANON = {
 }
 
 
+def canonical_all(streams):
+    """-> (canonical streams, noise offsets, derived fields), each a dict by stream name.  The
+    CANON streams have their decoded noise fields replaced by fixed placeholders; `noise` holds the
+    offsets of the raw bytes that were replaced and `derived` the name of each replaced field.  A
+    placeholder can equal a raw field (a size word of 0, an emptied path record), so two canonical
+    forms are equal only when the same fields were replaced on both sides (W36-0d.1)."""
+    out = {}
+    noise = {}
+    derived = {}
+    for name, data in streams.items():
+        if name in CANON:
+            out[name], noise[name], derived[name] = CANON[name](data, streams)
+        else:
+            out[name], noise[name], derived[name] = data, set(), set()
+    return out, noise, derived
+
+
 def canonical(streams, with_noise=False):
     """One file's streams with the decoded noise fields of the CANON streams replaced by fixed
     placeholders.  `with_noise` also returns, per stream, the offsets of the raw bytes that were
     replaced (the named noise fields)."""
-    out = {}
-    noise = {}
-    for name, data in streams.items():
-        if name in CANON:
-            out[name], noise[name] = CANON[name](data, streams)
-        else:
-            out[name], noise[name] = data, set()
+    out, noise, _ = canonical_all(streams)
     return (out, noise) if with_noise else out
 
 
@@ -628,7 +648,8 @@ def compare(traced, ref, ctl, nul):
     names = sorted(set(traced) | set(ref))
     if nul is None:
         return ["no null"], 1, 0, len(names)
-    traced, ref, ctl, nul = (canonical(s) for s in (traced, ref, ctl, nul))
+    (traced, _, d_traced), (ref, _, d_ref) = canonical_all(traced), canonical_all(ref)
+    ctl, nul = canonical(ctl), canonical(nul)
     for name in names:
         if name not in ref:
             lines.append("only-in-traced %s %d" % (name, len(traced[name])))
@@ -647,6 +668,11 @@ def compare(traced, ref, ctl, nul):
             unchecked += 1
             continue
         checked += 1
+        # a field replaced by its placeholder on one side only is not the placeholder's value:
+        # a raw 0 is not a derived 0 (W36-0d.1 / R36G0c-1)
+        for field in sorted(d_ref.get(name, set()) ^ d_traced.get(name, set())):
+            lines.append("derived %s %s" % (name, field))
+            problems += 1
         c, n = ctl.get(name), nul.get(name)
         ids = (row_ids(name, c, ctl), row_ids(name, a, ref)) if _stride(name) else None
         mask = control_mask(name, len(a), c, n, ids) or set()
