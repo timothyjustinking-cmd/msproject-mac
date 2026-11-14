@@ -1720,6 +1720,39 @@ try:
             check("W36-0d.4 %s with its type word kept is the pair's own stream and passes" % label,
                   problems_ == 0, "%r" % (lines_,))
 
+        # --- W36-0d.5 (R36G0c-5): three Props14 / text guards that no case reached ------------------
+        # (a) the first tail entry starts right after the count word; (b) the blob's two size words
+        # agree; (c) a path or name longer than 2048 bytes is not a name.  Each is a wrong file of the
+        # same length as the right one, so no size difference fails it first.
+        def g_compare(tr_, rf_):
+            lines_, problems_, checked_, unchecked_ = g.compare(tr_, rf_, C, N)
+            return problems_, lines_
+
+        body_ = b"".join(struct.pack("<II", eid, 0x1E) + (name[:-4] if k == 0 else name)
+                         for k, (eid, name) in enumerate(p14_entries))
+        shifted = p14_head + struct.pack("<I", len(p14_entries)) + bytes([0x11, 0, 0x22, 0]) + body_
+        check("W36-0d.5 the shifted tail is as long as the pair's Props14", len(shifted) == len(R[P14]))
+        for which, (tr, rf) in (("traced", (swapped(R, P14, shifted), R)),
+                                ("reference", (R, swapped(R, P14, shifted)))):
+            problems_, lines_ = g_compare(tr, rf)
+            check("W36-0d.5 a Props14 tail whose first entry is not at +4 (junk after the count) in the "
+                  "%s fails" % which, problems_ >= 1 and any(P14 in ln for ln in lines_), "%r" % (lines_,))
+        for which, off in (("+4", 4), ("+0", 0)):
+            wrong = bytearray(R[P14])
+            struct.pack_into("<I", wrong, off, _u(R[P14][off:]) + 16)
+            for side, (tr, rf) in (("traced", (swapped(R, P14, bytes(wrong)), R)),
+                                   ("reference", (R, swapped(R, P14, bytes(wrong))))):
+                problems_, lines_ = g_compare(tr, rf)
+                check("W36-0d.5 the Props14 blob size word %s changed by 16 in the %s fails" % (which, side),
+                      problems_ >= 1 and any(P14 in ln for ln in lines_), "%r" % (lines_,))
+        for chars, expect in ((1024, "noise"), (1025, "fails")):
+            long_a = swapped(R, P14, p14_join(p14_head, [first, (second[0], ("a" * chars).encode("utf-16le"))]))
+            long_b = swapped(R, P14, p14_join(p14_head, [first, (second[0], ("b" * chars).encode("utf-16le"))]))
+            problems_, lines_ = g_compare(long_a, long_b)
+            check("W36-0d.5 two different tail names of %d bytes: %s" % (2 * chars, expect),
+                  (problems_ >= 1 and any(P14 in ln for ln in lines_)) if expect == "fails"
+                  else problems_ == 0, "%r" % (lines_,))
+
         # W36-0.3 at the function level
         lines, problems, checked, unchecked = g.compare(R, R, C, None)
         check("W36-0.3 compare with no null: one problem 'no null'",
