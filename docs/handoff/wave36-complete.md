@@ -421,3 +421,79 @@ None.  Every G0c item is fixed, except that **R36G0b-8** goes to the record as o
 * **`python -I` still cannot import `olefile`** here (user site-packages); the trace tests run without `-I` and read only committed files.
 
 WAVE-36-G0c-COMPLETE
+
+## G0d: the trace gate, third fix
+
+Brief `docs/handoff/wave36-brief.md` section 2 (G0d); findings R36G0c-1 to -11 of `docs/handoff/wave36-verification/review-g0c.md`.  Design rule, restated from G0c's: a masked field is
+accepted only as a value a save writes, on both sides, and a field derived on one side only is a FAIL.  Items, one finding id per commit, in order:
+
+| item | id | commit | what |
+|---|---|---|---|
+| W36-0d.1 | R36G0c-1 | `1956d20` | a derived field is told from a raw one: a size word of 0 no longer equals the placeholder (`derived <stream> <field>` on one side only FAILs) |
+| W36-0d.2 | R36G0c-2 | `6a7d4f4` | streams are keyed by their raw directory name: a collision of printable names FAILs, a renamed stream FAILs, the head line counts directory entries |
+| W36-0d.3 | R36G0c-3 | `527a951` | the view GUID string is noise only as a version-1 GUID with a timestamp (the binary test, on the parsed string) |
+| W36-0d.4 | R36G0c-4 | `b239c79` | the `_lpstr_slot_ok` type check is tested and seen red with it removed |
+| W36-0d.5 | R36G0c-5 | `b13b86c` | the Props14 first-entry, blob size-word and 2048-byte guards are tested and seen red |
+| W36-0d.6 | R36G0c-6 | `89c5fb4` | a masked field holds a value a save writes: stamps and save words 32 bits, not 0, not all-ones; LastSave a FILETIME after 2000; the strings at least a NUL, ending in a NUL, no control character; bounds from the 624 committed files |
+| W36-0d.7 | R36G0c-7 | `f517eb2` | each of the 56 OPEN pairs is pinned as (pair, stream, count): 170 rows; two wrong "data, never masked" reasons corrected |
+| W36-0d.8 | R36G0c-4, -5 | `ea5e70d` | `test_gate_guards_meta.py` removes each named guard in turn in a copy of the gate and the test goes red on each: 60 listed, 60 red at this commit |
+| W36-0d.9 | R36G0c-8 | `a04d135` | `_text_ok` rejects every Unicode C category (C1 controls, format, private use, unassigned); the meta-test lists 61 |
+| W36-0d.10 | R36G0c-11 | `f48beba` | the gate docstring states what the waiver is and what it is not |
+
+**Acceptance (the committed `tools/trace/test_trace_gate.py`, on the committed file set).**  Negative, over 191 edits: **191 of 191 FAIL**.  Positive, over 202 control-nulls: **146 PASS and
+56 OPEN**, the 56 pinned as 170 (pair, stream, count) rows.  Both counts are those of G0c and unchanged at every commit.  Every hand-built wrong file of the G0c review FAILs.  The meta-test
+(61 guards removed in turn): **`guards listed 61, red 61 (60 by a failing case, 1 by a crash), not red 0`**.  The test is 491 checks (G0c: 335), 0 FAIL.
+
+**Gate line.**  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only;
+each carries both trailers.  The full default run (the test, then the meta-test) took 486 s at 0d.8 and passed again on the 0d.9 tree (`build/w36/ea5e70d-W36-0d.9-green.log`); 0d.10 is a
+docstring, and the test alone (`--no-meta`) passed on it (491 PASS).  **The ctest itself was not re-run at the tip:** the build tree is shared and needs a reconfigure for the new
+`TIMEOUT` (300 s to 3600 s, the one change to `CMakeLists.txt`, which is why the 0d.8 doc gates print SOURCE CHANGED); the ctest runs the same script with no arguments.  G0d changes no C++
+source.  Per-item logs and counts are in `docs/handoff/wave36-verification/gates-g0d.md`.  The builder used no COM, did not touch the VM, `build/trace-2021/` or `build/r7/`, and pushed nothing.
+
+### Guards seen red
+
+Each red ran on the previous commit's gate or on a copy with one guard removed (`build/w36/mutants.py`, then the committed meta-test); logs are `build/w36/<parent>-W36-0d.N-red.log` and `-green.log`.
+
+| item | red | green |
+|---|---|---|
+| 0d.1 | five derived words set to 0, both sides; the empty path records: 14 FAIL | 357 PASS |
+| 0d.2 | the collision on both sides and both renamed cases returned rc 0: 6 FAIL of 10 | 367 PASS |
+| 0d.3 | zero digits, version, variant, zero timestamp: 10 FAIL | 381 PASS |
+| 0d.4 | the type clause removed: 12 FAIL | 399 PASS |
+| 0d.5 | `marks[0]` 2 FAIL, the size-word cross-check 2 FAIL, the 2048 cap 1 FAIL | 408 PASS |
+| 0d.6 | 52 FAIL, 9 PASS (equality and noise cases) | 469 PASS |
+| 0d.7 | the printed control-mask count + 1: 9 FAIL (was 8) | 471 PASS |
+| 0d.8 | the meta-test's first run: 59 of 60 red, **`stream-count` green** (the head line counting printable names: no case read the head count of a renamed stream); a check added, then 60 of 60 | 473 PASS |
+| 0d.9 | four character classes in two records, two sides, and the refusal check: 17 FAIL | 491 PASS, 61 of 61 red |
+
+### Deferred
+
+None.  R36G0c-9 and R36G0c-10 (Low) are queued below, as the brief allows for a fix that is not one line.
+
+### Queued (Low, not fixed)
+
+* **R36G0c-9.**  Three of the `named_absent` conditions of `_canon_props14` (the text test, the id test, `len(entries) >= 1`) are redundant: the comparison with the reference's canonical form
+  catches what they miss, and no committed tail shape isolates one (the review's 10 of 10 shapes give the same verdict with and without).  The meta-test lists none of them, as a removal
+  changes no verdict.  The SummaryInformation noise range "to the end of the slot" is verdict-neutral (it affects `with_noise` only); a case with an Author string that needs padding would
+  isolate it.  Direction: drop the redundant conditions, or find a shape where each matters.
+* **R36G0c-10.**  The control null no longer changes any verdict: it only labels a failing byte `control-mask` or `bytes-differ` and refuses a missing null, so a fake null (the control with
+  one SummaryInformation byte changed) gives the same verdict as the real one.  `runone6.ps1` and the "no null" guard therefore demand a file that proves nothing.  Direction: drop the null from
+  the command line and the specs, or make "no null" mean "no measured noise" by checking that the null differs from the control in SummaryInformation and Props only.  Needs the coordinator's
+  decision, because it changes the capture specs.
+
+### Found, not fixed
+
+* **R36G0c-11, the G0c record's own overstatements.**  The G0c record and `gates-g0c.md` say a masked field is "accepted only when both sides hold a well-formed value of the named kind"; that
+  was not true of R36G0c-1, -3, -6 and -8 until this group, and the G0c record counts twelve planted removals where the brief says eleven.  The gate docstring is corrected (0d.10); the G0c
+  records are not rewritten.  What the tests hold now is the acceptance above.
+* **R36G0b-8 is still open** and **R36G0b-11 is as G0c recorded it** (the G0b commits carry `Co-Authored-By`, not `Generated-By`; history is not rewritten; every G0c and G0d commit carries both).
+* **The review's "version digit index 15" is time_hi's high nibble.**  In the rendered string the version digit is index 17 and the variant digit index 20; the test changes 15, 17 and 20 and
+  expects 15 to stay noise (W36-0d.3).
+* **The review's "33 bytes of 0xff" example stays noise**: it is a valid Windows-1252 string.  The slot is bounded by its form (a NUL, no control character), not by what a user could be called.
+* **The font byte has no bound**: 24 committed bytes, 8 distinct values (0, 52, 96, 107, 110, 144, 192, 215), an uninitialised allocator byte with no pattern to test.
+* **The 56 OPEN pairs are still OPEN**, pinned to (pair, stream, count) but not decoded.  Two reasons that called per-save values "data, never masked" were wrong and are corrected (0d.7).
+* **`_text_ok`'s "unassigned" set is the running Python's `unicodedata`**; a character assigned in a newer Unicode than the runner's would be refused there.  The committed names are not affected.
+* **One guard is red by a crash, not a FAIL line** (`guidstr-shape`: a non-hex digit reaches `uuid.UUID` in the gate and the test dies with a `ValueError`); the meta-test reports it as such.
+* **The meta-test lengthens the ctest** from about 36 s to about 8 minutes on this machine (12 cores, six copies at a time); the `TIMEOUT` is 3600 s.  `--no-meta` skips it.
+
+WAVE-36-G0d-COMPLETE
