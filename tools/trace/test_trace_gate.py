@@ -327,6 +327,10 @@ try:
                     if at in uids_:              # W36-0f.2: the length word and the fill after the uids
                         out.update(range(at - 12, at - 8))
                         out.update(range(at + 4 * uids_[at], at + length))
+                    if rid in (0x2640002A, 0x2640002B, 0x2640002D) and length == 4 and                             220968000 <= struct.unpack_from("<I", data, at)[0] <= 226137600:
+                        out.update(range(at, at + 4))             # a view date word (W36-0f.4.1)
+                    if rid == 0x26400026 and length == 8 and struct.unpack_from("<I", data, at)[0] == 0                             and 24183812 <= struct.unpack_from("<I", data, at + 4)[0] <= 53413760:
+                        out.update(range(at + 4, at + 8))         # the view word's upper u32
                     if rid == 0x2640003D and uids_:
                         n_ = struct.unpack_from("<I", data, at)[0] if length >= 4 else None
                         if n_ in uids_.values() and data[at:at + length] == \
@@ -519,8 +523,6 @@ try:
                                         "baseline +42 00 -> 20 and +46..+48 c0 12 f2 -> 78 1e f1); "
                                         "masking them would also pass an edit of the real field",
             "114/TBkndTask/FixedMeta": "the meta item at +315; not decoded",
-            "214/CEdl/Var2Data": "the date words 0x2640002a, 0x2640002b and 0x2640002d and the view word "
-                                 "0x26400026 +4 (11 payload bytes); not decoded until W36-0f.4",
             "214/CTable/FixedData": "the byte at +447; not decoded",
             "214/CV_iew/Var2Data": "4-byte save words of the view bag (bag block uid 2 +42682; block "
                                    "uid 3 +2270..+2281 and their kin); not decoded",
@@ -537,12 +539,12 @@ try:
                 "114/TBkndRsc/FixedMeta", "114/TBkndTask/Fixed2Data", "114/TBkndTask/FixedMeta",
                 "214/CV_iew/Var2Data", "214/Props",
             ),
-            "wave27-priority-750": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
-            "wave27-unlink": ("114/TBkndAssn/Fixed2Data", "214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
+            "wave27-priority-750": ("214/CV_iew/Var2Data",),
+            "wave27-unlink": ("114/TBkndAssn/Fixed2Data", "214/CV_iew/Var2Data"),
             "wave28-mark-auto": ("214/CV_iew/Var2Data",),
             "wave28-mark-manual": ("214/CV_iew/Var2Data",),
-            "wave28-newtask-auto": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
-            "wave28-newtask-manual": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
+            "wave28-newtask-auto": ("214/CV_iew/Var2Data",),
+            "wave28-newtask-manual": ("214/CV_iew/Var2Data",),
             "wave28-outline-indent": ("214/CV_iew/Var2Data",),
             "wave28-outline-outdent": (
                 "114/Props", "114/TBkndAssn/Fixed2Meta", "114/TBkndAssn/FixedMeta",
@@ -556,7 +558,7 @@ try:
             "wave28-percent-auto100": ("214/CV_iew/Var2Data",),
             "wave28-percent-auto40": ("214/CV_iew/Var2Data",),
             "wave28-percent-manual0": ("214/CV_iew/Var2Data",),
-            "wave28-split": ("214/CEdl/Var2Data", "214/CV_iew/Var2Data"),
+            "wave28-split": ("214/CV_iew/Var2Data",),
             "wave28-update": ("214/CV_iew/Var2Data",),
             "wave29-outline-auto-indent": ("214/CV_iew/Var2Data",),
             "wave29-outline-auto-outdent": (
@@ -611,10 +613,8 @@ try:
             ),
             "wave35-g3-assign-remove-port-saved": (
                 "114/Props", "114/TBkndAssn/Fixed2Data", "114/TBkndAssn/Fixed2Meta",
-                "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta", "214/CEdl/Var2Data",
-                "214/CV_iew/Var2Data",
+                "114/TBkndAssn/FixedMeta", "114/TBkndRsc/FixedMeta", "214/CV_iew/Var2Data",
             ),
-            "wave35-viewstate-zoom-custom-narrow": ("214/CEdl/Var2Data",),
             "wave36-r7-calc-assign-1": ("114/TBkndAssn/Fixed2Data",),
             "wave36-r7-calc-assign-2": ("114/TBkndAssn/Fixed2Data",),
             "wave36-r7-dsi-total-work": ("114/TBkndAssn/Fixed2Data",),
@@ -641,6 +641,7 @@ try:
         # 14 November 2026: 170 rows (122 control-mask, 48 size-differs) in 56 pairs; regenerated at
         # W36-0f.1 (Props14 reads by its length words and is no longer OPEN): 161 rows (118 control-mask, 43 size-differs) in 56 pairs;
         # at W36-0f.2 (the slot table's fill and the row record are read; two pairs pass): 159 rows in 54 pairs.
+        # at W36-0f.4.1 (the CEdl date words and the view word are read; one pair passes): 152 rows in 53 pairs.
         OPEN_PINNED = (
     ('wave23-flags', '???114/Props', 'control-mask 4'),
     ('wave23-flags', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
@@ -671,16 +672,12 @@ try:
     ('wave27-percent-actuals', '???214/CFilter/VarMeta', 'size-differs 36->48'),
     ('wave27-percent-actuals', '???214/CV_iew/Var2Data', 'control-mask 106'),
     ('wave27-percent-actuals', '???214/Props', 'control-mask 2'),
-    ('wave27-priority-750', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave27-priority-750', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave27-unlink', '???114/TBkndAssn/Fixed2Data', 'control-mask 7'),
-    ('wave27-unlink', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave27-unlink', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-mark-auto', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-mark-manual', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-newtask-auto', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave28-newtask-auto', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-newtask-manual', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave28-newtask-manual', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-outline-indent', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave28-outline-outdent', '???114/Props', 'control-mask 2'),
@@ -695,7 +692,6 @@ try:
     ('wave28-percent-auto100', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-percent-auto40', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-percent-manual0', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave28-split', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave28-split', '???214/CV_iew/Var2Data', 'control-mask 6'),
     ('wave28-update', '???214/CV_iew/Var2Data', 'control-mask 4'),
     ('wave29-outline-auto-indent', '???214/CV_iew/Var2Data', 'control-mask 2'),
@@ -788,9 +784,7 @@ try:
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/Fixed2Meta', 'control-mask 6'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndAssn/FixedMeta', 'control-mask 10'),
     ('wave35-g3-assign-remove-port-saved', '???114/TBkndRsc/FixedMeta', 'control-mask 2'),
-    ('wave35-g3-assign-remove-port-saved', '???214/CEdl/Var2Data', 'control-mask 11'),
     ('wave35-g3-assign-remove-port-saved', '???214/CV_iew/Var2Data', 'control-mask 4'),
-    ('wave35-viewstate-zoom-custom-narrow', '???214/CEdl/Var2Data', 'control-mask 7'),
     ('wave36-r7-calc-assign-1', '???114/TBkndAssn/Fixed2Data', 'control-mask 2'),
     ('wave36-r7-calc-assign-2', '???114/TBkndAssn/Fixed2Data', 'control-mask 8'),
     ('wave36-r7-dsi-total-work', '???114/TBkndAssn/Fixed2Data', 'control-mask 4'),
@@ -879,7 +873,7 @@ try:
               "%r" % (sorted({(r[0], r[1]) for r in OPEN_PINNED} ^
                              {(s_, n_) for s_ in OPEN for n_ in OPEN[s_]})[:4],))
         for s in sorted(OPEN):
-            print("OPEN %s: %s" % (s, "; ".join("%s: %s" % (n, OPEN[s][n]) for n in
+            print("OPEN %s: %s" % (s, "; ".join("%s: %s" % (n, OPEN[s].get(n, "not an OPEN stream")) for n in
                                                   sorted(pos_failed.get(s, [])))))
         # W36-0c.5: the control mask minus the named fields is empty for every committed pair
         # except the OPEN ones, and for those it is exactly the streams MASKED_IN names.  In the
@@ -1343,6 +1337,104 @@ try:
         check("W36-0f.2 the canonical form of the slot table is its uids only",
               g.canonical_all(R)[0][cedl_n][slot_rec[0]:slot_rec[0] + 12 + 4 * len(slot_uids)] ==
               struct.pack("<III", 4 * len(slot_uids), 0x26400024, 1) + slot_pl[:4 * len(slot_uids)])
+
+        # --- W36-0f.4.1: the CEdl date words and the view word are session fields -----------------------
+        # Records 0x2640002a, 0x2640002b and 0x2640002d are u32 dates (tenths of a minute from 1 January
+        # 1984), and 0x26400026 an 8-byte view word with a zero lower u32 and an upper u32 that is not a
+        # date (DOSSIER, "CEdl view date word 0x2640002a" and its two kin, "CEdl view word rec
+        # 0x26400026"): a host control and its null differ in them in 7 of 223 pairs.  Each is masked as a
+        # value a save writes, inside the span of the 624 committed saves and the VM's; the lower u32 of
+        # the view word stays compared.
+        date_span = (220968000, 226137600)
+        view_span = (24183812, 53413760)
+        cedl_pl = {rid_: cd2[pos_ + 12:pos_ + 12 + len_] for pos_, len_, rid_, kind_ in recs2
+                   if rid_ in (0x2640002A, 0x2640002B, 0x2640002D, 0x26400026, 0x26400028)}
+        check("W36-0f.4.1 the reference holds the three date words (4 bytes), the view word (8) and 0x26400028",
+              sorted((k_, len(v_)) for k_, v_ in cedl_pl.items()) ==
+              [(0x26400026, 8), (0x26400028, 4), (0x2640002A, 4), (0x2640002B, 4), (0x2640002D, 4)],
+              "%r" % ({hex(k_): len(v_) for k_, v_ in cedl_pl.items()},))
+        check("W36-0f.4.1 the reference's date words and view word are inside the spans",
+              all(date_span[0] <= struct.unpack("<I", cedl_pl[k_])[0] <= date_span[1]
+                  for k_ in (0x2640002A, 0x2640002B, 0x2640002D)) and
+              struct.unpack_from("<I", cedl_pl[0x26400026], 0)[0] == 0 and
+              view_span[0] <= struct.unpack_from("<I", cedl_pl[0x26400026], 4)[0] <= view_span[1],
+              "%r" % (cedl_pl,))
+
+        def with_word(streams_, rid_, payload_):
+            return cedl_rebuilt(streams_, swap={rid_: payload_})
+
+        def date_pl(v_):
+            return struct.pack("<I", v_)
+
+        def view_pl(lo_, hi_):
+            return struct.pack("<II", lo_, hi_)
+
+        for rid_ in (0x2640002A, 0x2640002B, 0x2640002D):
+            here_ = struct.unpack("<I", cedl_pl[rid_])[0]
+            for what_, v_ in (("another date", date_span[0] + 14400 * 3), ("the span's first value", date_span[0]),
+                              ("the span's last value", date_span[1])):
+                moved = with_word(R, rid_, date_pl(v_))
+                cedl_verdict("%#x: %s (%d), traced" % (rid_, what_, v_), moved, R, False, "W36-0f.4.1")
+                cedl_verdict("%#x: %s (%d), reference" % (rid_, what_, v_), R, moved, False, "W36-0f.4.1")
+            for what_, v_ in (("0", 0), ("1", 1), ("0xffffffff", 0xFFFFFFFF), ("0x7fffffff", 0x7FFFFFFF),
+                              ("one under the span", date_span[0] - 1), ("one over the span", date_span[1] + 1),
+                              ("a 1990 date", 60000000)):
+                out_ = with_word(R, rid_, date_pl(v_))
+                cedl_verdict("%#x: %s, traced" % (rid_, what_), out_, R, True, "W36-0f.4.1")
+                cedl_verdict("%#x: %s, reference" % (rid_, what_), R, out_, True, "W36-0f.4.1")
+                cedl_verdict("%#x: %s against another date" % (rid_, what_), out_,
+                             with_word(R, rid_, date_pl(here_ + 14400)), True, "W36-0f.4.1")
+                # the same value out of kind on both sides is the same bytes, and passes
+                cedl_verdict("%#x: %s on both sides is equal" % (rid_, what_), out_, out_, False, "W36-0f.4.1")
+            # a word of another length is not a date word: a different word of it is data
+            long_a = with_word(R, rid_, cedl_pl[rid_] + date_pl(date_span[0]))
+            long_b = with_word(R, rid_, cedl_pl[rid_] + date_pl(date_span[0] + 14400))
+            cedl_verdict("%#x: a payload of 8 bytes whose last 4 differ" % rid_, long_a, long_b, True, "W36-0f.4.1")
+            short_a = with_word(R, rid_, cedl_pl[rid_][:2])
+            short_b = with_word(R, rid_, b"\x01\x00")
+            cedl_verdict("%#x: a payload of 2 bytes that differs" % rid_, short_a, short_b, True, "W36-0f.4.1")
+            # a date word in span against one out of span is a derived field on one side only
+            cedl_verdict("%#x: in span against one over the span" % rid_, R,
+                         with_word(R, rid_, date_pl(date_span[1] + 1)), True, "W36-0f.4.1")
+        # three date words changed at once, in span, are still noise
+        triple = R
+        for k_, rid_ in enumerate((0x2640002A, 0x2640002B, 0x2640002D)):
+            triple = with_word(triple, rid_, date_pl(date_span[0] + 14400 * (k_ + 1)))
+        cedl_verdict("the three date words changed", triple, R, False, "W36-0f.4.1")
+        # a date word is its own field: the same value moved to another record's payload is data
+        other_ = with_word(R, 0x26400028, date_pl(struct.unpack("<I", cedl_pl[0x26400028])[0] + 1))
+        cedl_verdict("0x26400028 (not a date word) changed by 1", other_, R, True, "W36-0f.4.1")
+        other_ = with_word(R, 0x26400028, date_pl(date_span[0] + 14400))
+        cedl_verdict("0x26400028 (not a date word) set to a date in the span", other_, R, True, "W36-0f.4.1")
+        cedl_verdict("0x26400028 (not a date word) set to two different dates in the span", other_,
+                     with_word(R, 0x26400028, date_pl(date_span[0] + 28800)), True, "W36-0f.4.1")
+        # the view word: the upper u32 is the session field, the lower u32 is compared
+        lo_here = struct.unpack_from("<I", cedl_pl[0x26400026], 0)[0]
+        for what_, hi_ in (("another upper u32", view_span[0] + 4096), ("the span's first value", view_span[0]),
+                           ("the span's last value", view_span[1])):
+            moved = with_word(R, 0x26400026, view_pl(lo_here, hi_))
+            cedl_verdict("view word: %s (%d), traced" % (what_, hi_), moved, R, False, "W36-0f.4.1")
+            cedl_verdict("view word: %s (%d), reference" % (what_, hi_), R, moved, False, "W36-0f.4.1")
+        for what_, hi_ in (("0", 0), ("1", 1), ("0xffffffff", 0xFFFFFFFF), ("one under the span", view_span[0] - 1),
+                           ("one over the span", view_span[1] + 1)):
+            out_ = with_word(R, 0x26400026, view_pl(lo_here, hi_))
+            cedl_verdict("view word: an upper u32 of %s, traced" % what_, out_, R, True, "W36-0f.4.1")
+            cedl_verdict("view word: an upper u32 of %s, reference" % what_, R, out_, True, "W36-0f.4.1")
+            cedl_verdict("view word: an upper u32 of %s on both sides is equal" % what_, out_, out_, False,
+                         "W36-0f.4.1")
+        for what_, lo_ in (("1", 1), ("0x00010000", 0x10000), ("0xffffffff", 0xFFFFFFFF)):
+            out_ = with_word(R, 0x26400026, view_pl(lo_, struct.unpack_from("<I", cedl_pl[0x26400026], 4)[0]))
+            cedl_verdict("view word: a lower u32 of %s, traced" % what_, out_, R, True, "W36-0f.4.1")
+            cedl_verdict("view word: a lower u32 of %s with another upper u32" % what_,
+                         with_word(R, 0x26400026, view_pl(lo_, view_span[0] + 4096)), R, True, "W36-0f.4.1")
+        long_a = with_word(R, 0x26400026, cedl_pl[0x26400026] + date_pl(1))
+        long_b = with_word(R, 0x26400026, cedl_pl[0x26400026] + date_pl(2))
+        cedl_verdict("view word: a payload of 12 bytes whose last 4 differ", long_a, long_b, True, "W36-0f.4.1")
+        cedl_verdict("view word: a payload of 4 bytes that differs",
+                     with_word(R, 0x26400026, date_pl(1)), with_word(R, 0x26400026, date_pl(2)), True, "W36-0f.4.1")
+        check("W36-0f.4.1 the gate names the date words and the view word as derived",
+              {"date 0x2640002a", "date 0x2640002b", "date 0x2640002d", "view 0x26400026"} <=
+              g.canonical_all(R)[2][cedl_n])
 
         # --- W36-0f.3: the note rich text's language id and generator build -------------------------------
         # The Var2Data block of a note (key 0x0b40000f of a Task, 0x0f400047 of an Assn, 0x0c400014 of a

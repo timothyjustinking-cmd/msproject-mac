@@ -195,6 +195,19 @@ CEDL_PATH_ID = 0x26400031        # UTF-16 file path ending "!" and NUL (the last
 CEDL_SLOTS_ID = 0x26400024       # the task uids in view order, then 0xffffffff fill (capacity)
 CEDL_ROWS_ID = 0x2640003D        # view row positions, from the slot table; in one save only at times
 CEDL_SLOTS_MAX = 1024            # bytes: the capacity bound; the committed saves reach 144
+# The view's date words (4-byte payloads: tenths of a minute from 1 January 1984) and the 8-byte view
+# word are session fields (W36-0f.4.1; DOSSIER "CEdl view date word 0x2640002a", "0x2640002b",
+# "0x2640002d" and "CEdl view word rec 0x26400026"): a host control and its null differ in them in 7 of
+# 223 pairs, and 143 to 144 of the 231 recordings differ from their references in them.  Each is masked
+# only as a value a save writes.  A date lies in one span, 220968000 to 226137600 (5 January to 30
+# December 2026): the smallest and largest of the 1872 date words of the 624 committed saves, which
+# the VM's saves (2d: 221015733 to 225969900) also lie in.  The view word's upper u32 lies in the span
+# of its 624 committed values and the VM's (24183812 to 53413760); its lower u32 is 0 in every save and
+# stays compared.  A word of another length or outside its span is data and is compared.
+CEDL_DATE_IDS = (0x2640002A, 0x2640002B, 0x2640002D)
+CEDL_DATE_SPAN = (220968000, 226137600)
+CEDL_VIEW_ID = 0x26400026
+CEDL_VIEW_SPAN = (24183812, 53413760)
 PROPS14_PATH_ID = 0x35400008     # UTF-16 file path
 PROPS14_NAME_ENTRIES = (0xFFFFFFFF, 0x3540000B)   # tail entries, each a UTF-16 user name
 PROPS14_SAVED_ID = 0x3540000A    # u16 0 or 1, session: how the host file was saved (DOSSIER)
@@ -311,6 +324,14 @@ def _canon_cedl_var2(data, streams):
         elif rid == CEDL_ROWS_ID and slots is not None and _rows_ok(payload, len(slots)):
             noise.update(range(pos, end))
             continue
+        elif rid in CEDL_DATE_IDS and length == 4 and                 CEDL_DATE_SPAN[0] <= _u32(payload, 0) <= CEDL_DATE_SPAN[1]:
+            out += struct.pack("<III", length, rid, kind) + bytes(4)
+            noise.update(range(pos + 12, pos + 16))
+            derived.add("date %#010x" % rid)
+        elif rid == CEDL_VIEW_ID and length == 8 and _u32(payload, 0) == 0 and                 CEDL_VIEW_SPAN[0] <= _u32(payload, 4) <= CEDL_VIEW_SPAN[1]:
+            out += struct.pack("<III", length, rid, kind) + bytes(8)
+            noise.update(range(pos + 16, pos + 20))
+            derived.add("view %#010x" % rid)
         else:
             out += data[pos:end]
         kept += 1
