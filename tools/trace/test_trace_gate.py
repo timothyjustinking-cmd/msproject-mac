@@ -3095,6 +3095,99 @@ try:
                 ("two different version-4 GUIDs", v4(1), v4(2), True)):
             slot_verdict("the third GUID: %s" % what_, put(R, props114, [(g3_at, a_)]),
                          put(R, props114, [(g3_at, b_)]), want_)
+        # --- W36-0f.5: the conditions the derived guards left green ---------------------------------------
+        # The meta-test removes each single condition of the gate; fifteen removals of G0f's clauses still
+        # passed the test.  Each case below is an input the removed condition refuses, and each fails
+        # (or raises, which the wrapper names a FAIL) without it.  Four conditions are on REDUNDANT instead.
+        r5_path, c5_path, n5_path = pair("wave30-inactivate-second")
+        R5, C5, N5 = load(r5_path), load(c5_path), load(n5_path)
+        cedl5 = "???214/CEdl/Var2Data"
+        view5 = [p_ for p_, len_, rid_ in records(R5[cedl5], 20) if rid_ == 0x26400026 and len_ == 8]
+        check("W36-0f.5 the pair's CEdl holds one view word record (8 bytes)", len(view5) == 1, "%r" % (view5,))
+
+        def other_word(hi_):
+            """R5 with the view word's record id changed to 0x26400099: the shape of the view word, not it."""
+            return put(R5, cedl5, [(view5[0] - 8, struct.pack("<I", 0x26400099)),
+                                   (view5[0], struct.pack("<II", 0, view_span[0] + hi_))])
+
+        lines_, problems_, checked_, unchecked_ = g.compare(other_word(10), other_word(20), C5, N5)
+        check("W36-0f.5 a record of the view word's shape and another id is not the view word",
+              problems_ >= 1 and any(cedl5 in ln for ln in lines_), "%r" % (lines_,))
+
+        nr_path, nc_path, nn_path = pair("wave30-notes")
+        NR5, NC5, NN5 = load(nr_path), load(nc_path), load(nn_path)
+        task_var2, task_meta = "???114/TBkndTask/Var2Data", "???114/TBkndTask/VarMeta"
+        task_note = [(24 + 12 * k_, uid_, off_) for k_ in range(struct.unpack_from("<I", NR5[task_meta], 8)[0])
+                     for uid_, off_, key_ in [struct.unpack_from("<III", NR5[task_meta], 24 + 12 * k_)]
+                     if key_ == 0x0B40000F and off_ != 0xFFFFFFFF]
+        check("W36-0f.5 the pair's Task VarMeta holds one note entry", len(task_note) == 1, "%r" % (task_note,))
+        note_entry, note_uid, note_off = task_note[0]
+
+        def pass_verdict(label_, tr_, rf_, ctl_, nul_):
+            lines_, problems_, checked_, unchecked_ = g.compare(tr_, rf_, ctl_, nul_)
+            check("W36-0f.5 %s" % label_, problems_ == 0, "%r" % (lines_,))
+
+        no_meta = {k_: v_ for k_, v_ in NR5.items() if k_ != task_meta}
+        pass_verdict("a save with no Task VarMeta reads no note", no_meta, no_meta, NC5, NN5)
+        short_meta = dict(NR5)
+        short_meta[task_meta] = NR5[task_meta][:10]
+        pass_verdict("a save with a Task VarMeta of 10 bytes reads no note", short_meta, short_meta, NC5, NN5)
+        far_meta = put(NR5, task_meta, [(note_entry + 4, struct.pack("<I", 0x7FFFFFF0))])
+        pass_verdict("a note entry whose offset is past the Var2Data reads no note", far_meta, far_meta, NC5, NN5)
+        note_len = struct.unpack_from("<I", NR5[task_var2], note_off)[0]
+        note_rtf = NR5[task_var2][note_off + 4:note_off + 4 + note_len]
+        lang_at = note_off + 4 + note_rtf.index(b"\\deflang1033") + len(b"\\deflang")
+        over_a = put(NR5, task_var2, [(note_off, struct.pack("<I", len(NR5[task_var2])))])
+        over_b = put(over_a, task_var2, [(lang_at, b"2057")])
+        lines_, problems_, checked_, unchecked_ = g.compare(over_b, over_a, NC5, NN5)
+        check("W36-0f.5 a note block whose length word runs past the stream is not parsed, so its language "
+              "id is compared", problems_ >= 1 and any(task_var2 in ln for ln in lines_), "%r" % (lines_,))
+        twice = bytearray(NR5[task_meta])
+        struct.pack_into("<I", twice, 8, struct.unpack_from("<I", twice, 8)[0] + 1)
+        twice += struct.pack("<III", note_uid + 1000, note_off, 0x0B40000F)
+        shared = dict(NR5)
+        shared[task_meta] = bytes(twice)
+        _, _, derived_ = g._canon_note_var2(task_var2)(NR5[task_var2], shared)
+        check("W36-0f.5 two entries of one note block name its fields once, by the first uid",
+              derived_ and all(d_.startswith("note %d " % note_uid) for d_ in derived_), "%r" % (sorted(derived_),))
+
+        cv5_meta = "???214/CV_iew/VarMeta"
+        bag5 = [24 + 12 * k_ for k_ in range(struct.unpack_from("<I", NR5[cv5_meta], 8)[0])
+                if struct.unpack_from("<I", NR5[cv5_meta], 24 + 12 * k_ + 8)[0] == g.BAG_KEY and
+                struct.unpack_from("<I", NR5[cv5_meta], 24 + 12 * k_ + 4)[0] != 0xFFFFFFFF]
+        check("W36-0f.5 the pair's CV_iew VarMeta holds a bag entry", len(bag5) >= 1, "%r" % (bag5,))
+        far_bag = put(NR5, cv5_meta, [(bag5[0] + 4, struct.pack("<I", 0x7FFFFFF0))])
+        pass_verdict("a view bag entry whose offset is past the Var2Data reads no bag", far_bag, far_bag, NC5, NN5)
+
+        # a save with one save word only has no value a slot could copy
+        one_word = lambda stamp_: put(R, props114, [(w_a, struct.pack("<I", stamp_)),
+                                                    (slot_at[0x02401395], struct.pack("<I", stamp_)),
+                                                    (w_b, struct.pack("<I", 0x3D200005)),
+                                                    (w_b - 8, struct.pack("<I", 0x02400009))])
+        slot_verdict("a slot that copies the one save word of a file is not a slot",
+                     one_word(0x3D200000), one_word(0x3D200001), True, tag_="W36-0f.5")
+
+        # a 16-byte version-1 record of an id the rule does not list is not a GUID of the save
+        def extra_guid(n_):
+            out_ = dict(R)
+            out_[props114] = R[props114] + struct.pack("<III", 16, 0x02400099, 0) + v1(n_)
+            return out_
+
+        slot_verdict("a 16-byte version-1 record of an unlisted id is not noise",
+                     extra_guid(1), extra_guid(2), True, tag_="W36-0f.5")
+
+        # a stale rule is not required of a stream: a rule with no `stale` reads none
+        saved_rule = g.NOISE[task_var2]
+        g.NOISE[task_var2] = {k_: v_ for k_, v_ in saved_rule.items() if k_ != "stale"}
+        try:
+            try:
+                no_stale = g.noise_windows(task_var2, NR5[task_var2], NR5[task_meta], NR5, NR5[task_var2])
+            except Exception as exc_:   # noqa: BLE001
+                no_stale = "%s: %s" % (type(exc_).__name__, exc_)
+        finally:
+            g.NOISE[task_var2] = saved_rule
+        check("W36-0f.5 a noise rule with no `stale` entry reads no stale block", isinstance(no_stale, set),
+              "%r" % (no_stale,))
         # --- W36-0f.4.5: the view GUID of every table and view row ----------------------------------------
         # A table is a 230-byte row of CTable FixedData with its GUID at +214 and a view a 138-byte row of
         # CV_iew FixedData with its GUID at +122; the committed saves with more tables or views (11 and 1

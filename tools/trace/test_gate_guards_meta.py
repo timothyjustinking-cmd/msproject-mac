@@ -571,6 +571,19 @@ REDUNDANT = {
     "row_ids:or-false:len(fd) < fbase": (
         "row_ids:or-false:(len(fd) - fbase) % fsize",
         "fbase is less than fsize, so a stream shorter than fbase leaves a remainder, which the next test refuses"),
+    "canon:or-false:off == 4294967295": (
+        "canon:or-false:off + 4 > len(data)",
+        "an offset of 0xffffffff plus 4 is past the data, which the next test refuses"),
+    "_canon_cview_var2:or-false:off == 4294967295": (
+        "_canon_cview_var2:or-false:off + 4 > len(data)",
+        "an offset of 0xffffffff plus 4 is past the data, which the next test refuses"),
+    "noise_windows:and-true:off != 4294967295#2": (
+        "_stale_ok:and-true:len(block) == 76",
+        "at an offset of 0xffffffff the block slice is empty, and _stale_ok of an empty block is False"),
+    "_slot_word_ok:and-true:length == 4": (
+        "noise_windows:and-true:length == 4",
+        "a save word record of another length than 4 is not masked as a word, so where its two sides differ "
+        "it fails there whatever the slot; where they are equal, a slot that copies it is equal too"),
     "compare:ifexp-true:_stride(name)": (
         "control_mask:if-never:stride is not None and ids is not None and (ids[0] is not None) and "
         "(ids[1] is not None)",
