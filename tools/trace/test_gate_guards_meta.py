@@ -232,7 +232,7 @@ GUARDS = [
      [('    return all(unicodedata.category(ch)[0] != "C" for ch in text)',
        '    return all(ch >= " " and ch != "\\x7f" for ch in text)')]),
     # --- W36-0d.7: the OPEN pins --------------------------------------------------------------------
-    ("control-mask-count", "R36G0c-7", "the printed control-mask byte count is one too many",
+    ("control-mask-count", "R36G0c-7", "a pinned number, not a guard removal: the printed control-mask byte count is one too many",
      [('            lines.append("control-mask %s %d" % (name, len(masked)))',
        '            lines.append("control-mask %s %d" % (name, len(masked) + 1))')]),
 ]
