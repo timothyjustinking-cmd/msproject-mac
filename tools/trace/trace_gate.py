@@ -194,6 +194,7 @@ VAR_META = {
 CEDL_PATH_ID = 0x26400031        # UTF-16 file path ending "!" and NUL (the last CEdl record)
 PROPS14_PATH_ID = 0x35400008     # UTF-16 file path
 PROPS14_NAME_ENTRIES = (0xFFFFFFFF, 0x3540000B)   # tail entries, each a UTF-16 user name
+PROPS14_SAVED_ID = 0x3540000A    # u16 0 or 1, session: how the host file was saved (DOSSIER)
 VIEW_CEDL_SIZE_ID = 0x00010007   # 214/Props typed u32: the length of 214/CEdl/Var2Data
 SI_AUTHOR, SI_LASTAUTHOR, SI_REVNUMBER, SI_LASTSAVE = 4, 8, 9, 13
 
@@ -238,6 +239,12 @@ def _text_ok(payload):
     if text.endswith("\0"):
         text = text[:-1]
     return all(unicodedata.category(ch)[0] != "C" for ch in text)
+
+
+def _saved_flag_ok(length, payload):
+    """Props14 record 0x3540000a: a u16 of 0 or 1, as every one of the 624 committed saves and the
+    VM saves hold (DOSSIER "Props14 rec 0x3540000a"); another length or value is data (W36-0f.1)."""
+    return length == 2 and struct.unpack("<H", payload)[0] in (0, 1)
 
 
 def _name_ok(payload):
@@ -319,19 +326,25 @@ def _canon_view_props(data, streams):
 
 
 def _tail_entries(tail):
-    """The Props14 tail [count][entries (id, type 0x1e, UTF-16 name)] as [(id, name bytes)], or
-    None.  A name has no length or terminator; it runs to the next entry's `id 1e 00 00 00`."""
+    """The Props14 tail [count][entries] as [(id, name bytes)], or None.  An entry is [id][byte
+    length][UTF-16 name]: the second word is the name's length, 30 for the 15-character name of the
+    host files, 10 for the VM's, 16 for an 8-character one (W36-0f.1, DOSSIER "size-differs
+    Props14").  The entries chain by their length words exactly to the end of the tail, each id is
+    one of the two names, and the count word is their number."""
     if len(tail) < 4:
         return None
     count = _u32(tail, 0)
-    marks = []
-    for at in range(4, len(tail) - 7, 2):
-        if _u32(tail, at) in PROPS14_NAME_ENTRIES and _u32(tail, at + 4) == 0x1E:
-            marks.append(at)
-    if len(marks) != count or (marks and marks[0] != 4) or not marks and len(tail) != 4:
-        return None
-    ends = marks[1:] + [len(tail)]
-    return [(_u32(tail, at), tail[at + 8:end]) for at, end in zip(marks, ends)]
+    entries = []
+    at = 4
+    while at < len(tail):
+        if at + 8 > len(tail):
+            return None
+        eid, size = struct.unpack_from("<II", tail, at)
+        if eid not in PROPS14_NAME_ENTRIES or at + 8 + size > len(tail):
+            return None
+        entries.append((eid, tail[at + 8:at + 8 + size]))
+        at += 8 + size
+    return entries if len(entries) == count else None
 
 
 def _canon_props14(data, streams):
@@ -360,8 +373,20 @@ def _canon_props14(data, streams):
             noise.update(range(pos, pos + 4))
             noise.update(range(pos + 12, stop))
             derived.add("path")
+        elif rid == PROPS14_SAVED_ID and _saved_flag_ok(length, payload):
+            out += struct.pack("<III", length, rid, kind) + bytes(2)
+            noise.update(range(pos + 12, pos + 14))
+            derived.add("rec %#010x" % rid)
         else:
             out += data[pos:stop]
+    # The record 0x3540000a is a session field and may be absent on one side (DOSSIER "Props14
+    # rec 0x3540000a": the committed control and null differ in 9 of 223 pairs, and the one file
+    # with no such record holds 20 records); an absent one is a placeholder record, and the record
+    # count word, which counts the records, says 21 for it (W36-0f.1).
+    if all(rid != PROPS14_SAVED_ID for pos, length, rid, kind in recs) and _u32(data, 12) == len(recs):
+        out[12:16] = struct.pack("<I", len(recs) + 1)
+        out += struct.pack("<III", 2, PROPS14_SAVED_ID, 2) + bytes(2)
+        derived.add("rec %#010x" % PROPS14_SAVED_ID)
     # The two committed shapes are a lone 0x3540000b entry (98 of 99 committed null saves) and
     # 0xffffffff then 0x3540000b (the controls and edits).  Both entry ids are handled alike: the
     # 8-byte header stays in the canonical form and only a well-formed text name is replaced.  The
@@ -375,17 +400,20 @@ def _canon_props14(data, streams):
     if named_absent:
         noise.update(range(end, end + 4))   # the count word is the derived one
         derived.add("tail name %#010x" % 0xFFFFFFFF)   # the absent entry's name is the placeholder
+    # An entry is [id][byte length][name]; a text name and its length word are one machine field
+    # (W36-0f.1), replaced together by a length of 0 and no name.  The chain by length words, which
+    # _tail_entries checked, is what a wrong length word fails.
     at = end + 4
     for eid, name in entries:
         stop = at + 8 + len(name)
         if _name_ok(name):
-            noise.update(range(at + 8, stop))
+            noise.update(range(at + 4, stop))
             derived.add("tail name %#010x" % eid)
         at = stop
     if named_absent:
-        out += struct.pack("<II", 0xFFFFFFFF, 0x1E)
+        out += struct.pack("<II", 0xFFFFFFFF, 0)
     for eid, name in entries:
-        out += struct.pack("<II", eid, 0x1E) + (b"" if _name_ok(name) else name)
+        out += struct.pack("<II", eid, 0) if _name_ok(name) else struct.pack("<II", eid, len(name)) + name
     return bytes(out), noise, derived
 
 
