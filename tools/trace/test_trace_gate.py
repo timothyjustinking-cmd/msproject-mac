@@ -2914,7 +2914,8 @@ try:
         # LastSave inside its committed span (0x01dd62019f6a0e00 to 0x01dd72130aac6c00, 22 October to
         # 11 November 2026).  The numbers are written here from the Value bounds table of
         # spec/writers/evidence/trace-gate-fields-g0b.md, not read from the gate.
-        span_lo, span_hi = 0x3D141482, 0x3D282DB4
+        # (W36-0f.4.3: the top is the VM's, 0x3d28352a: the committed top is 0x3d282db4)
+        span_lo, span_hi = 0x3D141482, 0x3D28352A
         ls_lo, ls_hi = 0x01DD62019F6A0E00, 0x01DD72130AAC6C00
 
         def filetime_of(year):
@@ -2976,6 +2977,18 @@ try:
             problems_, lines_ = verdict(badf, othr)
             check("W36-0e.2 both 114/Props save words at %s against another value inside it are noise" % vname,
                   problems_ == 0 and badf[props114] != othr[props114], "%r" % (lines_,))
+        # W36-0f.4.3: the VM's saves after the newest committed file wrote 0x3d283502, 0x3d283516 and
+        # 0x3d28352a (DOSSIER, Props stamp word 0x2401396, 0x240139f, 0x2401397); each is noise as the two
+        # save words, set against a committed-range value, and a stamp one over the committed top is too
+        for vname, val_ in (("the VM's 0x3d283502", 0x3D283502), ("the VM's 0x3d283516", 0x3D283516),
+                            ("the VM's 0x3d28352a", 0x3D28352A), ("one over the committed top", 0x3D282DB5)):
+            for which in ("traced", "reference"):
+                badf = put(R, props114, [(w_a, struct.pack("<I", val_)), (w_b, struct.pack("<I", val_))])
+                othr = put(R, props114, [(w_a, struct.pack("<I", 0x3D282DB4)), (w_b, struct.pack("<I", 0x3D282DB4))])
+                tr, rf = (badf, othr) if which == "traced" else (othr, badf)
+                problems_, lines_ = verdict(tr, rf)
+                check("W36-0f.4.3 both 114/Props save words at %s in the %s save are noise" % (vname, which),
+                      problems_ == 0 and badf[props114] != othr[props114], "%r" % (lines_,))
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)

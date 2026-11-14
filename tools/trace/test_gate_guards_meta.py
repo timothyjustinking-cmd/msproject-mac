@@ -324,6 +324,8 @@ GUARDS = [
     ("guid-timestamp", "R36G0c-3", "_is_v1_guid: the timestamp may be 0",
      [("(any(raw[:6]) or raw[6] & 15 != 0 or raw[7] != 0))", "True)")]),
     # --- W36-0d.6: a masked field holds a value a save writes ----------------------------------------
+    ("stamp-span-vm", "W36-0f.4.3", "the stamp span stops at the committed top, under the VM's three latest stamps",
+     [("STAMP_SPAN = (0x3D141482, 0x3D28352A)", "STAMP_SPAN = (0x3D141482, 0x3D282DB4)")]),
     ("stamp-lower", "R36G0d-2", "_stamp_ok has no lower bound (0, 1)",
      [('STAMP_SPAN[0] <= struct.unpack("<I", raw)[0] <= STAMP_SPAN[1]',
        'struct.unpack("<I", raw)[0] <= STAMP_SPAN[1]')]),
