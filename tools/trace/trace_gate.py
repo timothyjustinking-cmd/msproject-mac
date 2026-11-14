@@ -279,9 +279,9 @@ def _tail_entries(tail):
 
 def _canon_props14(data, streams):
     """Props14: a blob [size][size][0x10000][count] of Props-format records (size = blob end - 4,
-    derived), then the tail.  Noise: the file path record, the two blob size words, the user-name
-    strings of the tail, and the tail entry id 0xffffffff, which the committed controls and edits
-    carry and 98 of the 99 committed null saves do not (a per-save entry, not decoded)."""
+    derived), then the tail.  Noise: the file path record, the two blob size words, and the
+    user-name text of each tail entry.  The 0xffffffff entry, which the committed controls and
+    edits carry and the committed null saves do not, is a named case below."""
     if len(data) < 16 or _u32(data, 8) != 0x10000:
         return data, set()
     end = _u32(data, 0) + 4
@@ -303,18 +303,27 @@ def _canon_props14(data, streams):
             noise.update(range(pos + 12, stop))
         else:
             out += data[pos:stop]
-    kept = [e for e in entries if e[0] != 0xFFFFFFFF]
-    out += struct.pack("<I", len(kept))
+    # The two committed shapes are a lone 0x3540000b entry (98 of 99 committed null saves) and
+    # 0xffffffff then 0x3540000b (the controls and edits).  Both entry ids are handled alike: the
+    # 8-byte header stays in the canonical form and only a well-formed text name is replaced.  The
+    # 0xffffffff entry may be absent on one side only as the named case: the tail is exactly one
+    # 0x3540000b entry with a text payload; its canonical form then carries the 0xffffffff header
+    # and the derived count (W36-0c.4 / R36G0b-2).  Junk in the entry, a second one, or any other
+    # shape is compared as it is.
+    named_absent = len(entries) == 1 and entries[0][0] == 0x3540000B and _text_ok(entries[0][1])
+    canon = ([(0xFFFFFFFF, b"")] if named_absent else []) + entries
+    out += struct.pack("<I", len(canon))
+    if named_absent:
+        noise.update(range(end, end + 4))   # the count word is the derived one
     at = end + 4
     for eid, name in entries:
         stop = at + 8 + len(name)
-        if eid == 0xFFFFFFFF:
-            noise.update(range(at, stop))
-        elif _text_ok(name):
+        if _text_ok(name):
             noise.update(range(at + 8, stop))
         at = stop
-    noise.update(range(end, end + 4))   # the entry count follows the dropped entry
-    for eid, name in kept:
+    if named_absent:
+        out += struct.pack("<II", 0xFFFFFFFF, 0x1E)
+    for eid, name in entries:
         out += struct.pack("<II", eid, 0x1E) + (b"" if _text_ok(name) else name)
     return bytes(out), noise
 

@@ -865,6 +865,74 @@ try:
                 check("W36-0c.3 %s: %s fails" % (label, what),
                       problems >= 1 and any(SI in ln for ln in lines), "%r" % (lines,))
 
+        # --- W36-0c.4 (R36G0b-2): the Props14 tail entry 0xffffffff is a decoded entry ----------------
+        # The tail is [count][entry]...; an entry is [id][0x1e][UTF-16 name, no length].  The two
+        # committed shapes are one entry (0x3540000b, a user name) and two (0xffffffff then
+        # 0x3540000b, each a name).  The entry 0xffffffff is handled like 0x3540000b: its 8-byte
+        # header is compared, only a well-formed text name is noise, and it may be absent on ONE
+        # side only in the named case of a single remaining 0x3540000b entry with a text payload.
+        # Junk in it, and a second one, FAIL.
+        P14 = "Props14"
+
+        def p14_split(blob):
+            """(blob part before the tail, [(entry id, name bytes)]) by the test's own parse."""
+            head = _u(blob) + 4
+            tail = blob[head:]
+            marks = [i for i in range(4, len(tail) - 7, 2)
+                     if struct.unpack_from("<II", tail, i)[1] == 0x1E and
+                     struct.unpack_from("<I", tail, i)[0] in (0xFFFFFFFF, 0x3540000B)]
+            ends = marks[1:] + [len(tail)]
+            return blob[:head], [(struct.unpack_from("<I", tail, m)[0], tail[m + 8:e])
+                                 for m, e in zip(marks, ends)]
+
+        def p14_join(head, entries, count=None):
+            return head + struct.pack("<I", len(entries) if count is None else count) + \
+                b"".join(struct.pack("<II", eid, 0x1E) + name for eid, name in entries)
+
+        p14_head, p14_entries = p14_split(R[P14])
+        check("W36-0c.4 the reference tail is the two entries 0xffffffff and 0x3540000b",
+              [e[0] for e in p14_entries] == [0xFFFFFFFF, 0x3540000B] and
+              p14_join(p14_head, p14_entries) == R[P14], "%r" % ([e[0] for e in p14_entries],))
+        text_name = "z:\\other\\name".encode("utf-16le")
+        junk = bytes([1, 0, 2, 0]) * 100        # control characters: not a text name
+
+        def p14_verdict(label, entries, count=None, want_fail=True):
+            mutated = dict(R)
+            mutated[P14] = p14_join(p14_head, entries, count)
+            lines, problems, checked, unchecked = g.compare(mutated, R, C, N)
+            check("W36-0c.4 %s %s" % (label, "fails" if want_fail else "is noise"),
+                  (problems >= 1 and any(P14 in ln for ln in lines)) if want_fail else problems == 0,
+                  "%r" % (lines,))
+            return lines
+
+        first, second = p14_entries
+        p14_verdict("a different well-formed text name in each entry",
+                    [(first[0], text_name), (second[0], text_name * 2)], want_fail=False)
+        p14_verdict("400 junk bytes in place of the 0xffffffff name", [(first[0], junk), second])
+        p14_verdict("400 junk bytes in place of the 0x3540000b name", [first, (second[0], junk)])
+        p14_verdict("a second 0xffffffff entry of 400 non-text bytes (count 3)",
+                    [first, second, (0xFFFFFFFF, junk)])
+        p14_verdict("a second 0xffffffff entry with a text name (count 3)",
+                    [first, (0xFFFFFFFF, text_name), second])
+        p14_verdict("a second 0xffffffff entry after the first, count unchanged",
+                    [first, (0xFFFFFFFF, junk), second], count=2)
+        p14_verdict("the 0xffffffff entry's 400 junk bytes with the count word 1",
+                    [(first[0], junk), second], count=1)
+        # absent on one side only: the named case
+        p14_verdict("the 0xffffffff entry absent (one 0x3540000b entry, count 1)", [second],
+                    want_fail=False)
+        mutated = dict(R)
+        absent = dict(R)
+        absent[P14] = p14_join(p14_head, [second])
+        lines, problems, checked, unchecked = g.compare(R, absent, C, N)
+        check("W36-0c.4 the 0xffffffff entry present in the traced save only is noise",
+              problems == 0, "%r" % (lines,))
+        for label, entries in (("absent with a junk 0x3540000b name", [(second[0], junk)]),
+                               ("alone with a junk name", [(first[0], junk)]),
+                               ("absent, the remaining entry is 0xffffffff", [first]),
+                               ("both absent", [])):
+            p14_verdict("the 0xffffffff entry %s" % label, entries)
+
         # W36-0.2: a mask is built only from equal-length control and null, and per record
         # for a fixed-stride stream
         stride_name = "???114/TBkndTask/Fixed2Data"
