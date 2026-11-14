@@ -14,14 +14,16 @@ house rules of wave 35g are the last section of that file, "Standing rules and s
   `docs/handoff/wave32-verification/rewrite-sha-map.txt` (left old, right current).
 * **Wave 36 (the writer wave)** puts the Project 2021 trace's rules into the writers.  Brief
   `docs/handoff/wave36-brief.md`, record `docs/handoff/wave36-complete.md`, builder Claude Sonnet
-  5.5, nothing pushed.  Groups: G0 the trace gate and the records (marker `WAVE-36-G0-COMPLETE`),
-  G1 the font item, G2 Props (closes R35cG0-4), CLOSE.  G3 (Insert Task, Milestone, Summary) is
+  5.5, nothing pushed.  Groups: G0, G0b and G0c the trace gate and the records, G1 and G1b the font item,
+  G2 Props (closes R35cG0-4), CLOSE.  G3 (Insert Task, Milestone, Summary) is
   not started: no held-out insert pair (`spec/writers/evidence/trace-insert-rules-r6.md`).
-* **G0 is done, G0b follows**: `tools/trace/trace_gate.py` has per-stream noise windows, no wrong-length
-  mask and a FAIL "no null" (the review's R36G0-1 to -9 found by-name waivers and regions in the
-  windows; G0b, `wave36-brief.md` section 2, replaces them with named fields); `tools/trace/test_trace_gate.py` (ctest `trace_gate_guards`) and
-  `tools/trace/test_host_skip.ps1` (ctest `trace_host_scripts`, needs `pwsh`) guard them.  CI has
-  no `olefile`, so `trace_gate_guards` SKIPs there until the workflows `pip install olefile`.
+* **G0, G0b and G0c are done** (markers `WAVE-36-G0-COMPLETE`, `-G0b-`, `-G0c-`): `tools/trace/trace_gate.py`
+  compares a traced save with the reference outside named noise fields only, and the control mask excuses
+  nothing; a pair whose control or edit differs in a field nobody decoded FAILs and is OPEN in the test
+  (56 of 202 control-nulls, see `wave36-complete.md` G0c).  `tools/trace/test_trace_gate.py` (ctest
+  `trace_gate_guards`) and `tools/trace/test_host_skip.ps1` (ctest `trace_host_scripts`, needs `pwsh`)
+  guard them; both CI jobs `pip install olefile`, not yet run on a runner.  The VM still runs the frozen
+  gate and `host.ps1`; the coordinator copies the new ones in and re-gates (R36G0b-8 needs a real recording).
 * **Open, no Critical or High:** the Lows R35gG0-1 to -4, R35gG1-1 to -5 and R35gW-1 to -5;
   partly fixed or open R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), R35bW-1, R35bW-2, R35bG2-2,
   R35bG3-1, R35bG0-9, R35bG1-10, R35bG2-9.  All are queued in `docs/handoff/plan-waves27-30.md`.

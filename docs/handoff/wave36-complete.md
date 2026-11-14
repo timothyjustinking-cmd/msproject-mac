@@ -352,3 +352,72 @@ Each red ran on the parent commit's code with the new tests; the green is the sa
 * **`python -I` still cannot import `olefile`** here (user site-packages); the scripts that need it run without `-I` and read only committed files.
 
 WAVE-36-G1b-COMPLETE
+
+## G0c: the trace gate, second fix
+
+Brief `docs/handoff/wave36-brief.md` section 2 (G0c); findings R36G0b-1 to -12 of `docs/handoff/wave36-verification/review-g0b.md`.  Design rule: a mask
+names a field, never a region, and a masked field is accepted only when both sides hold a well-formed value of the named kind.  Items, one finding id per
+commit, in order:
+
+| item | id | commit | what |
+|---|---|---|---|
+| W36-0c.1 | R36G0b-5, -7 | `4352eb7` | the test runs on the committed file set (624 `.mpp`, 202 control-nulls): a null's control comes from one table, a null with no control is a FAIL line, never a crash; the positive sweep lists the pairs that fail it as OPEN, each with its stream and reason |
+| W36-0c.2 | R36G0b-4 | `7a23ab7` | a GUID field is noise only when both sides are version-1 GUIDs; all-zero against a real GUID FAILs |
+| W36-0c.3 | R36G0b-3 | `4c854f1` | a `SummaryInformation` string slot is exactly type, length, string and zero padding to 4; bytes after the string FAIL |
+| W36-0c.4 | R36G0b-2 | `a4a7ab7` | the `Props14` tail entry 0xffffffff is compared like 0x3540000b: its header stays, only a text name is replaced, it may be absent on one side only as the named case |
+| W36-0c.5 | R36G0b-1 | `9d930c6` | the control mask no longer excuses a byte no field names: it is diagnostic (`control-mask <stream> <n>`) and a problem; nothing was decoded or widened, so 43 more pairs are OPEN (56 in all) |
+| W36-0c.6 | R36G0b-6 | `5e47783` | the test holds its own parse of the five parsed streams and the font rows; 12 planted guard removals each go red; `--gate-dir` runs the whole test on a mutated gate |
+| W36-0c.7 | R36G0b-9 | `a35cde2` | `vmx` reports the agent's `ERR` text, not a length error; a reply over 300 characters is modelled (no wrap, measured in PowerShell 7.7.0 and 5.1.26100.9818) |
+| W36-0c.8 | R36G0b-10, -12 | `3c92b13` | the head line's "not checked" counts the streams not compared (one file only, another size); the overstated sentences in the gate and test docstrings, this record, `gates-g0b.md`, and the item id in `ci.yml` and `CMakeLists.txt` |
+
+**Acceptance (the committed ctest `trace_gate_guards`, on the committed file set).**  Negative: TRACED = the control's null save, REFERENCE = the edit, over 191
+edits: **191 of 191 FAIL** at `9d930c6` and after (189 of 191 at `4352eb7`: the two no-op percent edits passed until the control mask stopped excusing).
+Positive: TRACED = the control's null save, REFERENCE = the control, over 202 control-nulls: **146 PASS and 56 OPEN** (13 OPEN at `4352eb7`; the 43 added at `9d930c6`
+are bytes no field names, now FAILs by design).  An OPEN pair is reported as OPEN, never as a PASS, and leaves the list only by passing.  Hand-built wrong files: the
+review's cases for R36G0b-1 to -4 and the twelve of R36G0b-6 all FAIL.
+
+**Gate line.**  At `3c92b13`, core tree `build/w35g-close-fresh`: build exit 0; `ctest -C Release -E plan_recalc -j4` 67/67 passed, including `trace_gate_guards`
+(335 checks, 45 s) and `trace_host_scripts` (`build/w36/3c92b13-W36-G0c-core-ctest.log`).  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0,
+`scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each carries both trailers.  Per-item logs and counts are in
+`docs/handoff/wave36-verification/gates-g0c.md`.  G0c changes no C++ source (one comment in `CMakeLists.txt`).  The builder used no COM, did not touch the VM or
+`build/trace-2021/`, and pushed nothing.
+
+### Guards seen red
+
+Each red ran on the previous commit's tool (or a mutated copy), then the green on the new one; logs are `build/w36/<parent>-W36-0c.N-red.log` and `-green.log`.
+
+| item | red | green |
+|---|---|---|
+| 0c.1 | the committed test: 103 PASS lines, then `FileNotFoundError tests/data/wave23-flags-control.mpp` | 221 PASS, 0 FAIL |
+| 0c.2 | every GUID zeroed in the traced, in the reference, or one of them: 30 FAIL on the 0c.1 gate, e.g. `???114/Props: every GUID zero in the traced fails (2 GUIDs)` | 253 PASS |
+| 0c.3 | 240 zero bytes after the string, 240 junk bytes, a nonzero padding byte, the wrong padding length: 12 FAIL | 273 PASS |
+| 0c.4 | junk in the 0xffffffff name, a second 0xffffffff entry (non-text and text name): 3 FAIL | 287 PASS |
+| 0c.5 | seven committed files with the control/null bytes inverted each had 0 problems on the 0c.4 gate: 13 FAIL (the OPEN list stale for 43 pairs, the negative sweep, three identity cases) | each of the seven FAILs with `control-mask <stream> <n>`; 304 PASS |
+| 0c.6 | 12 planted removals (every SummaryInformation property a placeholder; any 12-byte FILETIME as LastSave; `_text_ok` always true; the CEdl path record waived; the CEdl size words zeroed; 0x00010007 zeroed; the Props14 path record waived; the tail names waived; every tail entry dropped; 114/Props GUIDs masked without the version-1 test; the view GUID string with one side; the font byte from any 44-multiple record): all red, 1 to 9 FAIL each | 329 PASS on the real gate |
+| 0c.7 | the new test on the old `host.ps1`: `FAIL host.ps1 agent ERR reply: throws the agent error text, not a length error` and the two-piece one, 2 failed | 19 PASS |
+| 0c.8 | the new test on the 0c.7 gate: a missing, an extra and a longer stream each read `0 not checked` (3 FAIL) | 335 PASS |
+
+### Deferred
+
+None.  Every G0c item is fixed, except that **R36G0b-8** goes to the record as open (below), as the brief says.
+
+### Found, not fixed
+
+* **R36G0b-8 is open.**  Every sweep and hand-built case runs on committed files; no file the real Project 2021 wrote in a trace has met the gate.  Only the coordinator's
+  re-gate of the recordings settles it.
+* **R36G0b-11: the G0b commits carry `Co-Authored-By`, not the `Generated-By` trailer rule 1 requires** (0 of 11).  History is not rewritten; the operator decides whether to
+  before the merge.  Every G0c commit, and the three G0 commits, carry both.
+* **56 of 202 control-nulls are OPEN**, 12 streams, each with a "not decoded" line in `SIZE_OPEN`, `MASKED_IN` or `MASKED` in the test (the sort table 0x26400024 and the 26-byte
+  record 0x2640003d of `214/CEdl/Var2Data`; the save words of `214/CV_iew/Var2Data` and `114/Props`; Assn and Rsc meta items; Assn and Task Fixed2Data bytes that are data).  Direction:
+  decode a field and name it with its evidence row, or re-record the pair.
+* **A zero placeholder collides with a traced field that is itself 0 and fails its derivation rule.**  The canonical forms replace a derived field (the CEdl size words,
+  `214/Props` record 0x00010007, `CEdl/VarMeta` +20) with 0 only when it equals what the stream implies; a traced field that is 0 and wrong stays 0, and the reference's placeholder is
+  0, so the two compare equal.  The window audit and the new cases catch it only where the true value is not 0.  Not fixed here; direction: a distinct placeholder.
+* **Two of the twelve planted removals (7 and 9) are caught by one check each** (the Props14 path-record case; the positive sweep).  A second case for each is cheap.
+* **`host.ps1` takes the review's smaller fix.**  The `ERR` prefix is reported as the agent's error.  The review's fuller one (the agent sends the trimmed base64 length and its own sha in
+  `out_meta`, and the host compares exactly) is not done: it changes `agent.ps1`, which the frozen VM copy does not follow until the coordinator copies it in.  The no-wrap result and the `ERR`
+  case are confirmed on the host in both PowerShell editions, not on the VM; the coordinator's `vmx 'Get-Date'` plus one reply over 300 characters settles it.
+* **The VM still runs the frozen gate, `host.ps1` and `agent.ps1`** until the coordinator copies the new ones in; the re-gate of the recordings follows.
+* **`python -I` still cannot import `olefile`** here (user site-packages); the trace tests run without `-I` and read only committed files.
+
+WAVE-36-G0c-COMPLETE
