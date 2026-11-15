@@ -251,7 +251,8 @@ BAG_KEY = 0x20400006
 # DOSSIER "CV_iew view stamp word (rec 0x22400015 +4..7)" and "CV_iew view date words (rec 0x22400008
 # +1176..1190)"): a host control and its null differ in the stamp in 21 of 202 pairs and in a date word
 # in 17 to 21, always one date against another.  A stamp lies in the span of the 627 committed ones (the
-# 0x3d1412c0 to 0x3d2812c0 of the saves, widened to the committed top of STAMP_SPAN, 0x3d282db4); a date lies in the CEdl date
+# 0x3d1412c0 to 0x3d2c12c0, the minimum and maximum of the 1193 view stamps of the 1187 saved copies read by
+# tools/trace/span_probe.py: W36-2.0); a date lies in the CEdl date
 # span (the 630 non-default words run 220968000 to 225989400).  A date word of 14400, 14400 and
 # 0x340a75ff is the view's unset value, equal in the other 1245 records, and is compared, as is the
 # u16 at +1190 (0 or 0x8080).  The u16 words at +1172 and +1180 are not these fields.
@@ -271,7 +272,7 @@ CVIEW_WIDTH_AT = 1172
 CVIEW_UNIT_AT = 1180
 CVIEW_WIDTH_SPAN = (128, 4096)
 CVIEW_STAMP_ID = 0x22400015
-CVIEW_STAMP_SPAN = (0x3D1412C0, 0x3D282DB4)
+CVIEW_STAMP_SPAN = (0x3D1412C0, 0x3D2C12C0)
 CVIEW_STATE_ID = 0x22400008
 CVIEW_STATE_MIN = 1194
 CVIEW_DATE_AT = (1176, 1182, 1186)
@@ -605,12 +606,12 @@ def _canon_props14(data, streams):
 # row of "Value bounds" in spec/writers/evidence/trace-gate-fields-g0b.md.  A value outside its span
 # is data, not noise.  The stamp grows with time, so a capture made after the last committed save
 # is outside its span until the span is widened with that evidence row (the re-gate will show it).
-# 5835 stamps of 624 files (Task +128, Assn block, Props words) run 0x3d141482 to 0x3d282db4; the top is
-# the VM's: its three latest saves wrote 0x3d283502, 0x3d283516 and 0x3d28352a in the Props baseline-slot
-# words (DOSSIER, "Props stamp word 0x2401396", "0x240139f" and "0x2401397"), saved after the newest
-# committed file, so a save word of those saves is one too (W36-0f.4.3).
-STAMP_SPAN = (0x3D141482, 0x3D28352A)
-LASTSAVE_SPAN = (0x01DD62019F6A0E00, 0x01DD72130AAC6C00)   # 624 LastSave FILETIMEs, 22 Oct to 11 Nov 2026
+# 13228 stamps of 1187 saved copies (624 committed files and 563 recorded saves: Task +128, Assn and Rsc
+# blocks, Props words; tools/trace/span_probe.py) run 0x3d141482 to 0x3d2c15ea, the minimum and maximum
+# read, none 0 or all-ones; the saves of 14 and 15 November 2026 hold the top (W36-0f.4.3 had taken the VM's
+# 0x3d28352a; W36-2.0 widens it to the decoded maximum of every save).
+STAMP_SPAN = (0x3D141482, 0x3D2C15EA)
+LASTSAVE_SPAN = (0x01DD62019F6A0E00, 0x01DD74E2A0C9E600)   # 1187 LastSave FILETIMEs, 22 Oct to 15 Nov 2026 (W36-2.0)
 
 
 def _stamp_ok(raw):

@@ -390,7 +390,7 @@ try:
                     for at_, len_, rid_, kind_ in chain_:
                         if rid_ == 0x22400015 and kind_ == 1 and len_ == 20 and \
                                 struct.unpack_from("<I", data, at_)[0] == 0 and \
-                                0x3D1412C0 <= struct.unpack_from("<I", data, at_ + 4)[0] <= 0x3D282DB4:
+                                0x3D1412C0 <= struct.unpack_from("<I", data, at_ + 4)[0] <= 0x3D2C12C0:
                             out.update(range(at_ + 4, at_ + 8))
                         if rid_ == 0x22400008 and kind_ == 1 and len_ >= 1194:
                             for lo_ in (1176, 1182, 1186):
@@ -1069,13 +1069,13 @@ try:
             if name == "???114/TBkndTask/FixedData":
                 for row in range(max(0, (len(data) - 48) // 202)):   # W36-0f.4.7: every row, inside the span
                     at = 48 + 202 * row
-                    if 0x3D141482 <= struct.unpack_from("<I", data, at + 128)[0] <= 0x3D28352A:
+                    if 0x3D141482 <= struct.unpack_from("<I", data, at + 128)[0] <= 0x3D2C15EA:
                         out.update(range(at + 128, at + 132))
             for var_name, stamp_key in STAMP_BLOCKS:
                 if name == var_name:
                     for uid, off, key in blocks(meta):
                         if key == stamp_key and off != 0xFFFFFFFF and \
-                                0x3D141482 <= struct.unpack_from("<I", data, off + 4)[0] <= 0x3D28352A:
+                                0x3D141482 <= struct.unpack_from("<I", data, off + 4)[0] <= 0x3D2C15EA:
                             out.update(range(off + 4, off + 8))
             for key_, (addr_, lo_, hi_) in STALE_BLOCKS.get(name, {}).items():
                 for uid, off, key in blocks(meta):
@@ -1523,7 +1523,7 @@ try:
         # and only in a bag block whose records chain exactly; the unset value of a date word, the u16
         # words around them and every other byte are compared.
         cv_n, cv_meta_n = "???214/CV_iew/Var2Data", "???214/CV_iew/VarMeta"
-        stamp_span = (0x3D1412C0, 0x3D282DB4)
+        stamp_span = (0x3D1412C0, 0x3D2C12C0)
         cv_recs = bag_records(R[cv_n], R[cv_meta_n])
         stamp_recs = [r_ for r_ in cv_recs if r_[2] == 0x22400015]
         state_recs = [r_ for r_ in cv_recs if r_[2] == 0x22400008]
@@ -2037,7 +2037,7 @@ try:
         check("W36-0f.4.7 Task FixedData: the stamp of a row the control has is noise inside the span",
               problems == 0 and AR[task_n][stamp_at:stamp_at + 4] != in_span, "%r" % (lines,))
         for vname, val in (("zero", 0), ("all ones", 0xFFFFFFFF), ("one", 1), ("0x7fffffff", 0x7FFFFFFF),
-                           ("one over the span's top", 0x3D28352B), ("one under the span's bottom", 0x3D141481)):
+                           ("one over the span's top", 0x3D2C15EB), ("one under the span's bottom", 0x3D141481)):
             for which in ("traced", "reference"):
                 bad_ = put(AR, task_n, [(stamp_at, struct.pack("<I", val))])
                 problems, lines = verdict(*((bad_, AR) if which == "traced" else (AR, bad_)), AC)
@@ -2073,7 +2073,7 @@ try:
             problems, lines = verdict(put(AR, stamp_name, [(at_s[0], in_span)]), AR, AC)
             check("W36-0f.4.7 %s: the stamp of key %#x inside the span is noise" % (stamp_name, stamp_key),
                   problems == 0 and AR[stamp_name][at_s[0]:at_s[0] + 4] != in_span, "%r" % (lines,))
-            for vname, val in (("zero", 0), ("all ones", 0xFFFFFFFF), ("one over the span's top", 0x3D28352B),
+            for vname, val in (("zero", 0), ("all ones", 0xFFFFFFFF), ("one over the span's top", 0x3D2C15EB),
                                ("one under the span's bottom", 0x3D141481)):
                 for which in ("traced", "reference"):
                     bad_ = put(AR, stamp_name, [(at_s[0], struct.pack("<I", val))])
@@ -3021,13 +3021,13 @@ try:
         # --- W36-0e.2 (R36G0d-2): a masked value is accepted only inside the range the saves show -------
         # The bounds of 0d.6 refused 0 and all-ones only, so a stamp of 1 or 0x7fffffff, two unequal save
         # words, and a LastSave in 2001 or 2600 were noise.  A stamp is noise inside the span of the 624
-        # committed saves (0x3d141482 to 0x3d282db4), the two 114/Props save words only when equal, and
-        # LastSave inside its committed span (0x01dd62019f6a0e00 to 0x01dd72130aac6c00, 22 October to
-        # 11 November 2026).  The numbers are written here from the Value bounds table of
+        # saves (0x3d141482 to 0x3d2c15ea of 1187 saved copies, W36-2.0), the two 114/Props save words only when equal, and
+        # LastSave inside its span (0x01dd62019f6a0e00 to 0x01dd74e2a0c9e600, 22 October to
+        # 15 November 2026).  The numbers are written here from the Value bounds table of
         # spec/writers/evidence/trace-gate-fields-g0b.md, not read from the gate.
-        # (W36-0f.4.3: the top is the VM's, 0x3d28352a: the committed top is 0x3d282db4)
-        span_lo, span_hi = 0x3D141482, 0x3D28352A
-        ls_lo, ls_hi = 0x01DD62019F6A0E00, 0x01DD72130AAC6C00
+        # (W36-2.0: the top is the decoded maximum of 1187 saved copies, 0x3d2c15ea; W36-0f.4.3's 0x3d28352a is inside it)
+        span_lo, span_hi = 0x3D141482, 0x3D2C15EA
+        ls_lo, ls_hi = 0x01DD62019F6A0E00, 0x01DD74E2A0C9E600
 
         def filetime_of(year):
             return (datetime.date(year, 1, 1) - datetime.date(1601, 1, 1)).days * 86400 * 10 ** 7

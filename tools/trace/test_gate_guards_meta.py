@@ -321,8 +321,8 @@ GUARDS = [
     ("guid-timestamp", "R36G0c-3", "_is_v1_guid: the timestamp may be 0",
      [("(any(raw[:6]) or raw[6] & 15 != 0 or raw[7] != 0))", "True)")]),
     # --- W36-0d.6: a masked field holds a value a save writes ----------------------------------------
-    ("stamp-span-vm", "W36-0f.4.3", "the stamp span stops at the committed top, under the VM's three latest stamps",
-     [("STAMP_SPAN = (0x3D141482, 0x3D28352A)", "STAMP_SPAN = (0x3D141482, 0x3D282DB4)")]),
+    ("stamp-span-vm", "W36-2.0", "the stamp span stops at the top of the committed saves, under the stamps of the 14 and 15 November saves",
+     [("STAMP_SPAN = (0x3D141482, 0x3D2C15EA)", "STAMP_SPAN = (0x3D141482, 0x3D282DB4)")]),
     ("pslot-id-1395", "W36-0f.4.4", "baseline slot 0x02401395 is not read as a slot",
      [('0x02401395: "slot"', '0x02401395: "none"')]),
     ("pslot-id-1396", "W36-0f.4.4", "baseline slot 0x02401396 is not read as a slot",
