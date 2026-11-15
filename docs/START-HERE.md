@@ -21,8 +21,11 @@ house rules of wave 35g are the last section of that file, "Standing rules and s
   compares a traced save with the reference outside named noise fields only, and the control mask excuses
   nothing; a pair whose control or edit differs in a field nobody decoded FAILs and is OPEN in the test
   (56 of 202 control-nulls, see `wave36-complete.md` G0c).  `tools/trace/test_trace_gate.py` (ctest
-  `trace_gate_guards`) and `tools/trace/test_host_skip.ps1` (ctest `trace_host_scripts`, needs `pwsh`)
-  guard them; both CI jobs `pip install olefile`, not yet run on a runner.  The VM still runs the frozen
+  `trace_gate_guards`, acceptance sweeps only), `tools/trace/test_gate_guards_meta.py` (ctest
+  `trace_gate_meta`, label of the same name, own timeout: removes each guard and expects red; run on a
+  fresh tree at each group close and in the CI job `trace-gate-meta`; the matrix and asan jobs pass
+  `-LE trace_gate_meta`) and `tools/trace/test_host_skip.ps1` (ctest `trace_host_scripts`, needs `pwsh`)
+  guard them; the CI jobs `pip install olefile`, not yet run on a runner.  The VM still runs the frozen
   gate and `host.ps1`; the coordinator copies the new ones in and re-gates (R36G0b-8 needs a real recording).
 * **Open, no Critical or High:** the Lows R35gG0-1 to -4, R35gG1-1 to -5 and R35gW-1 to -5;
   partly fixed or open R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), R35bW-1, R35bW-2, R35bG2-2,

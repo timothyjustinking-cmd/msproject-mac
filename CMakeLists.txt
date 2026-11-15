@@ -186,13 +186,30 @@ if(CORE_BUILD_TESTS)
             COMMAND "${Python3_EXECUTABLE}"
                     "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_trace_gate.py"
         )
-        # W36-0b.10: the test reads every committed pair (about 36 s here, more on a slow runner),
-        # so it carries its own limit instead of ctest's 60 s default.  W36-0d.8: it then runs the
-        # guard meta-test (60 gate copies, one test run each, 6 at a time: about 8 minutes here).
+        # W36-0b.10: the test reads every committed pair (about 45 s here, more on a slow runner),
+        # so it carries its own limit instead of ctest's 60 s default.  W36-2.4: it runs the
+        # acceptance sweeps only; the guard-removal run is trace_gate_meta below.
         set_tests_properties(trace_gate_guards PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             SKIP_RETURN_CODE 77
-            TIMEOUT 3600
+            TIMEOUT 600
+        )
+
+        # W36-2.4 (W36-0d.8, 0e.1): the guard meta-test removes each guard of the gate, named and
+        # derived, in a copy and asserts the acceptance test above goes red (hundreds of gate copies,
+        # one test run each, 6 at a time: minutes, so it has its own limit).  Label trace_gate_meta:
+        # `ctest -L trace_gate_meta` runs it, `ctest -LE trace_gate_meta` leaves it out.  It runs on a
+        # fresh tree at each group close and in the CI job trace-gate-meta.
+        add_test(
+            NAME trace_gate_meta
+            COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_gate_guards_meta.py"
+        )
+        set_tests_properties(trace_gate_meta PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            SKIP_RETURN_CODE 77
+            LABELS trace_gate_meta
+            TIMEOUT 10800
         )
     endif()
 

@@ -28,7 +28,7 @@ are G0's; G0b and G0c added the later checks listed after them:
            first entry and size words and the 2048-byte cap are seen red (0d.4, 0d.5); a masked field
            holds a value a save writes (0d.6); each OPEN entry is pinned as (pair, stream, count)
            (0d.7); and test_gate_guards_meta.py removes each named guard in turn and asserts this
-           test goes red, run at the end of a default run (0d.8).
+           test goes red (0d.8; since W36-2.4 its own ctest, trace_gate_meta, not run from here).
 
   W36-0e   the meta-test derives its candidate guards from the gate (0e.1) and this test turns a gate
            that raises, or a gate that returns the wrong shape, into a named FAIL, so a removal is red
@@ -39,13 +39,13 @@ are G0's; G0b and G0c added the later checks listed after them:
            words and a LastSave in 2001 or 2600 FAIL (0e.2); an emptied Props14 tail name is not a
            name, so two emptied names do not equal their placeholder and FAIL (0e.3).
 
-    python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only] [--no-meta] [--fail-fast]
+    python test_trace_gate.py [--gate PATH | --gate-dir DIR] [--cli-only] [--fail-fast]
 
 --gate runs the command-line cases against another copy of the gate (a red run against an older
 version); --gate-dir runs every case, in-process ones too, against DIR/trace_gate.py (a gate
-with one guard removed); --cli-only skips the cases that import the gate's functions; --no-meta
-does not run the guard meta-test after a pass (the meta-test itself runs this test with it);
---fail-fast stops at the first FAIL.  Exit 0 all pass, 1 a case failed, 77 olefile is not
+with one guard removed); --cli-only skips the cases that import the gate's functions;
+--fail-fast stops at the first FAIL.  The guard meta-test (test_gate_guards_meta.py) is a separate
+ctest, trace_gate_meta (W36-2.4); it runs this file with --gate-dir and --fail-fast.  Exit 0 all pass, 1 a case failed, 77 olefile is not
 installed (ctest SKIP).
 """
 
@@ -73,7 +73,6 @@ except ImportError:
 gate_path = os.path.join(HERE, "trace_gate.py")
 cli_only = False
 gate_dir = HERE
-no_meta = False
 fail_fast = False
 args = sys.argv[1:]
 while args:
@@ -87,8 +86,6 @@ while args:
         gate_path = os.path.join(gate_dir, "trace_gate.py")
     elif a == "--cli-only":
         cli_only = True
-    elif a == "--no-meta":
-        no_meta = True
     elif a == "--fail-fast":
         fail_fast = True
     else:
@@ -3919,12 +3916,4 @@ finally:
 print("%d failed" % len(failures) if failures else "all passed")
 if failures:
     sys.exit(1)
-# W36-0d.8: the guards are removed one at a time in copies of the gate and this test must go red on
-# each.  Only the plain run does it: --gate, --gate-dir and --cli-only run another gate or a subset,
-# and the meta-test runs this file itself with --no-meta.
-if not no_meta and gate_dir == HERE and gate_path == os.path.join(HERE, "trace_gate.py") and not cli_only:
-    print("--- guard meta-test (test_gate_guards_meta.py)")
-    sys.stdout.flush()
-    sys.exit(subprocess.run([sys.executable, os.path.join(HERE, "test_gate_guards_meta.py"),
-                             "--skip-baseline"]).returncode)
 sys.exit(0)

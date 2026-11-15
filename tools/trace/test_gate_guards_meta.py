@@ -13,8 +13,13 @@ the test goes red.  A guard whose removal leaves the test green is a case that i
 It prints one line per guard (`red` with the first failing case, `red (crash)` when the mutant made
 the test raise, or `GREEN`), then `guards listed N, red M` (and the baseline).  Exit 0 only when every
 listed guard is red, every text to remove was found in the gate exactly as many times as stated, and
-the unmodified gate passes (`--skip-baseline` leaves that to the caller, which is test_trace_gate.py
-running this after its own pass).  Exit 1 otherwise; 77 when olefile is absent.
+the unmodified gate passes (`--skip-baseline` leaves that to a caller that has run
+test_trace_gate.py itself).  Exit 1 otherwise; 77 when olefile is absent.
+
+W36-2.4: this is its own ctest, `trace_gate_meta` (label `trace_gate_meta`, own TIMEOUT), and no
+longer runs at the end of test_trace_gate.py, so `ctest -R trace_gate_guards` runs the acceptance
+sweeps only.  Run it with `ctest -L trace_gate_meta` on a fresh tree at each group close and in
+the CI job `trace-gate-meta`.
 
 W36-0e.1 (R36G0d-1): the named list above can only hold the guards someone thought of, so the
 candidates are also DERIVED from the gate with `ast`: the condition of an `if` that returns,
@@ -668,7 +673,7 @@ def run_mutant(gid, mutant, tmp):
     os.makedirs(d)
     with open(os.path.join(d, "trace_gate.py"), "w", encoding="utf-8", newline="\n") as f:
         f.write(mutant)
-    r = subprocess.run([sys.executable, TEST, "--gate-dir", d, "--no-meta", "--fail-fast"],
+    r = subprocess.run([sys.executable, TEST, "--gate-dir", d, "--fail-fast"],
                        capture_output=True, text=True, cwd=HERE)
     fails = [ln for ln in r.stdout.splitlines() if ln.startswith("FAIL")]
     if r.returncode == 0:
@@ -739,7 +744,7 @@ def main(argv):
             futures = [pool.submit(run_guard, g, src, tmp) for g in guards]
             futures += [pool.submit(run_candidate, c, src, tmp) for c in derived]
             if not skip_baseline and not picks:
-                base = pool.submit(subprocess.run, [sys.executable, TEST, "--no-meta", "--fail-fast"],
+                base = pool.submit(subprocess.run, [sys.executable, TEST, "--fail-fast"],
                                    capture_output=True, text=True, cwd=HERE)
             for fut in futures:
                 gid, state, detail = fut.result()

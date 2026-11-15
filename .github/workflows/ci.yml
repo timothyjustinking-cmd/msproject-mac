@@ -185,7 +185,7 @@ jobs:
         shell: bash
         env:
           MPP_NO_CORPUS: "1"
-        run: ctest --test-dir build -C Release -E plan_recalc --output-on-failure --timeout 60
+        run: ctest --test-dir build -C Release -E plan_recalc -LE trace_gate_meta --output-on-failure --timeout 60
 
       # Wave 24 (W24-4/R4): wave 23 excluded plan_recalc from CI entirely and
       # lost the 266 checks that do NOT need the corpus (test_base,
@@ -341,5 +341,45 @@ jobs:
         shell: bash
         run: |
           export MPP_NO_CORPUS=1
-          ctest --test-dir build/asan -C RelWithDebInfo -E plan_recalc \
+          ctest --test-dir build/asan -C RelWithDebInfo -E plan_recalc -LE trace_gate_meta \
                 --output-on-failure --timeout 180
+
+  # Wave 36 (W36-2.4): the trace gate's guard-removal run (tools/trace/test_gate_guards_meta.py)
+  # left trace_gate_guards and is its own ctest, labelled trace_gate_meta, with its own TIMEOUT.
+  # The two jobs above exclude it (-LE trace_gate_meta); this is the one CI job that runs it.  It
+  # is Python only, so the tree is configured (that is what registers the test) and not built.
+  trace-gate-meta:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event != 'push')
+    name: trace-gate-meta
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Python with olefile
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install olefile
+        shell: bash
+        run: python -m pip install --quiet olefile
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORE_WARNINGS_AS_ERRORS=ON
+
+      - name: Test the trace gate's guards (remove each, the acceptance test must go red)
+        shell: bash
+        run: ctest --test-dir build -C Release -L trace_gate_meta --output-on-failure
