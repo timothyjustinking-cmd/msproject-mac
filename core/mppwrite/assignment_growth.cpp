@@ -1340,12 +1340,11 @@ struct Built {
     std::vector<std::string> expected_changed;
 };
 
-/* Replace every built stream on `work`, rebuild the summary from the edited
- * task row, write the package through save_props_edit, re-read it and prove
- * every built stream, every scalar and the exact changed-stream set. */
-void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
-                    std::string const& path, std::string const& function,
-                    bool dry_run) {
+/* Replace every built stream on `work` and add the Task and Assignment size
+ * and count words to built.props.scalars, computed from the tables just laid
+ * out (W36-2.1; the callers keep only the words no table holds: the freed
+ * counter and the dirty flag). */
+void stage_built(CfbDocument& work, Built& built) {
     work.replace_stream(kAssnFixedData, built.assn_fixed);
     work.replace_stream(kAssnFixedMeta, built.assn_meta);
     work.replace_stream(kAssnFixed2Meta, built.assn_f2_meta);
@@ -1358,7 +1357,30 @@ void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
     work.replace_stream(kTaskVar2Data, built.task_var2);
     work.replace_stream(kRscFixedData, built.rsc_fixed);
     work.replace_stream(kRscFixedMeta, built.rsc_meta);
+    for (PropsScalarEdit const& word : props_table_words(
+             work, {PropsTable::Task, PropsTable::Assignment})) {
+        built.props.scalars.push_back(word);
+    }
+}
 
+/* The value `tag` holds after the save: the edit's word, or `before` when the
+ * edit leaves it as it was. */
+std::uint32_t scalar_after(Built const& built, std::uint32_t tag,
+                           std::uint32_t before) {
+    for (PropsScalarEdit const& edit : built.props.scalars) {
+        if (edit.tag == tag) {
+            return edit.value;
+        }
+    }
+    return before;
+}
+
+/* Rebuild the summary from the edited task row (`work` is already staged by
+ * stage_built), write the package through save_props_edit, re-read it and
+ * prove every built stream, every scalar and the exact changed-stream set. */
+void save_and_prove(CfbDocument& doc, CfbDocument& work, Built const& built,
+                    std::string const& path, std::string const& function,
+                    bool dry_run) {
     TaskTable const before = TaskTable::from_document(doc);
     TaskTable const after = TaskTable::from_document(work);
     /* The project Work string is "<n> hrs"; every pair's n is a multiple of 40
@@ -1904,13 +1926,8 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
         built.rsc_meta = rsc_meta;
 
         built.props.stream = kPropsBackEnd;
-        built.props.scalars = {
-            {kPropsAssignmentCountTag, static_cast<std::uint32_t>(new_rows)},
-            {kPropsAssignmentSizeTag,
-             static_cast<std::uint32_t>(var2_base + kFourBlockBytes)},
-            {kPropsTaskSizeTag, static_cast<std::uint32_t>(
-                                    task_var2_base + 8 + 4 * new_leaf_count)},
-        };
+        /* W36-2.1: the count and size words come from the staged tables. */
+        built.props.scalars.clear();
         if (dirty_before != 0) {
             built.props.scalars.push_back({kPropsAssignmentDirtyTag, 0});
         }
@@ -1923,6 +1940,11 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             kEditMarkerStream};
 
         CfbDocument edited = doc;
+        stage_built(edited, built);
+        std::uint32_t const props_count_after =
+            scalar_after(built, kPropsAssignmentCountTag, count_before);
+        std::uint32_t const props_size_after =
+            scalar_after(built, kPropsAssignmentSizeTag, size_before);
         save_and_prove(doc, edited, built, path, function, dry_run);
 
         AssignmentGrowthWrite written;
@@ -1940,14 +1962,13 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
             (assn_var_meta.size() - kVarMetaHeaderBytes) / kVarMetaEntryBytes;
         written.var_entries_after = written.var_entries_before + 4;
         written.props_count_before = count_before;
-        written.props_count_after = static_cast<std::uint32_t>(new_rows);
+        written.props_count_after = props_count_after;
         written.props_freed_before = freed_before;
         written.props_freed_after = freed_before;
         written.props_dirty_before = dirty_before;
         written.props_dirty_after = 0;
         written.props_size_before = size_before;
-        written.props_size_after =
-            static_cast<std::uint32_t>(var2_base + kFourBlockBytes);
+        written.props_size_after = props_size_after;
         return written;
     }
 
@@ -2235,19 +2256,19 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
            0x00);
 
     built.props.stream = kPropsBackEnd;
+    /* W36-2.1: the count and size words come from the staged tables. */
     built.props.scalars = {
-        {kPropsAssignmentCountTag, static_cast<std::uint32_t>(new_rows)},
         {kPropsAssignmentFreedTag, freed_before + removed_payload},
         {kPropsAssignmentDirtyTag, 1},
-        {kPropsAssignmentSizeTag,
-         static_cast<std::uint32_t>(var2_base + kFourBlockBytes)},
     };
+    CfbDocument edited = doc;
+    stage_built(edited, built);
 
     std::uint32_t const props_count_after =
-        static_cast<std::uint32_t>(new_rows);
+        scalar_after(built, kPropsAssignmentCountTag, count_before);
     std::uint32_t const props_freed_after = freed_before + removed_payload;
     std::uint32_t const props_size_after =
-        static_cast<std::uint32_t>(var2_base + kFourBlockBytes);
+        scalar_after(built, kPropsAssignmentSizeTag, size_before);
     if (props_count_after == count_before ||
         props_freed_after == freed_before || props_size_after == size_before) {
         fail(function + ": a measured scalar would not change");
@@ -2260,7 +2281,6 @@ AssignmentGrowthWrite assign_resource(CfbDocument& doc,
         kRscFixedData,      kRscFixedMeta,   kPropsBackEnd,
         kDocumentSummaryStream, kEditMarkerStream};
 
-    CfbDocument edited = doc;
     save_and_prove(doc, edited, built, path, function, dry_run);
 
     AssignmentGrowthWrite written;
@@ -2705,18 +2725,18 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
     built.rsc_meta = rsc_meta;
 
     built.props.stream = kPropsBackEnd;
+    /* W36-2.1: the count and size words come from the staged tables. */
     built.props.scalars = {
-        {kPropsAssignmentCountTag, static_cast<std::uint32_t>(new_rows - 1)},
         {kPropsAssignmentFreedTag, freed_before + copied_payload},
         {kPropsAssignmentDirtyTag, 1},
-        {kPropsAssignmentSizeTag,
-         static_cast<std::uint32_t>(var2_base + kFourBlockBytes)},
     };
+    CfbDocument edited = doc;
+    stage_built(edited, built);
     std::uint32_t const props_count_after =
-        static_cast<std::uint32_t>(new_rows - 1);
+        scalar_after(built, kPropsAssignmentCountTag, count_before);
     std::uint32_t const props_freed_after = freed_before + copied_payload;
     std::uint32_t const props_size_after =
-        static_cast<std::uint32_t>(var2_base + kFourBlockBytes);
+        scalar_after(built, kPropsAssignmentSizeTag, size_before);
     if (props_count_after == count_before ||
         props_freed_after == freed_before || props_size_after == size_before) {
         fail(function + ": a measured scalar would not change");
@@ -2728,7 +2748,6 @@ AssignmentGrowthWrite unassign_resource(CfbDocument& doc,
         kTaskVar2Data,   kRscFixedData,  kPropsBackEnd,   kDocumentSummaryStream,
         kEditMarkerStream};
 
-    CfbDocument edited = doc;
     save_and_prove(doc, edited, built, path, function, dry_run);
 
     AssignmentGrowthWrite written;

@@ -43,6 +43,14 @@
  *            (214/Props CV_iew size 0x01000100 100,178 -> 100,234).  The
  *            Task freed word (BE 0x01000002, 0 -> payload bytes on a var
  *            removal) is measured through W34-1.2's pairs.
+ *   derived  W36-2.1: a table's size word is the length of its Var2Data and
+ *            its count word the u32 at +8 of its FixedMeta, as the save lays
+ *            the tables out (all 8 words, 624/624 committed files; 214/Props
+ *            carries only the CV_iew size, which viewstream_edit derives the
+ *            same way).  props_table_words() computes them from the document
+ *            the save has laid out, so the growth writers no longer carry a
+ *            measured copy of each word.  The Task freed counter and the
+ *            Assignment dirty flag are in no table and stay the caller's.
  *   marker   The Props14 edit marker (edit_marker.h) is written on every save,
  *            as every measured editor save writes it.
  *
@@ -130,6 +138,8 @@ inline constexpr char const* kPropsFrontEnd = "214/Props";
  * writes them little-endian (0x00010001 etc.); it is the same four bytes. */
 inline constexpr std::uint32_t kPropsTaskSizeTag = 0x01000100u;
 inline constexpr std::uint32_t kPropsTaskFreedTag = 0x01000002u;
+inline constexpr std::uint32_t kPropsTaskCountTag = 0x01000001u;
+inline constexpr std::uint32_t kPropsCalendarSizeTag = 0x03000100u;
 inline constexpr std::uint32_t kPropsResourceCountTag = 0x02000001u;
 inline constexpr std::uint32_t kPropsResourceSizeTag = 0x02000100u;
 inline constexpr std::uint32_t kPropsCalendarCountTag = 0x03000001u;
@@ -164,6 +174,27 @@ struct PropsEdit {
     std::vector<PropsRecordEdit> records;
     std::vector<PropsScalarEdit> scalars;
 };
+
+/* W36-2.1: the four 114 tables whose size and count words the save derives.
+ * The value is the table number N of the tags 0x0N000100 (size) and
+ * 0x0N000001 (count). */
+enum class PropsTable : std::uint8_t {
+    Task = 1,
+    Resource = 2,
+    Calendar = 3,
+    Assignment = 4,
+};
+
+/* The 114/Props size and count words of `tables`, computed from the streams
+ * `laid_out` holds (the save has laid the tables out): size = the length of
+ * <table>/Var2Data, count = the u32 at +8 of <table>/FixedMeta.  Measured on
+ * all 8 words of the 624 committed files (every word equal, 624/624).  Only
+ * the words that differ from the Props stream's stored value are returned, so
+ * the result goes straight into PropsEdit::scalars; a table whose streams are
+ * missing or whose Props word is absent throws Error.  The caller names the
+ * tables its edit lays out: a table it does not touch keeps its stored words. */
+std::vector<PropsScalarEdit> props_table_words(
+    CfbDocument const& laid_out, std::vector<PropsTable> const& tables);
 
 /* What the write proved from the file on disk. */
 struct PropsRecordWrite {

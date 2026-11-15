@@ -696,6 +696,48 @@ void test_resource_add_pair(TestContext& t) {
                          "resource-add"),
             8, "resource-add: Project's Calendar count is 8");
 
+    /* W36-2.1: the words computed from the laid-out tables.  The control with
+     * Project's Resource and Calendar streams laid in yields exactly the three
+     * measured words; Project's own save and the unedited control yield none
+     * (every stored word already equals its table). */
+    {
+        using mppwrite::PropsTable;
+        std::vector<PropsTable> const all = {
+            PropsTable::Task, PropsTable::Resource, PropsTable::Calendar,
+            PropsTable::Assignment};
+        t.equal(mppwrite::props_table_words(control, all).size(), 0,
+                "resource-add: the control's stored words equal its tables");
+        t.equal(mppwrite::props_table_words(project, all).size(), 0,
+                "resource-add: Project's stored words equal its tables");
+        CfbDocument staged = control;
+        for (std::string const& path : project.stream_paths()) {
+            if (path.rfind("114/TBkndRsc/", 0) == 0 ||
+                path.rfind("114/TBkndCal/", 0) == 0) {
+                staged.replace_stream(path, project.read_stream(path));
+            }
+        }
+        std::vector<PropsScalarEdit> const words = mppwrite::props_table_words(
+            staged, {PropsTable::Resource, PropsTable::Calendar});
+        t.equal(words.size(), 3, "resource-add: three words derived");
+        auto const value_of = [&](std::uint32_t tag) -> std::uint64_t {
+            for (PropsScalarEdit const& word : words) {
+                if (word.tag == tag) {
+                    return word.value;
+                }
+            }
+            return 0xFFFFFFFFFFull;
+        };
+        t.equal(value_of(mppwrite::kPropsResourceCountTag), 6,
+                "resource-add: derived Resource count is 6");
+        t.equal(value_of(mppwrite::kPropsResourceSizeTag), 140,
+                "resource-add: derived Resource size is 140");
+        t.equal(value_of(mppwrite::kPropsCalendarCountTag), 8,
+                "resource-add: derived Calendar count is 8");
+        /* A table the caller does not name keeps its stored words. */
+        t.equal(mppwrite::props_table_words(staged, {PropsTable::Task}).size(),
+                0, "resource-add: an unnamed table derives nothing");
+    }
+
     PropsEdit edit;
     edit.scalars.push_back({mppwrite::kPropsResourceCountTag, 6});
     edit.scalars.push_back({mppwrite::kPropsResourceSizeTag, 140});

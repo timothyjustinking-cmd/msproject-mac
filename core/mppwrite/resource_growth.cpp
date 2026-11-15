@@ -842,33 +842,9 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
                 static_cast<std::uint32_t>(built.cal_f2.size()));
     }
 
-    built.props.stream = kPropsBackEnd;
-    built.props.scalars = {
-        {kPropsResourceCountTag, static_cast<std::uint32_t>(rsc_entries + 1)},
-        {kPropsResourceSizeTag, static_cast<std::uint32_t>(built.rsc_var2.size())},
-        {kPropsCalendarCountTag, static_cast<std::uint32_t>(cal_entries + 1)},
-    };
-
-    ResourceGrowthWrite written;
-    written.uid = uid;
-    written.id = id;
-    written.calendar_uid = cal_uid;
-    written.rows_before = rows;
-    written.rows_after = rows + 1;
-    written.resource_count_before = props_rsc_count;
-    written.resource_count_after = static_cast<std::uint32_t>(rsc_entries + 1);
-    written.resource_size_before = props_rsc_size;
-    written.resource_size_after = static_cast<std::uint32_t>(built.rsc_var2.size());
-    written.calendar_count_before = props_cal_count;
-    written.calendar_count_after = static_cast<std::uint32_t>(cal_entries + 1);
-
-    /* W34-4.2: a dry run has built and validated every stream; it writes
-     * nothing and leaves `doc` as it was. */
-    if (spec.dry_run) {
-        return written;
-    }
-
-    /* ---- save and prove ---------------------------------------------------- */
+    /* W36-2.1: the Props words are computed from the tables the save lays out,
+     * not copied from measured constants; the document is staged here so a dry
+     * run reports the same words a save writes. */
     CfbDocument work = doc;
     work.replace_stream(kRscFixedData, built.rsc_fixed);
     work.replace_stream(kRscFixedMeta, built.rsc_meta);
@@ -881,6 +857,41 @@ ResourceGrowthWrite add_work_resource(CfbDocument& doc,
     work.replace_stream(kCalFixed2Data, built.cal_f2);
     work.replace_stream(kCalFixed2Meta, built.cal_f2_meta);
 
+    built.props.stream = kPropsBackEnd;
+    built.props.scalars = props_table_words(
+        work, {PropsTable::Resource, PropsTable::Calendar});
+    auto const word_after = [&](std::uint32_t tag, std::uint32_t before) {
+        for (PropsScalarEdit const& edit : built.props.scalars) {
+            if (edit.tag == tag) {
+                return edit.value;
+            }
+        }
+        return before;
+    };
+
+    ResourceGrowthWrite written;
+    written.uid = uid;
+    written.id = id;
+    written.calendar_uid = cal_uid;
+    written.rows_before = rows;
+    written.rows_after = rows + 1;
+    written.resource_count_before = props_rsc_count;
+    written.resource_count_after =
+        word_after(kPropsResourceCountTag, props_rsc_count);
+    written.resource_size_before = props_rsc_size;
+    written.resource_size_after =
+        word_after(kPropsResourceSizeTag, props_rsc_size);
+    written.calendar_count_before = props_cal_count;
+    written.calendar_count_after =
+        word_after(kPropsCalendarCountTag, props_cal_count);
+
+    /* W34-4.2: a dry run has built and validated every stream; it writes
+     * nothing and leaves `doc` as it was. */
+    if (spec.dry_run) {
+        return written;
+    }
+
+    /* ---- save and prove ---------------------------------------------------- */
     (void)save_props_edit(work, built.props, path);
 
     /* The edit marker is the one stream whose change is conditional: the marker

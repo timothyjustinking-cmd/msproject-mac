@@ -173,10 +173,14 @@ std::string payload_pin_clause(std::uint32_t id, Bytes const& payload) {
 
 bool scalar_allowed(std::string const& stream, std::uint32_t tag) {
     if (stream == kPropsBackEnd) {
+        /* W36-2.1: Task count and Calendar size join the six derived words
+         * (all 8 table words equal the laid-out tables in 624/624 files). */
         return tag == kPropsTaskSizeTag || tag == kPropsTaskFreedTag ||
+               tag == kPropsTaskCountTag ||
                tag == kPropsResourceCountTag ||
                tag == kPropsResourceSizeTag ||
                tag == kPropsCalendarCountTag ||
+               tag == kPropsCalendarSizeTag ||
                tag == kPropsAssignmentCountTag ||
                tag == kPropsAssignmentFreedTag ||
                tag == kPropsAssignmentDirtyTag ||
@@ -187,9 +191,11 @@ bool scalar_allowed(std::string const& stream, std::uint32_t tag) {
 
 std::string scalar_whitelist(std::string const& stream) {
     if (stream == kPropsBackEnd) {
-        return "0x01000100 (Task size), 0x01000002 (Task freed), "
+        return "0x01000100 (Task size), 0x01000001 (Task count), "
+               "0x01000002 (Task freed), "
                "0x02000001 (Resource count), 0x02000100 (Resource size), "
-               "0x03000001 (Calendar count), 0x04000001 (Assignment count), "
+               "0x03000001 (Calendar count), 0x03000100 (Calendar size), "
+               "0x04000001 (Assignment count), "
                "0x04000002 (Assignment freed), 0x04008000 (Assignment dirty) "
                "and 0x04000100 (Assignment size)";
     }
@@ -337,6 +343,51 @@ void prove_only_owned_streams_changed(CfbDocument const& opened,
 }
 
 } /* namespace */
+
+std::vector<PropsScalarEdit> props_table_words(
+    CfbDocument const& laid_out, std::vector<PropsTable> const& tables) {
+    std::string const function = "props table words";
+    static constexpr char const* kNames[] = {"", "TBkndTask", "TBkndRsc",
+                                             "TBkndCal", "TBkndAssn"};
+    if (!laid_out.has_stream(kPropsBackEnd)) {
+        throw Error(function + ": the document has no " +
+                    std::string(kPropsBackEnd) + " stream");
+    }
+    Bytes const props = laid_out.read_stream(kPropsBackEnd);
+    std::vector<PropsScalarEdit> out;
+    for (PropsTable table : tables) {
+        std::uint32_t const n = static_cast<std::uint32_t>(table);
+        std::string const base = std::string("114/") + kNames[n];
+        std::string const var2 = base + "/Var2Data";
+        std::string const meta = base + "/FixedMeta";
+        if (!laid_out.has_stream(var2) || !laid_out.has_stream(meta)) {
+            throw Error(function + ": the document has no " + var2 + " or " +
+                        meta + " stream");
+        }
+        Bytes const meta_bytes = laid_out.read_stream(meta);
+        if (meta_bytes.size() < 12) {
+            throw Error(function + ": " + meta + " is " +
+                        std::to_string(meta_bytes.size()) +
+                        " bytes, shorter than its header count word");
+        }
+        std::uint32_t const size_tag = (n << 24) | 0x100u;
+        std::uint32_t const count_tag = (n << 24) | 0x001u;
+        std::uint32_t const size = static_cast<std::uint32_t>(
+            laid_out.read_stream(var2).size());
+        std::uint32_t const count = get_u32(meta_bytes, 8);
+        for (auto const& word : {std::pair<std::uint32_t, std::uint32_t>{
+                                     size_tag, size},
+                                 std::pair<std::uint32_t, std::uint32_t>{
+                                     count_tag, count}}) {
+            std::size_t const at = props_value_offset(
+                props, word.first, function, kPropsBackEnd);
+            if (get_u32(props, at) != word.second) {
+                out.push_back({word.first, word.second});
+            }
+        }
+    }
+    return out;
+}
 
 PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
                                std::string const& path) {
