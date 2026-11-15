@@ -171,6 +171,82 @@ std::string payload_pin_clause(std::uint32_t id, Bytes const& payload) {
     return std::string();
 }
 
+/* W36-2.2: the two ids a committed pair appended to 114/Props.  0x02401393 is
+ * the baseline calendar text (wave30-baseline, 12 held-out pairs), 0x02400005
+ * the summary note text (wave36-r7-w37-c-note-summary-short and -600). */
+constexpr std::uint32_t kBaselineCalendarId = 0x02401393u;
+constexpr std::uint32_t kSummaryNoteId = 0x02400005u;
+constexpr std::size_t kSummaryNoteMaxBytes = 514;
+
+bool insert_measured(std::uint32_t id) {
+    return id == kBaselineCalendarId || id == kSummaryNoteId;
+}
+
+/* The refusal clause for an insert payload, or empty when it is one a pair
+ * measured: kind 0, UTF-16LE text with two NUL code units, an even length
+ * (the +1 pad of an odd length is in no file), the baseline text fixed, the
+ * summary note at most 514 bytes (the 600-character pair is cut at 255). */
+std::string insert_pin_clause(std::uint32_t id, std::uint32_t kind,
+                              Bytes const& payload) {
+    static char const baseline_text[] = "Used for Microsoft Project 98 Baseline Calendar";
+    if (kind != 0) {
+        return "every measured insert has kind and flags 0";
+    }
+    if (payload.size() < 4 || payload.size() % 2 != 0) {
+        return "the payload is UTF-16 text and two NUL code units, so an even "
+               "length of at least 4 bytes (an odd length's pad is in no file)";
+    }
+    for (std::size_t i = payload.size() - 4; i < payload.size(); ++i) {
+        if (payload[i] != 0) {
+            return "the payload must end in two NUL code units";
+        }
+    }
+    if (id == kBaselineCalendarId) {
+        Bytes expected;
+        for (char const* c = baseline_text; *c != '\0'; ++c) {
+            expected.push_back(static_cast<std::uint8_t>(*c));
+            expected.push_back(0);
+        }
+        expected.insert(expected.end(), 4, 0);
+        if (payload != expected) {
+            return "0x02401393 is measured as the 98-byte baseline calendar "
+                   "text 'Used for Microsoft Project 98 Baseline Calendar'";
+        }
+    }
+    if (id == kSummaryNoteId && payload.size() > kSummaryNoteMaxBytes) {
+        return "0x02400005 is measured up to 514 payload bytes";
+    }
+    return std::string();
+}
+
+/* The full record walk the count word at +12 describes: that many records from
+ * +16, 12 + length bytes each.  `ok` is true only when it ends exactly at the
+ * stream end (624/624 committed files), which is what makes "the id is absent"
+ * and "the end of the stream is where Project appends" provable. */
+struct FullWalk {
+    bool ok = false;
+    std::vector<std::uint32_t> ids;
+};
+
+FullWalk full_walk(Bytes const& bytes) {
+    FullWalk walk;
+    std::uint32_t const count = get_u32(bytes, 12);
+    std::size_t pos = kPropsHeaderSize;
+    for (std::uint32_t i = 0; i < count; ++i) {
+        if (pos + kRecordHeaderSize > bytes.size()) {
+            return walk;
+        }
+        std::uint32_t const length = get_u32(bytes, pos);
+        if (length > bytes.size() - pos - kRecordHeaderSize) {
+            return walk;
+        }
+        walk.ids.push_back(get_u32(bytes, pos + 4));
+        pos += kRecordHeaderSize + length;
+    }
+    walk.ok = pos == bytes.size();
+    return walk;
+}
+
 bool scalar_allowed(std::string const& stream, std::uint32_t tag) {
     if (stream == kPropsBackEnd) {
         /* W36-2.1: Task count and Calendar size join the six derived words
@@ -442,6 +518,8 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
     PropsState const state = load_props(doc, stream, function);
 
     std::vector<PropsRecordWrite> planned;
+    FullWalk walk;
+    bool walk_done = false;
     for (PropsRecordEdit const& edit_record : edit.records) {
         std::size_t found = kNoIndex;
         std::size_t count = 0;
@@ -452,11 +530,47 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
             }
         }
         if (count == 0) {
-            throw Error(function + ": record " + hex_u32(edit_record.id) +
-                        " is not in " + stream + "; inserting a record is not "
-                        "a measured shape (wave30-baseline keeps its 161 "
-                        "records and grows only an undecoded +110-byte tail), "
-                        "so the insert is refused");
+            /* W36-2.2: an absent id is appended at the stream end, for the
+             * two ids a pair appended and the payloads it measured. */
+            if (!insert_measured(edit_record.id)) {
+                throw Error(function + ": record " + hex_u32(edit_record.id) +
+                            " is not in " + stream + "; the only records a "
+                            "pair appended are 0x02401393 (wave30-baseline "
+                            "and its held-out pairs) and 0x02400005 "
+                            "(wave36-r7-w37-c-note-summary), so this insert "
+                            "is refused");
+            }
+            std::string const insert_pin = insert_pin_clause(
+                edit_record.id, edit_record.kind, edit_record.payload);
+            if (!insert_pin.empty()) {
+                throw Error(function + ": record " + hex_u32(edit_record.id) +
+                            " is given an insert no pair measured: " +
+                            insert_pin + ", so this insert is refused");
+            }
+            if (!walk_done) {
+                walk = full_walk(state.bytes);
+                walk_done = true;
+            }
+            if (!walk.ok) {
+                throw Error(function + ": " + stream + " does not walk to "
+                            "its end by its record count word, so the append "
+                            "position is not the measured one and the insert "
+                            "is refused");
+            }
+            if (std::find(walk.ids.begin(), walk.ids.end(), edit_record.id) !=
+                walk.ids.end()) {
+                throw Error(function + ": record " + hex_u32(edit_record.id) +
+                            " is already in " + stream + " after the "
+                            "typed-property section; no pair updates a record "
+                            "there, so the insert is refused");
+            }
+            PropsRecordWrite write;
+            write.id = edit_record.id;
+            write.kind = edit_record.kind;
+            write.new_payload_bytes = edit_record.payload.size();
+            write.inserted = true;
+            planned.push_back(write);
+            continue;
         }
         if (count > 1) {
             throw Error(function + ": " + stream + " holds " +
@@ -540,7 +654,17 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
     /* Build the new stream: the header, the records in their existing order
      * with the edited payloads, and the tail moved whole with only the edited
      * value words rewritten. */
-    std::size_t new_size = kPropsHeaderSize + (state.bytes.size() - state.tail_offset);
+    std::vector<PropsRecordEdit const*> inserts;
+    std::size_t appended_bytes = 0;
+    for (PropsRecordWrite const& write : planned) {
+        if (write.inserted) {
+            inserts.push_back(find_record_edit(edit, write.id));
+            appended_bytes += kRecordHeaderSize + write.new_payload_bytes;
+        }
+    }
+    std::size_t new_size = kPropsHeaderSize +
+                           (state.bytes.size() - state.tail_offset) +
+                           appended_bytes;
     for (Record const& record : state.records) {
         PropsRecordEdit const* const replacement =
             find_record_edit(edit, record.id);
@@ -588,6 +712,24 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
                 scalar_values[i]);
     }
     out.insert(out.end(), tail.begin(), tail.end());
+    /* W36-2.2: each insert is appended at the end of the stream, after the
+     * typed-property section, and the record count word goes up by one. */
+    for (PropsRecordEdit const* insert : inserts) {
+        for (PropsRecordWrite& write : planned) {
+            if (write.inserted && write.id == insert->id) {
+                write.new_offset = out.size();
+            }
+        }
+        append_u32(out, static_cast<std::uint32_t>(insert->payload.size()));
+        append_u32(out, insert->id);
+        append_u32(out, insert->kind);
+        out.insert(out.end(), insert->payload.begin(), insert->payload.end());
+    }
+    if (!inserts.empty()) {
+        put_u32(out, 12,
+                get_u32(state.bytes, 12) +
+                    static_cast<std::uint32_t>(inserts.size()));
+    }
     put_u32(out, 0, static_cast<std::uint32_t>(out.size() - 4));
     put_u32(out, 4, static_cast<std::uint32_t>(out.size() - 4));
     if (out.size() != new_size) {
@@ -645,9 +787,26 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
     if (get_u32(after.bytes, 8) != get_u32(state.bytes, 8)) {
         throw Error(function + ": the written format word moved");
     }
-    if (get_u32(after.bytes, 12) != get_u32(state.bytes, 12)) {
-        throw Error(function + ": the word at header +12 moved; no measured "
-                    "record edit changes it");
+    if (get_u32(after.bytes, 12) !=
+        get_u32(state.bytes, 12) + static_cast<std::uint32_t>(inserts.size())) {
+        throw Error(function + ": the record count word at header +12 is " +
+                    std::to_string(get_u32(after.bytes, 12)) +
+                    "; only an insert moves it, by one per record");
+    }
+    if (!inserts.empty()) {
+        FullWalk const written_walk = full_walk(after.bytes);
+        if (!written_walk.ok ||
+            written_walk.ids.size() !=
+                walk.ids.size() + inserts.size()) {
+            throw Error(function + ": the written stream does not walk to "
+                        "its end by its record count word");
+        }
+        for (std::size_t i = 0; i < inserts.size(); ++i) {
+            if (written_walk.ids[walk.ids.size() + i] != inserts[i]->id) {
+                throw Error(function + ": the appended records are not at the "
+                            "stream end in request order");
+            }
+        }
     }
     if (after.records.size() != state.records.size()) {
         throw Error(function + ": the written stream holds " +
@@ -697,11 +856,21 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
     /* The tail: the control's bytes moved whole, with only the edited value
      * words different. */
     std::size_t const old_tail_bytes = state.bytes.size() - state.tail_offset;
-    if (after.bytes.size() - after.tail_offset != old_tail_bytes) {
+    if (after.bytes.size() - after.tail_offset !=
+        old_tail_bytes + appended_bytes) {
         throw Error(function + ": the written tail is " +
                     std::to_string(after.bytes.size() - after.tail_offset) +
-                    " bytes, expected " + std::to_string(old_tail_bytes) +
-                    "; a scalar edit must not resize the tail");
+                    " bytes, expected " +
+                    std::to_string(old_tail_bytes + appended_bytes) +
+                    "; a scalar edit must not resize the tail and an insert "
+                    "appends exactly its records");
+    }
+    if (!std::equal(out.end() - static_cast<std::ptrdiff_t>(appended_bytes),
+                    out.end(),
+                    after.bytes.end() -
+                        static_cast<std::ptrdiff_t>(appended_bytes))) {
+        throw Error(function + ": the appended records on disk are not the "
+                    "bytes built");
     }
     for (std::size_t i = 0; i < old_tail_bytes; ++i) {
         bool owned = false;
@@ -739,6 +908,8 @@ PropsEditWrite save_props_edit(CfbDocument& doc, PropsEdit const& edit,
     written.tail_offset_before = state.tail_offset;
     written.tail_offset_after = after.tail_offset;
     written.scalars_updated = scalar_value_at.size();
+    written.records_inserted = inserts.size();
+    written.appended_bytes = appended_bytes;
     written.record_writes = planned;
 
     doc = std::move(reread);

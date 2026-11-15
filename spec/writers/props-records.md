@@ -291,3 +291,29 @@ headers and payloads, and the tail.
 No dynamic trace this wave (W34-0.4 decision). The record-framing writer is a
 live-trace candidate: a breakpoint on the record-length write would settle
 the framing routine without a new pair.
+
+## W36-2.2: a new record is appended at the end of the stream
+
+_W36-2.2, 15 November 2026.  Supersedes the insert refusal above (W34-2.2) for two ids._
+
+The +110 B growth of `wave30-baseline` that W34 could not place is one framed record at the very end of the
+stream: `[u32 length 98][u32 id 0x02401393][u32 kind-and-flags 0][98 bytes of UTF-16LE text, "Used for Microsoft
+Project 98 Baseline Calendar" and two NUL code units]`.  The two leading size words follow the stream size and the
+word at +12 goes 262 -> 263 (trace-props-framing-r4.md: FUN_140253fe4, not-found branch).  The word at +12 is the
+full record count: a walk of that many records from +16, 12 + length bytes each, ends exactly at the stream end in
+624/624 committed files, with no repeated id and no odd record length (`build/w36/props_walk_probe.py`).  The
+typed-property scalars are records of that walk, so "the record area" of the sections above is the run of records
+before the first scalar, and the new record follows the scalars.
+
+Held out: the rule was written from the baseline trace and `wave30-baseline`.  Twelve more pairs in `tests/data`
+grow `114/Props` by one record of this shape (`build/w36/props_grow_probe.py`): `wave35-g3-baseline-set-nested` and
+the `wave36-r7-w37-b-*` pairs append the same 110-byte baseline record; `wave36-r7-w37-c-note-summary-short` (64 B
+payload) and `-600` (514 B payload, the note cut at 255 characters) append id `0x02400005`, the summary note text, and
+also move the Task size word because the note lives in the Task `Var2Data` (a derived word, W36-2.1).  In every one the
+port's output equals Project's appended bytes, the three header words and every control byte
+(`tests/roundtrip_props.cpp`, `test_insert_pairs`); the note pairs also match the whole stream outside the null-save
+noise.
+
+Not measured, so refused: any other id, a kind-and-flags word other than 0, an odd payload length (the disassembly
+pads an odd length by one byte; no file has one), a note past 514 bytes, a baseline text other than the measured one,
+an id already present after the typed-property section, and a stream that does not walk to its end by its count word.

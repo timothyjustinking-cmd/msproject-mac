@@ -51,6 +51,24 @@
  *            the save has laid out, so the growth writers no longer carry a
  *            measured copy of each word.  The Task freed counter and the
  *            Assignment dirty flag are in no table and stay the caller's.
+ *   insert   W36-2.2: an id absent from the stream is appended AT THE END of
+ *            the stream, after the typed-property section, as
+ *            [u32 length][u32 id][u32 kind-and-flags = 0][payload]; the two
+ *            leading size words become stream_size - 4 and the record count
+ *            word at +12 goes up by one per record (it IS the full record
+ *            count: a walk of that many records from +16, 12 + length each,
+ *            ends exactly at the stream end in 624/624 committed files, with
+ *            no repeated id and no odd length).  Derived from the baseline
+ *            trace (trace-props-framing-r4.md: FUN_140253fe4, not-found
+ *            branch) and the wave30-baseline pair (id 0x02401393, the 98-byte
+ *            "Used for Microsoft Project 98 Baseline Calendar" text, 110 B
+ *            appended, count 262 -> 263); held out, never used to derive it:
+ *            12 more pairs append that same record (wave35-g3-baseline-set-
+ *            nested and the wave36-r7-w37-b-* pairs, all 110 B) and two
+ *            append id 0x02400005, the summary note text (64 and 514 B
+ *            payloads, wave36-r7-w37-c-note-summary-*).  The odd-length pad of
+ *            the disassembly (+1) was never exercised by any file, so an odd
+ *            payload is refused.  Only those two ids insert.
  *   marker   The Props14 edit marker (edit_marker.h) is written on every save,
  *            as every measured editor save writes it.
  *
@@ -71,15 +89,13 @@
  *   214/Props  refused (no pair)               BE 0x01000100 only
  *   any other  refused                          refused
  *
- *   insert      refused on both streams.  No measured pair inserts a directory
- *               record: wave30-wbs-code and wave34-field-set UPDATE records
- *               that exist in the control (161 records on every side), and
- *               wave30-baseline, the one pair whose 114/Props grows (+110 B),
- *               keeps its 161 records and grows only the tail, in a section
- *               the decode note cannot yet rebuild (its +12 word 262 -> 263
- *               and an undecoded +110 B tail growth).  The custom-field SET
- *               pair's 88-byte insert is in the per-table Props streams
- *               (114/TBkndTask/Props 86 -> 174), not in 114/Props.
+ *   insert      114/Props: ids 0x02401393 and 0x02400005 only (see "insert"
+ *               above; W36-2.2 decoded the +110 B growth wave30-baseline
+ *               showed as an appended record).  Every other id, a kind
+ *               other than 0, an odd payload and 214/Props are refused.  The
+ *               custom-field SET pair's 88-byte insert is in the per-table
+ *               Props streams (114/TBkndTask/Props 86 -> 174), not in
+ *               114/Props.
  *   shrink      refused: no pair shrinks a record payload (wbs and field-set
  *               grow or keep the size); a shrink would be a different rule
  *               until a pair measures it.
@@ -95,7 +111,11 @@
  *     stream_size - 4, a format word that is not 0x00010000, or a record whose
  *     length runs past the stream end (the 0x00400000 id family is how the
  *     record area ends and the tail begins);
- *   - a record edit on 214/Props; a target id absent (insert), present twice,
+ *   - a record edit on 214/Props; a target id absent that is not one of the
+ *     two inserted ids (W36-2.2), or an insert whose kind, length or text no
+ *     pair measured, a stream that does not walk to its end by its count
+ *     word, an id already after the typed-property section; a target id
+ *     present twice,
  *     or outside the six a pair updated (0x0240138b, 0x024013be from
  *     wave30-wbs-code; 0x02401392, 0x024013c5 from wave34-field-set;
  *     0x02400003, 0x02400024 from wave35-calculate-unlinked; W35-0.4,
@@ -204,6 +224,7 @@ struct PropsRecordWrite {
     std::size_t new_offset = 0;
     std::size_t old_payload_bytes = 0;
     std::size_t new_payload_bytes = 0;
+    bool inserted = false;        /* W36-2.2: appended, so old_* are 0 */
 };
 
 struct PropsEditWrite {
@@ -215,6 +236,8 @@ struct PropsEditWrite {
     std::size_t tail_offset_before = 0;
     std::size_t tail_offset_after = 0;
     std::size_t scalars_updated = 0;
+    std::size_t records_inserted = 0; /* W36-2.2: appended at the stream end */
+    std::size_t appended_bytes = 0;   /* 12 + payload of every appended record */
     std::vector<PropsRecordWrite> record_writes;
 };
 

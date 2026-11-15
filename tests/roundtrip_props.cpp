@@ -44,8 +44,11 @@
  *
  * REFUSALS.  Every refusal branch the writer offers is exercised: no edit; an
  * unknown stream (including the per-table Props registries); a record edit on
- * 214/Props; a target record absent (the unmeasured insert, with the
- * wave30-baseline evidence in the message), present twice, of another kind,
+ * 214/Props; a target record absent and not one of the two ids a pair
+ * appended (W36-2.2: those two insert, each only as measured: kind 0, an even
+ * UTF-16 payload ending in two NUL code units, the baseline text fixed, the
+ * summary note at most 514 bytes, a stream that walks to its end by its count
+ * word), present twice, of another kind,
  * with an equal payload and with a smaller payload; a duplicate record id in
  * the request; a scalar tag outside the stream's whitelist, a duplicate tag in
  * the request, a tag absent from the stream, a tag twice in the stream, a hit
@@ -774,6 +777,152 @@ void test_resource_add_pair(TestContext& t) {
     compare_marker(t, "resource-add", control, null_save, project, doc);
 }
 
+/* W36-2.2: UTF-16LE of an ASCII text followed by `nuls` NUL code units. */
+Bytes utf16_text(std::string const& text, std::size_t nuls) {
+    Bytes out;
+    for (char c : text) {
+        out.push_back(static_cast<std::uint8_t>(c));
+        out.push_back(0);
+    }
+    out.insert(out.end(), nuls * 2, 0);
+    return out;
+}
+
+/* W36-2.2: the appended-record pairs.  wave30-baseline is the pair the rule
+ * was derived from; every other pair is held out (the rule was written from
+ * the baseline trace and that one pair, so these check it on streams it was
+ * never fitted to): twelve pairs append 0x02401393 and two append 0x02400005.
+ * The port's insert is built from the control and the payload alone, then
+ * compared with Project's save: the appended bytes, the three header words
+ * and every control byte must equal Project's. */
+struct InsertPair {
+    char const* label;
+    char const* control;
+    char const* null_save;
+    char const* project;
+    std::uint32_t id;
+    bool whole_stream; /* the pair has no other effect on 114/Props */
+};
+
+void test_insert_pairs(TestContext& t) {
+    static InsertPair const pairs[] = {
+        {"baseline (derived)", "wave30-baseline-control.mpp",
+         "wave30-baseline-control-null.mpp", "wave30-baseline-set.mpp",
+         0x02401393u, false},
+        {"baseline-nested", "wave35-g3-baseline-set-nested-control.mpp",
+         "wave35-g3-baseline-set-nested-control-null.mpp",
+         "wave35-g3-baseline-set-nested.mpp", 0x02401393u, false},
+        {"b-assign-one", "wave36-r7-w37-b-assign-one-control.mpp",
+         "wave36-r7-w37-b-assign-one-control-null.mpp",
+         "wave36-r7-w37-b-assign-one.mpp", 0x02401393u, false},
+        {"b-assign-two", "wave36-r7-w37-b-assign-two-control.mpp",
+         "wave36-r7-w37-b-assign-two-control-null.mpp",
+         "wave36-r7-w37-b-assign-two.mpp", 0x02401393u, false},
+        {"b-into-baseline2", "wave36-r7-w37-b-into-baseline2-control.mpp",
+         "wave36-r7-w37-b-into-baseline2-control-null.mpp",
+         "wave36-r7-w37-b-into-baseline2.mpp", 0x02401393u, false},
+        {"b-mode-automatic", "wave36-r7-w37-b-mode-automatic-control.mpp",
+         "wave36-r7-w37-b-mode-automatic-control-null.mpp",
+         "wave36-r7-w37-b-mode-automatic.mpp", 0x02401393u, false},
+        {"b-scope-all", "wave36-r7-w37-b-scope-all-control.mpp",
+         "wave36-r7-w37-b-scope-all-control-null.mpp",
+         "wave36-r7-w37-b-scope-all.mpp", 0x02401393u, false},
+        {"note-summary-short", "wave36-r7-w37-c-note-summary-short-control.mpp",
+         "wave36-r7-w37-c-note-summary-short-control-null.mpp",
+         "wave36-r7-w37-c-note-summary-short.mpp", 0x02400005u, true},
+        {"note-summary-600", "wave36-r7-w37-c-note-summary-600-control.mpp",
+         "wave36-r7-w37-c-note-summary-600-control-null.mpp",
+         "wave36-r7-w37-c-note-summary-600.mpp", 0x02400005u, true},
+    };
+    int index = 0;
+    for (InsertPair const& pair : pairs) {
+        std::string const label = std::string("insert ") + pair.label;
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, pair.control));
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, pair.null_save));
+        fixture::require_committed(join(MPPWRITE_TEST_DATA, pair.project));
+        CfbDocument const control = doc_from_data(pair.control);
+        CfbDocument const null_save = doc_from_data(pair.null_save);
+        CfbDocument const project = doc_from_data(pair.project);
+        Bytes const control_bytes = control.read_stream(mppwrite::kPropsBackEnd);
+        Bytes const project_bytes = project.read_stream(mppwrite::kPropsBackEnd);
+        std::size_t const grown = project_bytes.size() - control_bytes.size();
+        t.check(project_bytes.size() > control_bytes.size() + 12,
+                label + ": Project's save is one record longer");
+        if (project_bytes.size() <= control_bytes.size() + 12) {
+            continue;
+        }
+        t.equal(u32_at(project_bytes, control_bytes.size() + 4), pair.id,
+                label + ": the record Project appended has the expected id");
+        t.equal(u32_at(project_bytes, control_bytes.size()) + 12, grown,
+                label + ": 12 + length is the growth");
+        Bytes const payload(project_bytes.begin() +
+                                static_cast<std::ptrdiff_t>(control_bytes.size() + 12),
+                            project_bytes.end());
+        PropsEdit edit;
+        edit.records.push_back(
+            {pair.id, u32_at(project_bytes, control_bytes.size() + 8), payload});
+        if (pair.whole_stream) {
+            /* The note pairs also grow the Task Var2Data (the note text), so
+             * the Task size word moves: take it from the Task table laid out
+             * as Project laid it (W36-2.1's derived words), not as a constant. */
+            CfbDocument staged = control;
+            for (std::string const& path : project.stream_paths()) {
+                if (path.rfind("114/TBkndTask/", 0) == 0) {
+                    staged.replace_stream(path, project.read_stream(path));
+                }
+            }
+            edit.scalars =
+                mppwrite::props_table_words(staged, {mppwrite::PropsTable::Task});
+            t.check(!edit.scalars.empty(),
+                    label + ": the Task table's words moved with the note");
+        }
+        CfbDocument doc = control;
+        CfbDocument const before = doc;
+        PropsEditWrite const written = mppwrite::save_props_edit(
+            doc, edit,
+            out_path("w36-props-insert-" + std::to_string(index++) + ".mpp"));
+        t.equal(written.records_inserted, 1, label + ": one record inserted");
+        t.equal(written.appended_bytes, grown, label + ": appended bytes");
+        t.equal(written.record_writes.size(), 1, label + ": one record write");
+        t.check(written.record_writes[0].inserted &&
+                    written.record_writes[0].new_offset == control_bytes.size(),
+                label + ": the record sits at the old stream end");
+        t.equal(written.stream_bytes_after, project_bytes.size(),
+                label + ": the stream length equals Project's");
+
+        Bytes const port_bytes = doc.read_stream(mppwrite::kPropsBackEnd);
+        t.equal(port_bytes.size(), project_bytes.size(),
+                label + ": port length equals Project's");
+        t.equal(u32_at(port_bytes, 0), u32_at(project_bytes, 0),
+                label + ": size word +0 equals Project's");
+        t.equal(u32_at(port_bytes, 4), u32_at(project_bytes, 4),
+                label + ": size word +4 equals Project's");
+        t.equal(u32_at(port_bytes, 12), u32_at(project_bytes, 12),
+                label + ": record count word equals Project's");
+        t.check(std::equal(port_bytes.begin() +
+                               static_cast<std::ptrdiff_t>(control_bytes.size()),
+                           port_bytes.end(),
+                           project_bytes.begin() + static_cast<std::ptrdiff_t>(
+                                                       control_bytes.size())),
+                label + ": the appended record equals Project's byte for byte");
+        if (!pair.whole_stream) {
+            t.check(std::equal(port_bytes.begin() + 16,
+                               port_bytes.begin() + static_cast<std::ptrdiff_t>(
+                                                        control_bytes.size()),
+                               control_bytes.begin() + 16),
+                    label + ": every control byte after the header is kept");
+        }
+        check_only_owned_streams(t, before, doc, label,
+                                 {mppwrite::kPropsBackEnd, "Props14"});
+        compare_marker(t, label, control, null_save, project, doc);
+        if (pair.whole_stream) {
+            compare_field(t, label + " whole stream", control_bytes,
+                          null_save.read_stream(mppwrite::kPropsBackEnd),
+                          project_bytes, port_bytes, true);
+        }
+    }
+}
+
 void test_textstyle_pair(TestContext& t) {
     fixture::require_committed(
         join(MPPWRITE_TEST_DATA, "wave30-textstyle-control.mpp"));
@@ -873,8 +1022,44 @@ void test_edit_refusals(TestContext& t) {
     {
         PropsEdit edit;
         edit.records.push_back({0x024013FFu, 0, Bytes(4, 0)});
-        refuses(control, edit, "inserting a record is not a measured shape",
-                "an absent record (the insert) refused");
+        refuses(control, edit, "the only records a pair appended",
+                "an absent record no pair appended refused");
+    }
+    {
+        /* W36-2.2: the two ids that insert, each only as measured. */
+        Bytes const summary_ok = utf16_text("note", 2);
+        PropsEdit edit;
+        edit.records.push_back({0x02400005u, 4, summary_ok});
+        refuses(control, edit, "every measured insert has kind and flags 0",
+                "an insert of another kind refused");
+        edit.records[0] = {0x02400005u, 0, Bytes(7, 0)};
+        refuses(control, edit, "an even length of at least 4 bytes",
+                "an odd insert payload (the unmeasured pad) refused");
+        edit.records[0] = {0x02400005u, 0, utf16_text("note", 0)};
+        refuses(control, edit, "must end in two NUL code units",
+                "an insert without the two NUL code units refused");
+        edit.records[0] = {0x02400005u, 0, utf16_text(std::string(256, 'n'), 2)};
+        refuses(control, edit, "measured up to 514 payload bytes",
+                "a summary note past 514 bytes refused");
+        edit.records[0] = {0x02401393u, 0, utf16_text("Another calendar", 2)};
+        refuses(control, edit, "98-byte baseline calendar text",
+                "a baseline calendar text no pair measured refused");
+        edit.stream = mppwrite::kPropsFrontEnd;
+        edit.records[0] = {0x02400005u, 0, summary_ok};
+        refuses(control, edit, "no measured pair changes a 214/Props record",
+                "a 214/Props insert refused");
+    }
+    {
+        /* A stream whose count word does not walk to its end has no proved
+         * append position. */
+        Bytes damaged_bytes = bytes;
+        damaged_bytes[12] = static_cast<std::uint8_t>(damaged_bytes[12] + 1);
+        CfbDocument damaged = with_stream(
+            "wave30-wbs-control.mpp", mppwrite::kPropsBackEnd, damaged_bytes);
+        PropsEdit edit;
+        edit.records.push_back({0x02400005u, 0, utf16_text("note", 2)});
+        refuses(damaged, edit, "does not walk to its end by its record count",
+                "an insert into a stream that does not walk to its end refused");
     }
     {
         /* W35-0.4 (RC-W7): a record that exists but that no pair updated is
@@ -1131,6 +1316,7 @@ int main() {
         test_wbs_pair(t);
         test_field_set_pair(t);
         test_resource_add_pair(t);
+        test_insert_pairs(t);
         test_textstyle_pair(t);
         test_edit_refusals(t);
         test_damaged_streams(t);
