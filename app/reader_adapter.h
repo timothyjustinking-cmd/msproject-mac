@@ -243,6 +243,10 @@ inline PlanInput plan_input_from_document(const mpp::Document& document) {
     input.default_calendar_name_stored = document.project.default_calendar_name_stored;
     input.default_week_record = document.project.default_week_record;
     input.default_week_stored = document.project.default_week_stored;
+    // W36-2.3 (R35cG0-4): the digest of the pinned Props records for the Calculate Project
+    // refusal; a stream the reader could not digest reports not-stored.
+    input.props_digest = document.project.props_digest;
+    input.props_digest_stored = document.project.props_digest_stored;
 
     input.tasks.reserve(document.tasks.size());
     // W30-C5 (R29-8): the shape checks count a task's PHYSICAL assignment rows

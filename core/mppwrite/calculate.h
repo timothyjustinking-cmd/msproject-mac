@@ -108,6 +108,16 @@ bool calculate_measured_first_working_start(std::uint32_t props_start,
 int calculate_leaf_meta_mismatch(std::uint8_t const* entry, std::size_t size);
 std::vector<std::uint32_t> const& calculate_leaf_var_keys();
 
+/* W36-2.3 (R35cG0-4): the 114/Props pin as one number and as a stream test, for the plan
+ * layer.  `calculate_props_pin_digest` is the digest the reader computes from a stream that
+ * holds the pin's records, header words and tail, with the pin's exemptions (the project
+ * finish, the pending flag, the project start, 0x02400029 and 0x024013C2 payloads, and the
+ * Task size scalar in the tail); the encoding is in spec/writers/calculate.md.
+ * `calculate_props_pin_matches` runs the pin itself on a stream and names the first
+ * difference; a stream it accepts has the digest above. */
+std::uint64_t calculate_props_pin_digest();
+bool calculate_props_pin_matches(std::vector<std::uint8_t> const& props, std::string& error);
+
 /* What the pending file looks like, as the shape check read it. */
 struct CalculateShape {
     std::uint32_t critical_uid = 0;     /* the leaf that ends the project */

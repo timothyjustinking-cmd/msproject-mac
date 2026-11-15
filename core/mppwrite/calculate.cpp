@@ -885,6 +885,62 @@ bool read_calculate_shape(CfbDocument const& doc, CalculateShape& shape,
     }
 }
 
+/* W36-2.3 (R35cG0-4): the pin as one number, so the plan layer can hold the pin without
+ * the writer linking the reader.  FNV-1a 64 over: header words 8 and 12; per record the id,
+ * kind and length (u32 each) and, unless the payload is free, the payload's FNV-1a 64 (u64);
+ * then the tail length (u32) and the tail's FNV-1a 64 with the Task size scalar zeroed.  The
+ * reader computes the same number from the stream on its own (core/mpp/reader.cpp
+ * props_pin_digest), and app/app_edits_calculate_tests.cpp proves the two agree. */
+namespace {
+
+struct DigestSink {
+    std::uint64_t value = 0xCBF29CE484222325ULL;
+    void byte(std::uint8_t b) {
+        value ^= b;
+        value *= 0x100000001B3ULL;
+    }
+    void u32(std::uint32_t v) {
+        for (int i = 0; i < 4; ++i) {
+            byte(static_cast<std::uint8_t>((v >> (8 * i)) & 0xFFu));
+        }
+    }
+    void u64(std::uint64_t v) {
+        for (int i = 0; i < 8; ++i) {
+            byte(static_cast<std::uint8_t>((v >> (8 * i)) & 0xFFu));
+        }
+    }
+};
+
+} /* namespace */
+
+std::uint64_t calculate_props_pin_digest() {
+    DigestSink sink;
+    sink.u32(kPropsPinHeaderWord8);
+    sink.u32(kPropsPinHeaderWord12);
+    for (PropsPinRecord const& record : kPropsPin) {
+        sink.u32(record.id);
+        sink.u32(record.kind);
+        sink.u32(record.length);
+        if (!props_payload_is_free(record.id)) {
+            sink.u64(record.payload_hash);
+        }
+    }
+    sink.u32(static_cast<std::uint32_t>(kPropsPinTailBytes));
+    sink.u64(kPropsPinTailHash);
+    return sink.value;
+}
+
+bool calculate_props_pin_matches(std::vector<std::uint8_t> const& props, std::string& error) {
+    error.clear();
+    try {
+        check_props_pin(props);
+        return true;
+    } catch (Error const& caught) {
+        error = caught.what();
+        return false;
+    }
+}
+
 namespace {
 
 /* The request must be consistent with the stored leaves it is applied to. */

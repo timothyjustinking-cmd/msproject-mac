@@ -309,6 +309,15 @@ struct PlanInput {
     bool default_calendar_name_stored = false;
     std::vector<std::uint8_t> default_week_record;
     bool default_week_stored = false;
+    /* W36-2.3 (R35cG0-4): the reader's digest of the 114/Props records, header words and tail
+     * the Calculate Project writer pins (mpp::ProjectRow::props_digest has the encoding and the
+     * exemptions).  The plan-side refusal compares it with the pin's own
+     * (mppwrite::calculate_props_pin_digest), so a plan built from a file with other options
+     * is refused at the queue and not only at the save.  The default is the refused value: a
+     * plan not built by the reader adapter, or from a stream the reader could not digest, has
+     * `props_digest_stored` false. */
+    std::uint64_t props_digest = 0;
+    bool props_digest_stored = false;
     date32 project_start = kDateNa;
     date32 project_finish = kDateNa;
     /* W35c-0.2 (R35bG0-1): the project start in 114/Props (0x02400002), the word

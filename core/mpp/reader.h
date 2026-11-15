@@ -1021,6 +1021,19 @@ struct ProjectRow {
     std::vector<std::uint8_t> default_week_record;
     bool default_week_stored = false;
 
+    /* ---- The Calculate Project pin over the table props (W36-2.3, R35cG0-4): one FNV-1a 64
+     * of the stream's header words 8 and 12, each framed record's id, kind and length with
+     * the hash of its payload (the payload of the project finish 0x02400003, the pending flag
+     * 0x02400024, the project start 0x02400002, 0x02400029 and 0x024013C2 is left out: the
+     * save writes them or a measured relation moves them), and the tail's length and hash
+     * with the Task size scalar (tag 0x01000100) zeroed.  The encoding is in
+     * spec/writers/calculate.md; mppwrite::calculate_props_pin_digest() is the same number
+     * for the control, computed without this reader.  `props_digest_stored` is false when the
+     * stream is missing or has no framing to digest (short header, a record past the end, no
+     * or more than one Task size scalar in the tail); the digest is then 0. */
+    std::uint64_t props_digest = 0;
+    bool props_digest_stored = false;
+
     /* ---- The project START as the table props store it (W35c-0.2, R35bG0-1):
      * 114/Props 0x02400002, kind 4, one packed date.  It is a different word
      * from `start` above (row 0's FixedData roll-up, which manual calculation

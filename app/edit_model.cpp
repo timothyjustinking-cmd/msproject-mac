@@ -4024,6 +4024,22 @@ std::string calculate_plan_refusal(const PlanInput& plan) {
                             "critical path may have moved";
         }
     }
+    // W36-2.3 (R35cG0-4): the writer pins the 114/Props records, header words and tail to the
+    // measured control's (the options, defaults and per-file values no pair varies); the
+    // reader's digest of the same, with the same exemptions, is compared here so the queue
+    // refuses what the writer would refuse at the save.  Last, so each plan guard above keeps
+    // its own needle and its own test.
+    if (!plan.props_digest_stored) {
+        return prefix + "for a project whose 114/Props stream was not read: its options, "
+                        "defaults and per-file values have not been checked against the "
+                        "measured control";
+    }
+    if (plan.props_digest != mppwrite::calculate_props_pin_digest()) {
+        return prefix + "for a project whose 114/Props differs from the measured control "
+                        "(an option, a default or a per-file value that no measured Calculate "
+                        "Project pair varies; Calculate Project is enabled for the measured "
+                        "control's values only)";
+    }
     return {};
 }
 

@@ -1507,11 +1507,282 @@ void check_refusals() {
     }
 }
 
+/* ---- W36-2.3 (R35cG0-4): the plan's Props digest. ----------------------------------------- */
+
+struct PropsFrame {
+    std::size_t at = 0; /* the record's length word */
+    std::uint32_t length = 0;
+    std::uint32_t id = 0;
+};
+
+std::uint32_t le32(const Bytes& bytes, std::size_t at) {
+    return static_cast<std::uint32_t>(bytes[at]) | (static_cast<std::uint32_t>(bytes[at + 1]) << 8) |
+           (static_cast<std::uint32_t>(bytes[at + 2]) << 16) |
+           (static_cast<std::uint32_t>(bytes[at + 3]) << 24);
+}
+
+/* The framed records of a 114/Props stream, up to the opaque tail (id byte 2 not 0x40). */
+std::vector<PropsFrame> props_frames(const Bytes& props, std::size_t& tail_start) {
+    std::vector<PropsFrame> frames;
+    std::size_t at = 16;
+    while (at + 12 <= props.size()) {
+        PropsFrame frame;
+        frame.at = at;
+        frame.length = le32(props, at);
+        frame.id = le32(props, at + 4);
+        if ((frame.id & 0x00FF0000u) != 0x00400000u || at + 12 + frame.length > props.size()) {
+            break;
+        }
+        frames.push_back(frame);
+        at += 12 + frame.length;
+    }
+    tail_start = at;
+    return frames;
+}
+
+/* The reader's digest of `props` put in the control's container, read back through the reader
+ * and the app adapter (the path a file takes into a PlanInput). */
+app::PlanInput plan_with_props(const mppwrite::CfbDocument& control, const Bytes& props) {
+    mppwrite::CfbDocument doc = control;
+    doc.replace_stream(kProps, props);
+    return app::plan_input_from_document(mpp::load_bytes(doc.to_bytes()));
+}
+
+/* The verdict the writer's pin gives a stream and the one the plan's digest gives it must be
+ * the same: both accept it or both refuse it. */
+void expect_digest_agrees(const mppwrite::CfbDocument& control, const Bytes& props,
+                          bool expected_accept, const std::string& what) {
+    std::string error;
+    const bool writer_accepts = mppwrite::calculate_props_pin_matches(props, error);
+    const app::PlanInput plan = plan_with_props(control, props);
+    const bool plan_accepts =
+        plan.props_digest_stored && plan.props_digest == mppwrite::calculate_props_pin_digest();
+    check(writer_accepts == expected_accept,
+          what + ": the writer's pin " + (expected_accept ? "accepts" : "refuses") + " it (" +
+              (writer_accepts ? "accepted" : error) + ")");
+    check(plan_accepts == expected_accept,
+          what + ": the plan's digest " + (expected_accept ? "accepts" : "refuses") + " it");
+}
+
+void check_props_digest() {
+    const std::filesystem::path control_path = data_path(kControl);
+    fixture::require_committed(control_path);
+    const std::string source = control_path.string();
+    const mppwrite::CfbDocument control = mppwrite::CfbDocument::from_file(source);
+    const Bytes props = control.read_stream(kProps);
+    const app::PlanInput plan = load_plan(control_path);
+
+    /* The control: the reader's number is the pin's number, which the writer computes from its
+     * table without the reader. */
+    check(plan.props_digest_stored, "2.3: the reader digests the control's 114/Props");
+    check(plan.props_digest == mppwrite::calculate_props_pin_digest(),
+          "2.3: the control's reader digest is the pin's digest");
+    check(app::calculate_plan_refusal_reason(plan).empty(),
+          "2.3: the control plan passes every plan guard, the Props digest included");
+
+    /* Every record: a payload byte flipped is refused by both, except the five records whose
+     * payload the pin leaves free (the project start and finish, the pending flag, and the two
+     * per-save GUIDs, spec/writers/calculate.md); a record of no payload has its kind flipped. */
+    std::size_t tail_start = 0;
+    const std::vector<PropsFrame> frames = props_frames(props, tail_start);
+    check_size(frames.size(), 161, "2.3: the control holds 161 framed records");
+    std::size_t free_records = 0;
+    for (const PropsFrame& frame : frames) {
+        const bool free_payload = frame.id == 0x02400002u || frame.id == 0x02400003u ||
+                                  frame.id == 0x02400024u || frame.id == 0x02400029u ||
+                                  frame.id == 0x024013C2u;
+        Bytes changed = props;
+        if (frame.length > 0) {
+            changed[frame.at + 12] ^= 0x01;
+        } else {
+            changed[frame.at + 8] ^= 0x01;
+        }
+        free_records += free_payload ? 1u : 0u;
+        expect_digest_agrees(control, changed, free_payload,
+                             "2.3: record " + std::to_string(frame.id) +
+                                 (frame.length > 0 ? " payload byte flipped" : " kind flipped"));
+    }
+    check_size(free_records, 5, "2.3: five records are free in the pin");
+
+    /* A flip in the record's id or length, and the structural changes the pin's own tests make. */
+    for (const std::size_t word : {8u, 12u}) {
+        Bytes changed = props;
+        changed[word] ^= 0x01;
+        expect_digest_agrees(control, changed, false,
+                             "2.3: header word +" + std::to_string(word) + " changed");
+    }
+    {
+        Bytes changed(props.begin(), props.begin() + static_cast<std::ptrdiff_t>(frames.back().at));
+        changed.insert(changed.end(), props.begin() + static_cast<std::ptrdiff_t>(tail_start),
+                       props.end());
+        expect_digest_agrees(control, changed, false, "2.3: the last record removed");
+    }
+    {
+        Bytes changed(props.begin(), props.begin() + static_cast<std::ptrdiff_t>(tail_start));
+        const std::uint32_t extra[] = {2u, 0x024013FCu, 1u};
+        for (const std::uint32_t word : extra) {
+            for (int i = 0; i < 4; ++i) {
+                changed.push_back(static_cast<std::uint8_t>((word >> (8 * i)) & 0xFFu));
+            }
+        }
+        changed.push_back(0);
+        changed.push_back(0);
+        changed.insert(changed.end(), props.begin() + static_cast<std::ptrdiff_t>(tail_start),
+                       props.end());
+        expect_digest_agrees(control, changed, false, "2.3: a record appended after the 161st");
+    }
+    {
+        Bytes changed = props;
+        changed[tail_start + 3] ^= 0x01;
+        expect_digest_agrees(control, changed, false, "2.3: a tail byte flipped");
+        changed = props;
+        changed.back() ^= 0x01;
+        expect_digest_agrees(control, changed, false, "2.3: the last tail byte flipped");
+        changed = props;
+        changed.insert(changed.end(), 16, 0x00);
+        expect_digest_agrees(control, changed, false, "2.3: a tail padded by 16 bytes");
+    }
+    /* The Task size scalar (tag 0x01000100) is the one tail word the save rewrites. */
+    {
+        std::size_t scalar_at = 0;
+        for (std::size_t at = tail_start; at + 16 <= props.size(); at += 16) {
+            if (props[at + 4] == 0x01 && props[at + 5] == 0x00 && props[at + 6] == 0x01 &&
+                props[at + 7] == 0x00 && le32(props, at) == 4 && le32(props, at + 8) == 4) {
+                scalar_at = at;
+            }
+        }
+        check(scalar_at != 0, "2.3: the tail holds the Task size scalar");
+        Bytes changed = props;
+        changed[scalar_at + 12] ^= 0xFF;
+        changed[scalar_at + 13] ^= 0x5A;
+        expect_digest_agrees(control, changed, true, "2.3: the Task size scalar moved");
+        /* A second copy of it: the count is not one. */
+        changed = props;
+        const std::size_t target = scalar_at == tail_start ? tail_start + 16 : tail_start;
+        for (std::size_t i = 0; i < 16; ++i) {
+            changed[target + i] = props[scalar_at + i];
+        }
+        expect_digest_agrees(control, changed, false, "2.3: a second Task size scalar");
+    }
+    /* The stream missing: nothing to digest. */
+    {
+        const Bytes none;
+        const app::PlanInput unread = plan_with_props(control, none);
+        check(!unread.props_digest_stored && unread.props_digest == 0,
+              "2.3: an empty 114/Props has no digest");
+    }
+
+    /* The refusal at the queue: a plan read from a file with another option, a plan whose
+     * stream was not read, and a hand-built edit over each. */
+    {
+        const PropsFrame* title = nullptr;
+        for (const PropsFrame& frame : frames) {
+            if (frame.id == 0x02400008u) {
+                title = &frame;
+            }
+        }
+        check(title != nullptr && title->length > 0, "2.3: the control stores a project title record");
+        if (title != nullptr && title->length > 0) {
+            Bytes changed = props;
+            changed[title->at + 12] ^= 0x01;
+            mppwrite::CfbDocument doc = control;
+            doc.replace_stream(kProps, changed);
+            const std::filesystem::path path = out_path("app-calculate-props-title.mpp");
+            doc.save(path.string());
+            const app::PlanInput other = load_plan(path);
+            expect_refused(other, path.string(), "114/Props differs from the measured control",
+                           "2.3: a file whose project title record differs (plan layer)");
+            expect_push_refused(other, "114/Props differs from the measured control",
+                                "2.3: push() refuses a Calculate edit over a plan with other Props");
+            /* The writer refuses the same file for the same reason (its own text). */
+            expect_refused(plan, path.string(), "114/Props record 0x02400008 differs",
+                           "2.3: the same file with the clean plan (writer layer)");
+        }
+        app::PlanInput unread = plan;
+        unread.props_digest_stored = false;
+        expect_refused(unread, source, "114/Props stream was not read",
+                       "2.3: a plan whose Props digest was not read");
+        expect_push_refused(unread, "114/Props stream was not read",
+                            "2.3: push() refuses a Calculate edit over a plan with no Props digest");
+        app::PlanInput hand_built = plan;
+        hand_built.props_digest = 0;
+        expect_refused(hand_built, source, "114/Props differs from the measured control",
+                       "2.3: a plan whose Props digest is another number");
+    }
+    /* A free record changes nothing at the queue. */
+    {
+        Bytes changed = props;
+        for (const PropsFrame& frame : frames) {
+            if (frame.id == 0x02400029u && frame.length > 0) {
+                changed[frame.at + 12] ^= 0xFF;
+            }
+        }
+        const app::PlanInput same = plan_with_props(control, changed);
+        check(app::calculate_plan_refusal_reason(same).empty(),
+              "2.3: a plan whose only Props change is a free record is not refused");
+    }
+
+    /* HELD OUT: the rule (the pinned records and the five exemptions) was derived from the
+     * Calculate pair.  The Props stream of every growth pair it was not derived from must be
+     * refused by the pin and by the digest alike, and the digest must see the growth (the
+     * pair's edit digests differently from its own control).  Controls and edits both. */
+    {
+        struct GrowthPair {
+            const char* control;
+            const char* edit;
+        };
+        const GrowthPair pairs[] = {
+            /* record inserts (W36-2.2) */
+            {"wave30-baseline-control.mpp", "wave30-baseline-set.mpp"},
+            {"wave35-g3-baseline-set-nested-control.mpp", "wave35-g3-baseline-set-nested.mpp"},
+            {"wave36-r7-w37-b-assign-one-control.mpp", "wave36-r7-w37-b-assign-one.mpp"},
+            {"wave36-r7-w37-b-assign-two-control.mpp", "wave36-r7-w37-b-assign-two.mpp"},
+            {"wave36-r7-w37-b-into-baseline2-control.mpp", "wave36-r7-w37-b-into-baseline2.mpp"},
+            {"wave36-r7-w37-b-mode-automatic-control.mpp", "wave36-r7-w37-b-mode-automatic.mpp"},
+            {"wave36-r7-w37-b-scope-all-control.mpp", "wave36-r7-w37-b-scope-all.mpp"},
+            {"wave36-r7-w37-c-note-summary-short-control.mpp",
+             "wave36-r7-w37-c-note-summary-short.mpp"},
+            {"wave36-r7-w37-c-note-summary-600-control.mpp", "wave36-r7-w37-c-note-summary-600.mpp"},
+            /* assignment adds */
+            {"wave30-assign-add-control.mpp", "wave30-assign-add.mpp"},
+            {"wave34-assign-add-second-control.mpp", "wave34-assign-add-second.mpp"},
+            {"wave34-assign-add-third-control.mpp", "wave34-assign-add-third.mpp"},
+            {"wave36-r7-note-assignment-control.mpp", "wave36-r7-note-assignment.mpp"},
+            /* resource adds */
+            {"wave30-resource-add-control.mpp", "wave30-resource-add.mpp"},
+            {"wave34-resource-add-third-control.mpp", "wave34-resource-add-third.mpp"},
+            {"wave36-r7-resource-add-fourth-control.mpp", "wave36-r7-resource-add-fourth.mpp"},
+        };
+        for (const GrowthPair& pair : pairs) {
+            std::uint64_t digests[2] = {0, 0};
+            int side = 0;
+            for (const char* name : {pair.control, pair.edit}) {
+                const std::filesystem::path path = data_path(name);
+                fixture::require_committed(path);
+                const mpp::Document document = mpp::load_file(path.string());
+                const mppwrite::CfbDocument file = mppwrite::CfbDocument::from_file(path.string());
+                const Bytes stream = file.read_stream(kProps);
+                std::string error;
+                check(!mppwrite::calculate_props_pin_matches(stream, error),
+                      std::string("2.3 held out: the pin refuses ") + name);
+                check(document.project.props_digest_stored,
+                      std::string("2.3 held out: the reader digests ") + name);
+                check(document.project.props_digest != mppwrite::calculate_props_pin_digest(),
+                      std::string("2.3 held out: the digest refuses ") + name);
+                digests[side++] = document.project.props_digest;
+            }
+            check(digests[0] != digests[1],
+                  std::string("2.3 held out: the digest sees the growth of ") + pair.edit);
+        }
+    }
+}
+
 }  // namespace
 
 int main() {
     check_pair();
     check_refusals();
+    check_props_digest();
     std::printf("app_edits_calculate_tests: %d checks passed\n", g_checks - g_failures);
     if (g_failures != 0) {
         std::printf("app_edits_calculate_tests: %d FAILURE(S)\n", g_failures);

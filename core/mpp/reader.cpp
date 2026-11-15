@@ -4038,7 +4038,94 @@ struct ProjectPropsRecords {
     bool default_calendar_name_stored = false;
     std::vector<std::uint8_t> default_week_record;
     bool default_week_stored = false;
+    std::uint64_t props_digest = 0;
+    bool props_digest_stored = false;
 };
+
+/* W36-2.3 (R35cG0-4): the table props as the Calculate Project pin sees them, as one FNV-1a
+ * 64 (see ProjectRow::props_digest for the encoding).  Written from the pin's own rules in
+ * core/mppwrite/calculate.cpp without sharing its code: that writer must not link this
+ * reader, so app/app_edits_calculate_tests.cpp is what proves the two numbers agree.  The
+ * payload of a record the save writes, or a measured relation moves, is not hashed. */
+struct PropsDigestSink {
+    std::uint64_t value = 0xCBF29CE484222325ULL;
+    void byte(std::uint8_t b) {
+        value ^= b;
+        value *= 0x100000001B3ULL;
+    }
+    void u32(std::uint32_t v) {
+        for (int i = 0; i < 4; ++i) {
+            byte(static_cast<std::uint8_t>((v >> (8 * i)) & 0xFFu));
+        }
+    }
+    void u64(std::uint64_t v) {
+        for (int i = 0; i < 8; ++i) {
+            byte(static_cast<std::uint8_t>((v >> (8 * i)) & 0xFFu));
+        }
+    }
+};
+
+std::uint64_t fnv1a64_of(const std::uint8_t* data, std::size_t size) {
+    PropsDigestSink sink;
+    for (std::size_t i = 0; i < size; ++i) {
+        sink.byte(data[i]);
+    }
+    return sink.value;
+}
+
+bool props_payload_is_unpinned(std::uint32_t id) {
+    return id == 0x02400003u || id == 0x02400024u || id == 0x02400002u || id == 0x02400029u ||
+           id == 0x024013C2u;
+}
+
+/* False when the stream cannot be digested; `digest` is then 0. */
+bool props_pin_digest(const std::vector<std::uint8_t>& props, std::uint64_t& digest) {
+    digest = 0;
+    if (props.size() < 16) {
+        return false;
+    }
+    PropsDigestSink sink;
+    sink.u32(u32_at(props, 8));
+    sink.u32(u32_at(props, 12));
+    std::size_t at = 16;
+    while (at + 12 <= props.size()) {
+        const std::uint32_t length = u32_at(props, at);
+        const std::uint32_t id = u32_at(props, at + 4);
+        if ((id & 0x00FF0000u) != 0x00400000u) {
+            break; /* the opaque tail starts here */
+        }
+        if (static_cast<std::uint64_t>(at) + 12u + length > props.size()) {
+            return false;
+        }
+        sink.u32(id);
+        sink.u32(u32_at(props, at + 8));
+        sink.u32(length);
+        if (!props_payload_is_unpinned(id)) {
+            sink.u64(fnv1a64_of(props.data() + at + 12, length));
+        }
+        at += 12u + length;
+    }
+    std::vector<std::uint8_t> tail(props.begin() + static_cast<std::ptrdiff_t>(at), props.end());
+    std::size_t size_at = 0;
+    std::size_t scalars = 0;
+    for (std::size_t i = 0; i + 16 <= tail.size(); i += 16) {
+        if (u32_at(tail, i) == 4 && u32_at(tail, i + 8) == 4 && tail[i + 4] == 0x01 &&
+            tail[i + 5] == 0x00 && tail[i + 6] == 0x01 && tail[i + 7] == 0x00) {
+            size_at = i + 12;
+            ++scalars;
+        }
+    }
+    if (scalars != 1) {
+        return false;
+    }
+    for (std::size_t i = 0; i < 4; ++i) {
+        tail[size_at + i] = 0;
+    }
+    sink.u32(static_cast<std::uint32_t>(tail.size()));
+    sink.u64(fnv1a64_of(tail.data(), tail.size()));
+    digest = sink.value;
+    return true;
+}
 
 std::vector<std::uint8_t> read_props_stream(const CompoundFile& cfb,
                                             const std::string& root) {
@@ -4090,6 +4177,7 @@ ProjectPropsRecords decode_project_props(const CompoundFile& cfb,
     ProjectPropsRecords out;
     const std::string table_path = format.table_root + "/Props";
     const std::vector<std::uint8_t> table_props = read_props_stream(cfb, format.table_root);
+    out.props_digest_stored = props_pin_digest(table_props, out.props_digest);
     for_each_props_record(table_props, [&](std::uint32_t id, std::uint32_t kind,
                                            std::size_t payload, std::uint32_t length) {
         if (id == kProjectPropsStatusDate) {
@@ -4225,6 +4313,8 @@ Document parse_document(const CompoundFile& cfb) {
     document.project.default_calendar_name_stored = project_props.default_calendar_name_stored;
     document.project.default_week_record = project_props.default_week_record;
     document.project.default_week_stored = project_props.default_week_stored;
+    document.project.props_digest = project_props.props_digest;
+    document.project.props_digest_stored = project_props.props_digest_stored;
     resolve_resource_calendars(document);
     return document;
 }

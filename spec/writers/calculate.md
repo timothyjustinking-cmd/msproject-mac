@@ -385,24 +385,40 @@ changes only the Task size (the var-record appends) still matches the pin's tail
 the variable-record check above may refuse the file earlier for the record it now stores; the
 Notes and Text1 removals do not match it, since they also move the Task freed scalar.  The 4(e) merge check passes because it uses the control itself.
 
-*The plan layer has no Props pin, and that is a gap that is recorded, not a design (W35d-2.2,
-R35cG0-4).* `PlanInput` carries no `114/Props` records, only the project start 0.2 reads. The
-pin is writer-only and the plan layer reaches it by construction: `make_calculate_edit` runs
-`read_calculate_shape` on the file, which calls the pin, so the builder refuses. The save then
-ties the queued edit to the file: the edit model's save (`app/edit_model.cpp`, the
-`calculate_edit` branch; not `mppwrite::save_calculate`, which has no digest) compares
-`StructuralEdit::source_digest` with the digest of the file in hand, so a plan built from a
-file with other options cannot be saved. What that leaves: `push()` on a hand-built plan edit
-does not see the options and the refusal comes at the save, not at the queue.
+*The plan holds the Props pin as a digest (W36-2.3, closing R35cG0-4).* Until wave 36 the pin was
+writer-only: `PlanInput` carried no `114/Props` records beyond the project start 0.2 reads, the
+builder reached the pin through `read_calculate_shape` on the file, and the save tied the queued
+edit to the file with `StructuralEdit::source_digest`, so `push()` on a hand-built plan edit did
+not see the options and the refusal came at the save, not at the queue. Now the reader computes
+one number from the table props (`mpp::ProjectRow::props_digest`, filled into
+`PlanInput::props_digest` by the reader adapter) and `calculate_plan_refusal` compares it with
+`mppwrite::calculate_props_pin_digest()`, the same number computed from the pin's table without
+the reader, as the last plan guard (each earlier guard keeps its own needle). The refusal text
+is "114/Props differs from the measured control"; a plan not built by the reader, or from a
+stream the reader could not digest, has `props_digest_stored` false and is refused as "114/Props
+stream was not read". The writer's pin stays the check over the file.
 
-An earlier version of this paragraph said a plan-side Props digest would be a field "the writer
-would then have to trust over the file". It would not: a plan digest is one more refusal at the
-queue, and the writer's pin stays the check over the file. The reader already decodes
-`114/Props` (`core/mpp/reader.cpp`), so carrying a reader-computed digest of the pinned records
-on `PlanInput` (with the same exemptions as the pin) is cheap. It is not built: W35c-1.7
-(R35bG0-5) gave the plan the leaf's FixedMeta entry and VarMeta keys but not the Props records,
-and the writer's pin plus the save's digest stand in for it. It is the next step if a caller
-other than `make_calculate_edit` ever queues a Calculate Project edit.
+The digest is FNV-1a 64 over, in order: header words 8 and 12 (u32, little-endian); for each
+framed record (id byte 2 equal to 0x40) its id, kind and length (u32 each) and, unless its
+payload is free, the FNV-1a 64 of the payload (u64); then the tail length (u32) and the FNV-1a
+64 of the tail with the one Task size scalar (tag `0x01000100`) zeroed (u64). The free payloads
+are the pin's five: the project finish `0x02400003` and the pending flag `0x02400024` (the save
+writes them), the project start `0x02400002` (0.2 relates it to the leaf Start) and the two
+per-save GUIDs `0x02400029` and `0x024013C2`. A stream with a short header, a record that runs
+past its end, or a tail without exactly one Task size scalar has no digest. The reader and the
+writer compute it separately (the writer must not link the reader), so
+`app/app_edits_calculate_tests.cpp` checks that they agree: on the control, on a payload (or
+kind) flip in each of its 161 records (refused by both unless the record is one of the five),
+on both header words, a record removed and a record appended, a tail byte flipped, the tail
+padded and a second Task size scalar (all refused by both), and on the Task size scalar moved
+(accepted by both).
+
+*Held out.* The rule was derived from the Calculate pair. The Props stream of every growth pair
+it was not derived from is refused by the pin and by the digest alike, controls and edits: the
+nine record-insert pairs of W36-2.2 (baseline set and its eight held-out pairs, the note pairs
+among them), the four assignment-add pairs (wave30, wave34 second and third, the note
+assignment) and the three resource-add pairs (wave30, wave34 third, wave36 fourth); and in each
+pair the edit's digest differs from its own control's, so the digest sees the growth.
 
 *A queued Calculate Project and a later change (W35d-2.11, R35cW-4).* `push()` already refuses
 every other structural edit beside a queued Calculate (it is an exclusive kind), and the save
