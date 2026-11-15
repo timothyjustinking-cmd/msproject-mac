@@ -427,6 +427,12 @@ This group changes no C++ source.  It does not touch the VM, `build/trace-2021/`
 
 Done when every item is seen red, then green, both quoted.  Marker `WAVE-36-G0f-COMPLETE`.
 
+**Group order after the G0f marker (coordinator, Sun 15 Nov 2026, from the audit of that day).**  G0f is the last
+gate group ahead of the goal.  G2 and CLOSE run next in one driver run, without waiting for the G0f review.  From that
+review on, standing rule 5 applies to the gate as to everything else: a Medium or Low is queued in
+`plan-waves27-30.md`.  A Critical or High that lets a wrong file pass goes in as items inside the next writer group,
+not as a gate group of its own.
+
 ### G2: Props
 
 Writer: `core/mppwrite/props_edit.{h,cpp}`, and the plan layer.  The facts from the trace (`trace-props-framing-r4.md`, `trace-baseline-r4.md`, `trace-calculate-r3.md`):
@@ -440,9 +446,24 @@ Writer: `core/mppwrite/props_edit.{h,cpp}`, and the plan layer.  The facts from 
 - **Existing records** are rewritten in place by id.
 
 Items:
+- **W36-2.0, first:** the trace gate's `LASTSAVE_SPAN` and `STAMP_SPAN` (and `CVIEW_STAMP_SPAN`, if the same
+  saves need it) are widened to cover the saves of 14 and 15 Nov 2026.  The coordinator's triage of Sun 15 Nov 2026
+  found 107 recordings that FAIL only because their LastSave or stamp lies after the span's top.
+  - The new ends come from decoded values: read every saved copy in `build/trace-2021/saved/work/`
+    (git-ignored, read only) and the committed saves, decode the LastSave FILETIME, the Props save words and the
+    stamps with the gate's own decoders, and set each span to the minimum and maximum seen.  No end is set by hand.
+  - The gate, the test's copy of the spans and the evidence row in `trace-gate-fields-g0b.md` change together.
+  - The tracked files carry only the numeric span ends and a count of the files read, never a file name, path or
+    user name from `build/trace-2021/`.
+  - Test: a save one tick past the new top FAILs; one at the top passes.  Red, then green.  One commit.
 - **W36-2.1:** the per-table size and count words are computed from the tables the save lays out.  The measured-constant copies go.
 - **W36-2.2:** new-record framing in the Props writer.
 - **W36-2.3:** the plan gains a Props digest, which closes R35cG0-4.  Held-out check: the Props stream of every growth pair the rule was not derived from.  The baseline pair derived it, so check at least the insert, assign-add and resource-add pairs.
+- **W36-2.4, last:** the meta-test leaves `trace_gate_guards`.  The ctest `trace_gate_guards` runs the acceptance
+  sweeps only.  The guard-removal run becomes its own labelled test, `trace_gate_meta`, with its own timeout.  It is
+  run on a fresh tree at each group close and in one CI job.  Time one full meta run and put the minutes in the
+  commit message.  Test: `ctest -R trace_gate_guards` no longer runs the meta-test; `ctest -L trace_gate_meta`
+  runs it.
 
 ### G3: Insert Task, Insert Milestone, Insert Summary
 
