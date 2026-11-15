@@ -478,6 +478,24 @@ If it is met, the two GUIDs and the creation stamp are masked by field.
 
 ### CLOSE
 
+**First, the G0f review's findings that let a wrong file PASS** (`docs/handoff/wave36-verification/review-g0f.md`;
+the coordinator reproduced R36G0f-1 and -2 on the gate at `8d0d032`: exit 0, 0 problems).  These are items of
+this driver run, not a gate group (the audit of Sun 15 Nov 2026, W-2).  Each is seen red, then green, in its own commit:
+- **W36-C.1 (R36G0f-1, Critical):** the Gantt view block's unit word at +1180 is masked only together with a
+  changed pane width at +1172, and is checked against that width by the ratio the committed zoom references show.
+  The window date words beside it stay compared unless the same evidence covers them.  Test: each of the five zoom
+  pairs with only the unit word changed FAILs; the five zoom recordings' shape still passes.
+- **W36-C.2 (R36G0f-2, High):** a creation stamp is masked only for a row, assignment or resource block whose uid
+  is not in the control.  The stamp of a row present in the control is compared.  Test: wave30-calculate with
+  one existing row's stamp changed (in span) FAILs; a new row's stamp still passes.
+- **W36-C.3 (R36G0f-3):** CEdl record 0x2640003d, when present on one side only, keeps its header compared:
+  only the evidence-backed payload is dropped.  Test: its kind word changed (1 to 0x99) FAILs on
+  wave28-mark-auto.
+- **W36-C.4 (R36G0f-8):** the host network address printed in `trace-gate-fields-g0b.md` (the node of a
+  version-1 GUID) is replaced by "the host's node".  Test: `git grep` for the 12 hex digits finds nothing.
+- The review's Mediums and Lows (R36G0f-4 to -7 and -9) are queued in `plan-waves27-30.md`, not fixed here.
+
+Then:
 - Rerun every gate on a fresh tree.
 - Write the completion record with each id ticked: fixed (commit), partly fixed (what remains), deferred (evidence) or not started (the precondition that failed).
 - Update START-HERE (under 8 KB), `memory/coordinator.md` and the plan.
