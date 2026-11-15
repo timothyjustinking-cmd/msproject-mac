@@ -563,3 +563,88 @@ None.
 * **The 56 OPEN pairs are still OPEN**, pinned to (pair, stream, count) but not decoded; `R36G0b-8` is still open and `R36G0b-11` is as G0c recorded it.
 
 WAVE-36-G0e-COMPLETE
+
+## G0f: the trace gate, fifth fix
+
+Brief `docs/handoff/wave36-brief.md` section 2 (G0f); the machine and session fields the first re-gate of the VM's recordings found (`build/trace-2021/regate/DOSSIER.md`, `CAUSES.md`).  Design rule, restated: a
+masked field is accepted only as a value a save writes, on both sides, from evidence in the DOSSIER or the 624 committed saves; a field the evidence calls data is never masked; a field derived on one side only is a
+FAIL; and a guard is shown by a removal that turns the test red, found by the meta-test and not by a list.  Items, one finding id per commit, in order:
+
+| item | commit | what |
+|---|---|---|
+| W36-0f.1 | `643d1c4` | Props14: the tail names are read by their length words (10, 16 and 30 bytes), and the saved-flag record 0x3540000a is a bounded session field |
+| W36-0f.2 | `64565cf` | CEdl slot table: the uids are compared one by one; only the 0xffffffff fill is a session field |
+| W36-0f.3 | `58ed375` | note rich text: the language id and the generator build of the header are machine fields; the text is compared |
+| W36-0f.4.1 | `41a6be3` | CEdl: the three date words and the view word are session fields, each only as a value a save writes |
+| W36-0f.4.2 | `ccad382` | CV_iew: the view stamp and three view date words are session fields |
+| W36-0f.4.3 | `96eca67` | the span of a masked save stamp reaches the VM's latest decoded stamps, 0x3d28352a |
+| W36-0f.4.4 | `f26da8f` | Props: the baseline-slot words only as a copy of the save word; the third save GUID only as a version-1 GUID |
+| W36-0f.4.5 | `d2227a1` | the view GUID of every CTable and CV_iew FixedData row, as a version-1 GUID on both sides |
+| W36-0f.4.6 | `a81fe68` | the third GUID of an assignment's Fixed2Data row, +32..+47, as a version-1 GUID |
+| W36-0f.4.7 | `cf3d094` | the creation stamp of every Task row, assignment block and resource block, as a stamp inside the span |
+| W36-0f.4.8 | `64c173a` | the +18 and +38 words of a 76-byte baseline sub-record and its heap bytes, as stale process memory |
+| W36-0f.4.9 | `ed3d859` | Task FixedMeta +315, Rsc FixedMeta +140/+177 and Task Fixed2Data row +58 are data, not masked: each pinned to FAIL (deferred, with the evidence) |
+| W36-0f.4b | `11875ed` | the Gantt pane width (u16 at +1172 of the 41363-byte view-state record) and the unit beside it (+1180) |
+| W36-0f.5 | `a090ed9` | the 15 derived removals that stayed green: 11 get a case, 4 go on `REDUNDANT` with a red cover |
+| W36-0f.6 | `2922b56` | the DOSSIER's 13 data targets as 22 field cases, each built from the reference with the VM's value, each FAILs |
+| W36-0f.5 (again) | `217f3e6` | two named guards (`derived-cedl-path`, `derived-view-size`) found NOFIT by the tip run are anchored again; both red |
+
+**Acceptance (the committed `tools/trace/test_trace_gate.py`, on the committed file set).**  Negative, over 191 edits: **181 FAIL and 10 PASS**, the ten being edits that equal their null or control in every byte the gate
+checks, each pinned by name.  Positive, over 202 control-nulls: **180 PASS and 22 OPEN** (G0e: 146 and 56), the 22 pinned as (pair, stream, count), 107 rows.  Everything G0e accepted stays green: the 652 checks of G0e are
+in the test, now **1739 checks, 0 FAIL**.  Every hand-built wrong file of the G0b to G0d reviews still FAILs.  The meta-test: **`named guards listed 184, red 184`** (182 red in the tip run and two NOFIT, repaired and red at `217f3e6`; `2922b56-W36-0f.5-meta-named-final.log`, `2922b56-W36-0f.5b-picks.log`) and **`candidates derived 299 (run 299): removed red 283 (85 of them by a case that asserts the gate does not raise), listed redundant 16, green 0, crashed 0`**, the unmodified gate passes (`2922b56-W36-0f.5-meta-derived-final.log`).
+
+**Gate line.**  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each carries both trailers.
+The test alone (`--no-meta`) passed on the tip, 1739 PASS (`build/w36/a090ed9-W36-0f.6-green.full`).  The meta-test was run per commit (named guards of the item, the derived candidates after 0f.5) and at the tip as
+two partial runs, derived and named, because the full default run now exceeds two hours on this machine; the partial runs cannot check `REDUNDANT` for a stale entry (see Found, not fixed).  G0f changes no C++ source and no
+`CMakeLists.txt`.  Per-item logs and counts are in `docs/handoff/wave36-verification/gates-g0f.md`.  The builder used no COM, did not touch the VM, `build/trace-2021/` or `build/r7/`, and pushed nothing.
+
+### Guards seen red
+
+Each red ran on the previous commit's gate or on a copy with one guard removed; logs are `build/w36/<parent>-W36-0f.N-*`.
+
+| item | red | green |
+|---|---|---|
+| 0f.1 | 13 FAIL, 669 PASS | 692 PASS; 16 named red |
+| 0f.2 | 20 FAIL, 732 PASS | 752 PASS; 10 named red |
+| 0f.3 | 21 FAIL, 866 PASS | 896 PASS; 9 named red |
+| 0f.4.1 | 33 FAIL, 1010 PASS | 1043 PASS; 8 named red |
+| 0f.4.2 | 39 FAIL, 1221 PASS | 1263 PASS; 22 named red |
+| 0f.4.3 | 12 FAIL, 1259 PASS | 1271 PASS; 3 named red |
+| 0f.4.4 | 13 FAIL, 1292 PASS | 1315 PASS; 11 named red |
+| 0f.4.5 | 10 FAIL, 1323 PASS | 1333 PASS; 5 named red |
+| 0f.4.6 | 7 FAIL, 1331 PASS | 1338 PASS; 3 named red |
+| 0f.4.7 | 9 FAIL, 1362 PASS | 1377 PASS; 9 named red |
+| 0f.4.8 | 19 FAIL, 1464 PASS | 1489 PASS; 30 named red |
+| 0f.4.9 | 24 new FAIL against a gate that masks the three streams whole (47 in all) | 1519 PASS; no clause added, no guard |
+| 0f.4b | 32 FAIL, 1620 PASS | 1652 PASS; 11 named red |
+| 0f.5 | the 15 green derived removals and two covers (17) against the new test: 13 red, 4 redundant with a red cover, 0 green unlisted | 1665 PASS |
+| 0f.6 | the 22 field cases against a gate that sets the traced stream of the nine streams to the reference's: 22 of 22 FAIL | 1739 PASS |
+| 0f.5 (again) | the tip's named run: 2 NOFIT | both guards red as picks; 1739 PASS |
+
+The meta-test at the tip, as two partial runs on `2922b56` (the test files unchanged between): named 182 of 184 red and two NOFIT (`derived-cedl-path`, `derived-view-size`: the removal text no longer occurred once after
+0f.4.1 and 0f.1), repaired at `217f3e6` (W36-0f.5, second commit) and both red; derived 299, 283 red, 16 redundant (12 of G0e and the 4 of 0f.5, each green with a red cover), 0 green, 0 crashed.  The named run's
+final `REDUNDANT` loop raises a `KeyError` in a partial run, as G0e recorded; the table above it is complete.
+
+### Deferred
+
+* **W36-0f.4.9: Task FixedMeta +315, Rsc FixedMeta +140 and +177, Task Fixed2Data row +58.**  A mask needs a control/null pair that differs at the byte, and the 202 committed pairs do not show one: +315 differs
+  in 4 pairs and +58 in 5, and every one of those nulls was saved from a different file than its control (a difference between two documents); no same-file pair differs at either, and none at +140 or +177.  The
+  VM's decode names no meaning for the traced values.  No mask was added; the six bytes are pinned to FAIL by cases that go red if a later change masks them.  A same-file pair that differs at one of them, or the
+  VM's decode of its meaning, would reopen it.  The DOSSIER's "223 of 223" for +58 matches no byte of the stream (the committed rows hold 0, 0xffffffff and duration-sized words there).
+
+### Queued (Low, not fixed)
+
+* **Rsc FixedMeta +176 and +213** differ 0x1c to 0x5c in 7 same-file pairs; no DOSSIER target fails there, so nothing is masked.
+* **Props 0x2401390 +88** is not decoded ([U]); nothing is masked.
+* **The Rsc 0xc40015f stale block** has no committed block, so the stale-block reader has no case for it.
+* **The VM's own Gantt pane width** was never read; the unit's relation to the width is a bound (1 up to the width), not a formula, because the zoom's span is not decoded (W36-0f.4b).
+
+### Found, not fixed
+
+* **The meta-test now takes more than two hours** on this machine (299 derived candidates, 184 named, eleven jobs under load: the derived part about 90 minutes, the named part 45 to 60), and the ctest `TIMEOUT` of
+  3600 s is exceeded.  `CMakeLists.txt` is out of G0f's scope; the timeout, or a split of the meta-test into two ctests, is the coordinator's call.
+* **The stale-`REDUNDANT` check was not run at the tip**: it needs the named and derived parts in one run.  The 16 entries (12 of G0e, 4 of 0f.5) were each seen green with a red cover in the derived runs.
+* **OPEN_PINNED**: 107 rows in 22 pairs, pinned to (pair, stream, count) and not decoded; the control and its null differ in size in those pairs.
+* **A post-span capture FAILs** as data until the stamp span and the LastSave span are widened together (as G0e recorded); 0f.4.3 widened the stamp span to 0x3d28352a.
+
+WAVE-36-G0f-COMPLETE
