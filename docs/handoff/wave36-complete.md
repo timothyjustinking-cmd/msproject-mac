@@ -781,3 +781,5 @@ candidate (`_task_uids:if-never:data is None`) was green at C.2 and is red by a 
 * **Still the coordinator's**: copying the new gate and `host.ps1` into the VM and the re-gate (R36G0b-8 needs a real recording), fresh-tree gates in the verify worktree, mutations at each new guard, the
   independent reviewers, range scans, push and CI on all seven jobs, 4(e) for the two Props inserts (W36-2.2), the whole-wave review and the merge.  CI has no `olefile` until its jobs `pip install` it, and the
   `trace-gate-meta` CI job has not run on a runner.
+
+WAVE-36-COMPLETE
