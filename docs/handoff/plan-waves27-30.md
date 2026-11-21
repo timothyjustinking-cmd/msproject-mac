@@ -509,3 +509,32 @@ and wave 36 is the writer wave.  None is open.  The record is
 - **Still partly fixed or open, unchanged:** R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), the four
   35b ids (R35bW-1, R35bW-2, R35bG2-2, R35bG3-1), R35bG0-9, R35bG1-10 and R35bG2-9.  Revisit at
   wave 37 planning.
+
+## Queued from wave 36 (CLOSE): the G0f review's Mediums and Lows (22 November 2026)
+
+The G0f review is `wave36-verification/review-g0f.md`.  CLOSE fixed R36G0f-1 (W36-C.1 `de97271`), -2 (W36-C.2
+`1a581b2`), -3 (W36-C.3 `79109bb`) and -8 (W36-C.4 `429f241`).  The rest are queued, not fixed, with no wave
+assigned:
+
+- **R36G0f-4 (Medium):** the VM's newer saves lie above three spans: 108 of 210 VM copies with a committed
+  reference PASS, not 210.  `LASTSAVE_SPAN`'s top (11 November 2026) is below 115 of 231 VM LastSave values
+  (94 `?SummaryInformation` FAILs); `STAMP_SPAN` is below 33 Props save words and `CVIEW_STAMP_SPAN` below 21
+  CV_iew stamps.  A false FAIL, not a wrong file passing.  Fix: widen by the VM evidence, as W36-0f.4.3 did, or
+  state the cut-off date; correct the "the VM's lie within" claims in the evidence note.
+- **R36G0f-5 (Medium):** the stale-memory heap bytes (+58..59 of a Task block, +58..61 of an assignment block)
+  are masked on the block's shape alone, with no value check, and the resource block has neither a high-half
+  check nor heap bytes.  Fix: bound them to a user-mode address range or leave them compared and record the
+  pairs OPEN.
+- **R36G0f-6 (Medium):** two meta-test survivors: `stale-half-compare` (no case with +38's high half changed
+  alone, +40..41) and `view-width-neighbour` (no case touching +1182..+1183 beside a masked width with the date
+  unset on both sides).  Fix: add the two cases.  Also `slot-capacity-lowerbound` (a zero-length slot table,
+  no committed file has the shape).
+- **R36G0f-7 (Low):** the note machine fields are checked as a format, not as the VM's value: a `deflang` of 1
+  to 65535 and a Riched20 build of 1 to 5 digits pass.  The narrow form accepts the three known builds and
+  languages (2057 and 16.0.20430 for the VM; 1033 and 20527 for the hosts).
+- **R36G0f-9 (Low):** the evidence note says the view word's upper u32 span is that "of the 624 committed
+  values and the VM's"; the committed minimum is 25035936 and the lower bound is the VM's.  Wrong as evidence
+  text, harmless to the verdict.
+- **Found at W36-C.2, queued:** the VM recordings that rewrite the stamp of a row or block the control and the
+  reference share (the 15 Task, 6 assignment and 5 resource targets of 0f.4.7) FAIL again as data.  Either a
+  control/null pair shows the stamp moving in an existing row, or those recordings stay OPEN.
