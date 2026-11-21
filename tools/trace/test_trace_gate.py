@@ -50,6 +50,7 @@ installed (ctest SKIP).
 """
 
 import datetime
+import hashlib
 import os
 import io
 import re
@@ -2395,24 +2396,69 @@ try:
               not hasattr(g, "ceiling_for") and not any("ceiling" in r for r in g.NOISE.values()))
 
 
-        # W36-C.4 (R36G0f-8): a version-1 GUID's node is the machine's network address; the notes name it
-        # "the host's node" and print no address (the 12 hex digits, either case; a record's bytes in a hex
-        # dump, spaced, are data and not an address, and the .cpp and .tsv files hold recorded bytes)
-        node_ = re.compile("[host node]", re.IGNORECASE)
+        # W36-C.4 (R36G0f-8), W36b-0.3 (R36W-3): a version-1 GUID's node is the machine's network address; the
+        # notes name it "the host's node" or "the VM's node" and print no address.  The test holds none either:
+        # it compares the SHA-256 of every 12-hex-digit window of every note under spec/ and docs/ (any case,
+        # also with ':' or '-' between the digits) with the digests of the host's and the VM's nodes, and
+        # FAILs on any 12 hex digits that follow the word "node".  A recorded file's bytes (.cpp, .tsv, .mpp)
+        # are data and out of scope, as is a spaced hex dump of a record.  A history that printed an address
+        # stays; this is a guard on the tip.
+        node_digests_ = {"519323e052a475c1892804965c5cddf6522269d95455da84dce1b2bb1e21d0ba",
+                         "b2afe5e1730166f3acea6298a4533ce2b38be0aefad563496f84f3156b18230b"}
+        after_node_ = re.compile(r"node[^0-9a-fA-F]{0,8}[0-9a-fA-F]{12}", re.IGNORECASE)
+        hex_run_ = re.compile(r"[0-9a-fA-F]{12,}")
+        hex_sep_ = re.compile(r"(?<=[0-9a-fA-F])[:\-](?=[0-9a-fA-F])")
+
+        def address_hits(text_, digests_=node_digests_):
+            """What in `text_` is a network address: a window with a stored digest, or 12 hex digits after
+            the word 'node'."""
+            hits_ = []
+            for form_ in (text_, hex_sep_.sub("", text_)):
+                for run_ in hex_run_.finditer(form_):
+                    word_ = run_.group().lower()
+                    for k_ in range(len(word_) - 11):
+                        if hashlib.sha256(word_[k_:k_ + 12].encode("ascii")).hexdigest() in digests_:
+                            hits_.append("a window with a stored digest")
+                if after_node_.search(form_):
+                    hits_.append("12 hex digits after the word node")
+            return hits_
+
         root_ = os.path.abspath(os.path.join(HERE, "..", ".."))
         printed_ = []
         for top_ in ("spec", "docs"):
             for dir_, dirs_, files_ in os.walk(os.path.join(root_, top_)):
                 for fn_ in files_:
-                    if fn_.endswith(".md"):
+                    if fn_.endswith((".md", ".txt")):
                         with open(os.path.join(dir_, fn_), encoding="utf-8", errors="replace") as fh_:
-                            if node_.search(fh_.read()):
+                            if address_hits(fh_.read()):
                                 printed_.append(os.path.relpath(os.path.join(dir_, fn_), root_))
-        check("W36-C.4 no note under spec/ or docs/ prints the host's network address", not printed_,
+        check("W36-C.4 no note under spec/ or docs/ prints the host's or the VM's network address", not printed_,
               "%r" % (printed_,))
+        check("W36-C.4 two digests are stored, of 64 lower-case hex digits each",
+              len(node_digests_) == 2 and all(re.fullmatch("[0-9a-f]{64}", d_) for d_ in node_digests_))
+        # the check finds a planted address: an address of the test's own, by its digest, in each form a note
+        # could print it; the stored digests are of the host's and the VM's, which are not written here
+        plant_ = "0a1b2c3d4e5f"
+        plant_digest_ = {hashlib.sha256(plant_.encode("ascii")).hexdigest()}
+        for what_, text_ in (("alone", plant_), ("in a sentence", "the node is %s here" % plant_),
+                             ("in capitals", plant_.upper()), ("inside a longer hex run", "ff" + plant_ + "ee"),
+                             ("with colons", "0a:1b:2c:3d:4e:5f"), ("with hyphens", "0a-1b-2c-3d-4e-5f"),
+                             ("in a table cell", "| GUID | %s |" % plant_)):
+            check("W36b-0.3 a note with an address planted %s is found" % what_,
+                  bool(address_hits(text_, plant_digest_)), "%r" % (text_,))
+        for what_, text_ in (("another 12 hex digits", "0a1b2c3d4e50"), ("11 digits of it", plant_[:11]),
+                             ("a spaced hex dump of it", "0a 1b 2c 3d 4e 5f"), ("the word node alone", "the host's node"),
+                             ("the word node and a short hex word", "node deadbeef"), ("no text", "")):
+            check("W36b-0.3 a note with %s is not found" % what_, not address_hits(text_, plant_digest_),
+                  "%r" % (text_,))
+        check("W36b-0.3 12 hex digits after the word node are found with no stored digest",
+              "12 hex digits after the word node" in address_hits("node: 0a1b2c3d4e5f", set()))
         check("W36-C.4 the evidence note names the host's node in its GUID rows",
               open(os.path.join(root_, "spec", "writers", "evidence", "trace-gate-fields-g0b.md"),
                    encoding="utf-8").read().count("the host's node") >= 2)
+        check("W36b-0.3 the evidence note names the VM's node",
+              open(os.path.join(root_, "spec", "writers", "evidence", "trace-gate-fields-g0b.md"),
+                   encoding="utf-8").read().count("the VM's node") >= 1)
 
         # a gate that checked nothing is not a pass
         lines, problems, checked, unchecked = g.compare({}, {}, C, N)
