@@ -9,7 +9,7 @@
 # bold, and w35-<unlinked|linked|lag|snet>-<calc|null> for the four wave 35 calculate pairs;
 # "null" saves the control with no edit (the noise run).
 #
-# Trace round fixes, Tue 10 to Wed 11 Nov 2026 (spec/writers/evidence/trace-*.md):
+# Trace round fixes, Tue 10 to Wed 11 Nov 2026 (the trace-*.md notes, in the private notes repo):
 # - the save waits for "Recording has started" in the attach log; saving when the .run file
 #   appeared gave 0 ms traces;
 # - the calculation mode is set per target (manual for null, calculate and the w35 pairs,

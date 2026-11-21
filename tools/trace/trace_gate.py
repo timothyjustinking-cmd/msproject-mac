@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Trace gate (docs/handoff/trace-runbook.md section 5): does a traced save equal the committed
+"""Trace gate (the trace runbook, section 5, in the private notes repo): does a traced save equal the committed
 pair's file, outside the null-save noise?  Runs INSIDE THE TRACE VM, where the saved file stays.
 
     python trace_gate.py TRACED REFERENCE CONTROL CONTROL_NULL

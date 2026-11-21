@@ -19,6 +19,9 @@ house rules of wave 35g are the last section of that file, "Standing rules and s
   `1a581b2`, `79109bb`, `429f241`); the markers are in `wave36-complete.md`.  G3 (Insert Task,
   Milestone, Summary) is not started: no rule predicts a held-out pair (`trace-insert-rules-r6.md`;
   the five `wave36-r7-insert-*` recordings are committed but no note derives or checks a rule on them).
+* **Trace notes** (`trace-*.md`, `trace-*.txt`, the runbook) live in the private repo beside this one,
+  `../msproject-mac-trace` (D-8, Sun 22 Nov 2026); a citation by file name refers there.  The one public
+  note is `spec/writers/evidence/trace-gate-fields-g0b.md`, the gate's field evidence.
 * **The trace gate** `tools/trace/trace_gate.py` compares a traced save with the reference outside named
   noise fields only; each mask names a field and checks its value; a pair whose control or edit differs in
   an undecoded field FAILs and is OPEN in the test (22 of 202 control-nulls, 107 rows pinned).  A creation

@@ -105,7 +105,7 @@ Items:
   compared in full, because the port writes it.
 - **W36-0b.4 (R36G0-4):** remove the windows over Assn Fixed2Data +32..+42, the creation stamp of EXISTING
   Task FixedData rows, and Props record 0x02401394.  Mask only what the evidence names as per-save noise,
-  quoting the note and line for each mask in a comment.  The trace notes are leaving the public repo (the operator's D-4): read them from `D:devmsproject-mac-traceevidence`, and cite them by file name only.
+  quoting the note and line for each mask in a comment.  The trace notes are leaving the public repo (the operator's D-4): read them from `../msproject-mac-trace/evidence`, and cite them by file name only.
 - **W36-0b.5 (R36G0-5):** there are no single-run ceilings.  The acceptance tests below replace them.
 - **W36-0b.6 (R36G0-7):** settle the KVP reply-length check without the VM: build the guest's `Out-String`
   reply shape in a unit test, then make `host.ps1` accept exactly that shape, trailing newline and CR
