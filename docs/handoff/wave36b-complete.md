@@ -134,3 +134,5 @@ Nothing in CLOSE is deferred.  R36W-7 to -10 are queued by the commit above, not
 * **Still the coordinator's:** a fresh worktree and the gates there, every "Guards seen red" row put back to red, the independent review of the wave
   diff, then on the operator's word the push, CI on every job and the merge of `wave36` and `wave36b` into `main`.  The G0 "Found, not fixed" list
   above stands (the 0.1 message's undercount, the hash as a guard and not a secret, the VM-address history, the `SKIP_RETURN_CODE` coverage).
+
+WAVE-36b-COMPLETE
