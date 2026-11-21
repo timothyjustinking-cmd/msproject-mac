@@ -711,16 +711,35 @@ def _canon_summary(data, streams):
     return bytes(out), noise, derived
 
 
-def _canon_cview_var2(data, streams):
+def _unit_follows_width(mine, theirs):
+    """The unit word beside a changed pane width is noise only when it follows from the width: the widths
+    differ, both units are 1 up to their width, and the units are in the ratio of the widths, within one
+    rounding of the unit (|u1*w2 - u2*w1| <= the larger width; the five committed zoom references against
+    the VM's saves of them are 0 to 305 of 599).  Two equal units are no difference, so a reset zoom's
+    default unit needs no clause.  The test is symmetric, so both sides decide alike; each side has already
+    checked its own width against the width span, and a width out of it on the other side leaves that
+    side's width underived, which the gate fails (W36-C.1 / R36G0f-1)."""
+    (w1, u1), (w2, u2) = mine, theirs
+    if w1 == w2 or not (1 <= u1 <= w1 and 1 <= u2 <= w2):
+        return False
+    return abs(u1 * w2 - u2 * w1) <= max(w1, w2)
+
+
+def _canon_cview_var2(data, streams, other_streams=None):
     """CV_iew/Var2Data: the view stamp of a view-stamp record and the three date words of a view-state
     record are session fields, each replaced in place (the length does not change, so the font-row
     windows still find their offsets) and each named in the third result with its block's uid, only in
     a bag block whose records chain exactly to the block's end and only as a value a save writes
-    (W36-0f.4.2)."""
+    (W36-0f.4.2).  The Gantt pane width is a machine field; the unit word beside it is noise only
+    together with a different width on the other side, in the ratio of the two widths (W36-C.1), so
+    the other side's streams are needed to name it."""
     out = bytearray(data)
     noise = set()
     derived = set()
     meta = streams.get(VAR_META[CVIEW_VAR2])
+    # the other side's record is read at the same offset, without a parse of its own: where its framing
+    # differs, the header bytes of the record differ and are compared (W36-C.1)
+    other_data = None if other_streams is None else other_streams.get(CVIEW_VAR2)
     for uid, off, key in _meta_blocks(meta):
         if key != BAG_KEY or off == 0xFFFFFFFF or off + 4 > len(data):
             continue
@@ -744,7 +763,11 @@ def _canon_cview_var2(data, streams):
                     out[at + CVIEW_WIDTH_AT:at + CVIEW_WIDTH_AT + 2] = bytes(2)
                     noise.update(range(at + CVIEW_WIDTH_AT, at + CVIEW_WIDTH_AT + 2))
                     derived.add("view pane width uid %d" % uid)
-                    if 1 <= struct.unpack_from("<H", data, at + CVIEW_UNIT_AT)[0] <= width:
+                    unit = struct.unpack_from("<H", data, at + CVIEW_UNIT_AT)[0]
+                    if other_data is not None and at + CVIEW_UNIT_AT + 2 <= len(other_data) and \
+                            _unit_follows_width((width, unit), (
+                                struct.unpack_from("<H", other_data, at + CVIEW_WIDTH_AT)[0],
+                                struct.unpack_from("<H", other_data, at + CVIEW_UNIT_AT)[0])):
                         out[at + CVIEW_UNIT_AT:at + CVIEW_UNIT_AT + 2] = bytes(2)
                         noise.update(range(at + CVIEW_UNIT_AT, at + CVIEW_UNIT_AT + 2))
                         derived.add("view pane unit uid %d" % uid)
@@ -763,17 +786,21 @@ for _name in NOTE_KEYS:
     CANON[_name] = _canon_note_var2(_name)
 
 
-def canonical_all(streams):
+def canonical_all(streams, other=None):
     """-> (canonical streams, noise offsets, derived fields), each a dict by stream name.  The
     CANON streams have their decoded noise fields replaced by fixed placeholders; `noise` holds the
     offsets of the raw bytes that were replaced and `derived` the name of each replaced field.  A
     placeholder can equal a raw field (a size word of 0, an emptied path record), so two canonical
-    forms are equal only when the same fields were replaced on both sides (W36-0d.1)."""
+    forms are equal only when the same fields were replaced on both sides (W36-0d.1).  `other` is the
+    other side's raw streams, read only by the one field that is noise relative to the other side (the
+    Gantt unit word, W36-C.1)."""
     out = {}
     noise = {}
     derived = {}
     for name, data in streams.items():
-        if name in CANON:
+        if name == CVIEW_VAR2:
+            out[name], noise[name], derived[name] = CANON[name](data, streams, other)
+        elif name in CANON:
             out[name], noise[name], derived[name] = CANON[name](data, streams)
         else:
             out[name], noise[name], derived[name] = data, set(), set()
@@ -1062,7 +1089,8 @@ def compare(traced, ref, ctl, nul):
         lines.append("stream name collision %s" % key)
         problems += 1
     raw_t, raw_r = getattr(traced, "raw", {}), getattr(ref, "raw", {})
-    (traced, _, d_traced), (ref, _, d_ref) = canonical_all(traced), canonical_all(ref)
+    (traced_c, _, d_traced), (ref_c, _, d_ref) = canonical_all(traced, ref), canonical_all(ref, traced)
+    traced, ref = traced_c, ref_c
     ctl, nul = canonical(ctl), canonical(nul)
     for name in names:
         if name not in ref:

@@ -395,9 +395,9 @@ try:
                                     out.update(range(at_ + lo_, at_ + lo_ + 4))
                             wide_ = struct.unpack_from("<H", data, at_ + 1172)[0]
                             if len_ == 41363 and 128 <= wide_ <= 4096:
+                                # the unit at +1180 is noise only against a different width on the other
+                                # side (W36-C.1), so it is not a field of one file: see the C.1 cases
                                 out.update(range(at_ + 1172, at_ + 1174))
-                                if 1 <= struct.unpack_from("<H", data, at_ + 1180)[0] <= wide_:
-                                    out.update(range(at_ + 1180, at_ + 1182))
             elif name in NOTE_SPEC:
                 meta_, key_ = NOTE_SPEC[name]
                 seen_ = set()
@@ -3476,6 +3476,12 @@ try:
         zoom_stems = (("wave35-viewstate-zoom-custom", 351), ("wave35-viewstate-zoom-custom-10d", 351),
                       ("wave35-viewstate-zoom-custom-narrow", 355), ("wave35-viewstate-zoom-entire", 355),
                       ("wave35-viewstate-zoom-reset", 351))
+        # the unit the VM's save holds beside its width in each recording (W36-C.1; read from the VM's
+        # saved copy of each target, which is not committed: 104, 146, 105, 110 and 100 against the
+        # references' 178, 249, 152, 185 and 100)
+        vm_recorded_ = {"wave35-viewstate-zoom-custom": 104, "wave35-viewstate-zoom-custom-10d": 146,
+                        "wave35-viewstate-zoom-custom-narrow": 105, "wave35-viewstate-zoom-entire": 110,
+                        "wave35-viewstate-zoom-reset": 100}
         zoom_ = {}
         for stem_, vm_width_ in zoom_stems:
             zr_, zc_, zn_ = (load(p_) for p_ in pair(stem_))
@@ -3513,16 +3519,32 @@ try:
             zv("the VM's shape: width %d, unit %d, the first date moved" % (vm_width_, vm_unit_),
                zput(vm_width_, vm_unit_, {1176: moved_date_}), False)
             zv("the VM's width and unit, the dates as the reference's", zput(vm_width_, vm_unit_), False)
-            zv("the VM's width alone, the reference's unit (up to the width)", zput(vm_width_), False)
+            # W36-C.1 (R36G0f-1): the unit follows the width.  The VM's recorded unit of each recording, read
+            # from the VM's saved copy (the Gantt record's +1180), is inside the ratio rule.
+            zv("the VM's recorded unit %d beside width %d" % (vm_recorded_[stem_], vm_width_),
+               zput(vm_width_, vm_recorded_[stem_]), False)
+            # a width alone, the unit the reference's own, leaves no unit difference to excuse: the width is
+            # the machine field and the equal unit is compared equal
+            zv("the VM's width alone, the reference's unit %d" % ref_u_, zput(vm_width_), False)
+            # only the unit changed: the width is the reference's, so nothing excuses the word
+            for only_u_ in (ref_u_ + 1, ref_u_ - 1, 1, ref_w_, 2 * ref_u_, vm_unit_):
+                zv("only the unit changed to %d, the width the reference's %d" % (only_u_, ref_w_),
+                   zput(None, only_u_), True)
+            zv("a unit off the ratio by three beside the VM's width, above", zput(vm_width_, vm_unit_ + 3), True)
+            zv("a unit off the ratio by three beside the VM's width, below", zput(vm_width_, max(1, vm_unit_ - 3)), True)
+            zv("a unit twice the ratio beside the VM's width", zput(vm_width_, 2 * vm_unit_), True)
             zv("a width of the control's 100, the zoom not applied", zput(100, vm_unit_), True)
             for bad_w_, what_ in ((0, "0"), (1, "1"), (127, "one under 128"), (4097, "one over 4096"),
                                   (0xFFFF, "0xffff")):
                 zv("a width of %s" % what_, zput(bad_w_, 1), True)
+                zv("a width of %s, the reference's unit" % what_, zput(bad_w_), True)
             for good_w_ in (128, 4096):
-                zv("a width of %d (the span's end), its unit 1" % good_w_, zput(good_w_, 1), False)
+                zv("a width of %d (the span's end), its unit in the ratio" % good_w_,
+                   zput(good_w_, max(1, round(ref_u_ * good_w_ / ref_w_))), False)
+                zv("a width of %d (the span's end), its unit 1" % good_w_, zput(good_w_, 1), True)
             zv("a unit of 0 beside the width", zput(vm_width_, 0), True)
             zv("a unit above the width", zput(vm_width_, vm_width_ + 1), True)
-            zv("a unit equal to the width", zput(vm_width_, vm_width_), False)
+            zv("a unit equal to the width", zput(vm_width_, vm_width_), True)
             for lo_ in (1162, 1164, 1166, 1168, 1170, 1174, 1178, 1190, 1192):
                 zv("the u16 at +%d changed beside the VM's width" % lo_,
                    zput(vm_width_, vm_unit_, {lo_: struct.pack("<H", struct.unpack_from("<H", zr_[cv_n], zat_[0] + lo_)[0] ^ 0x0101)}),
@@ -3563,9 +3585,40 @@ try:
             cv_verdict("the 1530-byte record's width 351 against 599 on the two sides",
                        cv_put(R, {short_at_ + 1172: struct.pack("<H", 351)}),
                        cv_put(R, {short_at_ + 1172: struct.pack("<H", 599)}), True)
-            check("W36-0f.4b the gate names the width and unit of a zoomed record as derived",
-                  {"view pane width uid 2", "view pane unit uid 2"} <= g.canonical_all(zr_)[2][cv_n],
-                  "%r" % (sorted(g.canonical_all(zr_)[2][cv_n]),))
+            # a unit of 0, or one above its width, is in a ratio but is no zoom's unit (a unit that equals the
+            # other side's is no difference, so the pairs below differ)
+            for label_, u_t_, u_r_, want_fail_ in (("a unit of 0 against 1", 0, 1, True),
+                                                   ("a unit of 1 against 0", 1, 0, True),
+                                                   ("units above their widths on both sides, in the ratio", 352, 600, True),
+                                                   ("the same widths with units in the ratio", 104, 178, False)):
+                zv2("a unit pair, %s" % label_,
+                    zbytes(zr_, {zat_ + 1172: struct.pack("<H", 351), zat_ + 1180: struct.pack("<H", u_t_)}),
+                    zbytes(zr_, {zat_ + 1180: struct.pack("<H", u_r_)}), want_fail_)
+            vm_shape_ = zbytes(zr_, {zat_ + 1172: struct.pack("<H", 351), zat_ + 1180: struct.pack("<H", 104)})
+            for label_, a_, b_ in (("the VM's save against the reference", vm_shape_, zr_),
+                                   ("the reference against the VM's save", zr_, vm_shape_)):
+                check("W36-0f.4b the gate names the width and unit of a zoomed record as derived, %s" % label_,
+                      {"view pane width uid 2", "view pane unit uid 2"} <= g.canonical_all(a_, b_)[2][cv_n],
+                      "%r" % (sorted(g.canonical_all(a_, b_)[2][cv_n]),))
+            # W36-C.1: the unit is noise only against the other side's different width; alone, or against an
+            # equal width, it is not named
+            def zcanon(label_, a_, b_=None):
+                try:
+                    return g.canonical_all(a_, b_)[2][cv_n]
+                except Exception as exc:   # noqa: BLE001 - a gate that raises is the finding
+                    check("gate raised %s in %s: %s" % (type(exc).__name__, label_, str(exc)[:60]), False)
+                    return None
+
+            for label_, got_ in (("without the other side", zcanon("the unit, no other side", vm_shape_)),
+                                 ("against an equal width", zcanon("the unit, an equal width", zr_, zr_)),
+                                 ("against a stream that ends before the unit",
+                                  zcanon("the unit, a short other stream",
+                                         vm_shape_, dict(zr_, **{cv_n: zr_[cv_n][:zat_ + 1180]}))),
+                                 ("against a stream with no CV_iew",
+                                  zcanon("the unit, no other CV_iew", vm_shape_,
+                                         {k_: v_ for k_, v_ in zr_.items() if k_ != cv_n}))):
+                check("W36-C.1 the unit is not derived %s" % label_,
+                      got_ is not None and "view pane unit uid 2" not in got_, "%r" % (got_,))
         for vname, ft_ in (("the year 2600", filetime_of(2600)), ("the year 2001", filetime_of(2001)),
                            ("one tick below the span", ls_lo - 1), ("one tick above the span", ls_hi + 1)):
             slot_ = struct.pack("<I", 0x40) + struct.pack("<Q", ft_)
