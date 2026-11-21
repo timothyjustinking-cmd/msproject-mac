@@ -275,6 +275,9 @@ CVIEW_STAMP_ID = 0x22400015
 CVIEW_STAMP_SPAN = (0x3D1412C0, 0x3D2C12C0)
 CVIEW_STATE_ID = 0x22400008
 CVIEW_STATE_MIN = 1194
+# The three date words are the zoom window's dates as well as a session's (the zoom writes the window in
+# +1176 and +1182): a word is noise only in a pair whose control and null hold two different in-span dates in it
+# (`_pair_date_differs`, W36b-0.2); everywhere else it is compared.
 CVIEW_DATE_AT = (1176, 1182, 1186)
 CVIEW_DATE_SPAN = (220968000, 226137600)
 
@@ -726,26 +729,75 @@ def _unit_follows_width(mine, theirs):
     return abs(u1 * w2 - u2 * w1) <= max(w1, w2)
 
 
-def _canon_cview_var2(data, streams, other_streams=None):
+def _bag_chains(data, meta):
+    """(uid, records) of each bag block (VarMeta key BAG_KEY, a real offset) of the CV_iew/Var2Data stream
+    `data`, read by its VarMeta `meta`, in the VarMeta's order.  `records` are the block's framed records
+    (`frame_records`), or None when its length word runs past the stream or its records do not chain exactly
+    to its end: the one reading of a bag block, shared by the canonical form and the pair (W36b-0.2)."""
+    if data is None:
+        return
+    for uid, off, key in _meta_blocks(meta):
+        if key != BAG_KEY or off == 0xFFFFFFFF or off + 4 > len(data):
+            continue
+        end = off + 4 + _u32(data, off)
+        yield uid, (frame_records(data[:end], off + 20) if end <= len(data) else None)
+
+
+def _is_view_state(rid, kind, length):
+    """A view-state record: id 0x22400008, kind 1, at least CVIEW_STATE_MIN bytes."""
+    return rid == CVIEW_STATE_ID and kind == 1 and length >= CVIEW_STATE_MIN
+
+
+def _state_dates(streams, uid):
+    """[(length, (the date words +1176, +1182 and +1186))] of the view-state records of the bag block of
+    VarMeta uid `uid` in `streams`, in the block's order; None when the stream or the block is missing or the
+    block's records do not chain exactly to its end."""
+    data = streams.get(CVIEW_VAR2)
+    for u, recs in _bag_chains(data, streams.get(VAR_META[CVIEW_VAR2])):
+        if u != uid:
+            continue
+        if recs is None:
+            return None
+        return [(length, tuple(_u32(data, pos + 12 + lo) for lo in CVIEW_DATE_AT))
+                for pos, length, rid, kind in recs if _is_view_state(rid, kind, length)]
+    return None
+
+
+def _pair_date_differs(pair, uid, index, length, which):
+    """True when the pair's control and its control null hold two different dates, both inside the span, at
+    date word `which` (0 to 2) of the `index`th view-state record of block `uid`, a record of `length` bytes
+    in both.  Only then is that word a session field of this pair; in every other pair it is data, so a
+    zoom save's window dates are compared (W36b-0.2 / R36W-1)."""
+    if pair is None:
+        return False
+    ctl, nul = (_state_dates(side, uid) for side in pair)
+    if ctl is None or nul is None or index >= len(ctl) or index >= len(nul):
+        return False
+    if ctl[index][0] != length or nul[index][0] != length:
+        return False
+    a, b = ctl[index][1][which], nul[index][1][which]
+    return a != b and all(CVIEW_DATE_SPAN[0] <= w <= CVIEW_DATE_SPAN[1] for w in (a, b))
+
+
+def _canon_cview_var2(data, streams, other_streams=None, pair=None):
     """CV_iew/Var2Data: the view stamp of a view-stamp record and the three date words of a view-state
     record are session fields, each replaced in place (the length does not change, so the font-row
     windows still find their offsets) and each named in the third result with its block's uid, only in
     a bag block whose records chain exactly to the block's end and only as a value a save writes
     (W36-0f.4.2).  The Gantt pane width is a machine field; the unit word beside it is noise only
     together with a different width on the other side, in the ratio of the two widths (W36-C.1), so
-    the other side's streams are needed to name it."""
+    the other side's streams are needed to name it.  A view date word is a session field only where the
+    pair's control and its null differ in it (`pair` = the control's and the null's raw streams): the
+    zoom window's dates are what a zoom writer must get right, so they are data in every other pair
+    (W36b-0.2)."""
     out = bytearray(data)
     noise = set()
     derived = set()
-    meta = streams.get(VAR_META[CVIEW_VAR2])
     # the other side's record is read at the same offset, without a parse of its own: where its framing
     # differs, the header bytes of the record differ and are compared (W36-C.1)
     other_data = None if other_streams is None else other_streams.get(CVIEW_VAR2)
-    for uid, off, key in _meta_blocks(meta):
-        if key != BAG_KEY or off == 0xFFFFFFFF or off + 4 > len(data):
-            continue
-        end = off + 4 + _u32(data, off)
-        recs = frame_records(data[:end], off + 20) if end <= len(data) else None
+    for uid, recs in _bag_chains(data, streams.get(VAR_META[CVIEW_VAR2])):
+        states = 0
         for pos, length, rid, kind in recs or []:
             at = pos + 12
             if rid == CVIEW_STAMP_ID and kind == 1 and length == 20 and _u32(data, at) == 0 and \
@@ -753,9 +805,11 @@ def _canon_cview_var2(data, streams, other_streams=None):
                 out[at + 4:at + 8] = bytes(4)
                 noise.update(range(at + 4, at + 8))
                 derived.add("view stamp uid %d" % uid)
-            elif rid == CVIEW_STATE_ID and kind == 1 and length >= CVIEW_STATE_MIN:
-                for lo in CVIEW_DATE_AT:
-                    if CVIEW_DATE_SPAN[0] <= _u32(data, at + lo) <= CVIEW_DATE_SPAN[1]:
+            elif _is_view_state(rid, kind, length):
+                states += 1
+                for which, lo in enumerate(CVIEW_DATE_AT):
+                    if (CVIEW_DATE_SPAN[0] <= _u32(data, at + lo) <= CVIEW_DATE_SPAN[1]
+                            and _pair_date_differs(pair, uid, states - 1, length, which)):
                         out[at + lo:at + lo + 4] = bytes(4)
                         noise.update(range(at + lo, at + lo + 4))
                         derived.add("view date uid %d +%d" % (uid, lo))
@@ -787,20 +841,21 @@ for _name in NOTE_KEYS:
     CANON[_name] = _canon_note_var2(_name)
 
 
-def canonical_all(streams, other=None):
+def canonical_all(streams, other=None, pair=None):
     """-> (canonical streams, noise offsets, derived fields), each a dict by stream name.  The
     CANON streams have their decoded noise fields replaced by fixed placeholders; `noise` holds the
     offsets of the raw bytes that were replaced and `derived` the name of each replaced field.  A
     placeholder can equal a raw field (a size word of 0, an emptied path record), so two canonical
     forms are equal only when the same fields were replaced on both sides (W36-0d.1).  `other` is the
     other side's raw streams, read only by the one field that is noise relative to the other side (the
-    Gantt unit word, W36-C.1)."""
+    Gantt unit word, W36-C.1); `pair` is the control's and the null's raw streams, read only by the view
+    date words, which are noise only where those two differ (W36b-0.2)."""
     out = {}
     noise = {}
     derived = {}
     for name, data in streams.items():
         if name == CVIEW_VAR2:
-            out[name], noise[name], derived[name] = CANON[name](data, streams, other)
+            out[name], noise[name], derived[name] = CANON[name](data, streams, other, pair)
         elif name in CANON:
             out[name], noise[name], derived[name] = CANON[name](data, streams)
         else:
@@ -1102,7 +1157,9 @@ def compare(traced, ref, ctl, nul):
         lines.append("stream name collision %s" % key)
         problems += 1
     raw_t, raw_r = getattr(traced, "raw", {}), getattr(ref, "raw", {})
-    (traced_c, _, d_traced), (ref_c, _, d_ref) = canonical_all(traced, ref), canonical_all(ref, traced)
+    pair = (ctl, nul)
+    (traced_c, _, d_traced), (ref_c, _, d_ref) = (canonical_all(traced, ref, pair),
+                                                  canonical_all(ref, traced, pair))
     traced, ref = traced_c, ref_c
     ctl, nul = canonical(ctl), canonical(nul)
     for name in names:

@@ -389,10 +389,8 @@ try:
                                 struct.unpack_from("<I", data, at_)[0] == 0 and \
                                 0x3D1412C0 <= struct.unpack_from("<I", data, at_ + 4)[0] <= 0x3D2C12C0:
                             out.update(range(at_ + 4, at_ + 8))
-                        if rid_ == 0x22400008 and kind_ == 1 and len_ >= 1194:
-                            for lo_ in (1176, 1182, 1186):
-                                if 220968000 <= struct.unpack_from("<I", data, at_ + lo_)[0] <= 226137600:
-                                    out.update(range(at_ + lo_, at_ + lo_ + 4))
+                        # the view date words are noise only where the pair's control and null differ in them
+                        # (W36b-0.2): the spec reads no pair here, so it replaces none
                             wide_ = struct.unpack_from("<H", data, at_ + 1172)[0]
                             if len_ == 41363 and 128 <= wide_ <= 4096:
                                 # the unit at +1180 is noise only against a different width on the other
@@ -1609,8 +1607,12 @@ try:
                 struct.pack_into("<I", meta_, 24 + 12 * k_ + 8, rekey_)
             return dict(streams_, **{cv_n: var2_, cv_meta_n: bytes(meta_)})
 
-        def cv_verdict(label_, traced_, ref_, want_fail_):
-            lines_, problems_, checked_, unchecked_ = g.compare(traced_, ref_, C, N)
+        def cv_verdict(label_, traced_, ref_, want_fail_, pair_=None):
+            try:
+                lines_, problems_, checked_, unchecked_ = g.compare(traced_, ref_, *(pair_ or (C, N)))
+            except Exception as exc:   # noqa: BLE001 - a gate that raises is the finding (W36-0e.1)
+                check("W36-0f.4.2 %s: the gate raised %s: %s" % (label_, type(exc).__name__, str(exc)[:60]), False)
+                return
             check("W36-0f.4.2 %s %s" % (label_, "fails" if want_fail_ else "is noise"),
                   (problems_ >= 1 and any(cv_n in ln for ln in lines_)) if want_fail_ else problems_ == 0,
                   "%r" % (lines_,))
@@ -1672,63 +1674,117 @@ try:
         cv_verdict("a block that is not of the bag key: a moved stamp",
                    cv_put(plain_, {stamp_at + 4: struct.pack("<I", here_ + 0x1000)}), plain_, True)
         # the stamp moved in the bag block of another uid is a different field of another block
-        check("W36-0f.4.2 the gate names the stamp of block 2 and the date words of block 3 as derived",
+        # W36b-0.2 (R36W-1): a view date word is a session field only where the pair's control and its null
+        # hold two different in-span dates in it.  A pair is built here from a base save by putting date a in
+        # the control and date b in the null at the words it names.
+        da_, db_ = date_span[0] + 14400, date_span[0] + 28800
+
+        def dpair(base_, at_=None, los_=(1176, 1182, 1186)):
+            at_ = date_at if at_ is None else at_
+            return (cv_put(base_, {at_ + lo_: struct.pack("<I", da_) for lo_ in los_}),
+                    cv_put(base_, {at_ + lo_: struct.pack("<I", db_) for lo_ in los_}))
+
+        flat_ = (R, R)
+        triple_pair = dpair(R)
+        check("W36b-0.2 the gate names the stamp of block 2 and, for a pair that differs in them, the date "
+              "words of block 3 as derived",
               {"view stamp uid 2", "view date uid 3 +1176", "view date uid 3 +1182", "view date uid 3 +1186"} <=
-              g.canonical_all(R)[2][cv_n])
+              g.canonical_all(R, None, triple_pair)[2][cv_n])
+        check("W36b-0.2 the gate names no date word of a pair that agrees in them, and still names the stamp",
+              {n_ for n_ in g.canonical_all(R, None, flat_)[2][cv_n] if n_.startswith("view date")} == set() and
+              {n_ for n_ in g.canonical_all(R)[2][cv_n] if n_.startswith("view date")} == set() and
+              "view stamp uid 2" in g.canonical_all(R, None, flat_)[2][cv_n])
 
         # the three date words of a view-state record
         for lo_ in (1176, 1182, 1186):
             here_ = cv_u32(R[cv_n], date_at + lo_)
+            pair_lo = dpair(R, los_=(lo_,))
             for what_, v_ in (("another date", date_span[0] + 14400 * 3), ("the span's first value", date_span[0]),
                               ("the span's last value", date_span[1])):
                 moved = cv_put(R, {date_at + lo_: struct.pack("<I", v_)})
-                cv_verdict("view date +%d: %s (%d), traced" % (lo_, what_, v_), moved, R, False)
-                cv_verdict("view date +%d: %s (%d), reference" % (lo_, what_, v_), R, moved, False)
+                # a pair that agrees in the word: a date moved in it is data (the zoom window, R36W-1)
+                cv_verdict("view date +%d: %s (%d), traced, the pair agreeing" % (lo_, what_, v_), moved, R, True)
+                cv_verdict("view date +%d: %s (%d), reference, the pair agreeing" % (lo_, what_, v_), R, moved, True)
+                cv_verdict("view date +%d: %s (%d), traced, the pair's control and null differing in it" %
+                           (lo_, what_, v_), moved, R, False, pair_lo)
+                cv_verdict("view date +%d: %s (%d), reference, the pair's control and null differing in it" %
+                           (lo_, what_, v_), R, moved, False, pair_lo)
+                # a pair that differs in another word excuses none of this one
+                for other_lo in (x_ for x_ in (1176, 1182, 1186) if x_ != lo_):
+                    cv_verdict("view date +%d: %s, the pair differing at +%d only" % (lo_, what_, other_lo),
+                               moved, R, True, dpair(R, los_=(other_lo,)))
             for what_, v_ in (("0", 0), ("1", 1), ("0xffffffff", 0xFFFFFFFF), ("0x7fffffff", 0x7FFFFFFF),
                               ("the unset 14400", 14400), ("the unset 0x340a75ff", 0x340A75FF),
                               ("one under the span", date_span[0] - 1), ("one over the span", date_span[1] + 1),
                               ("a 1990 date", 60000000)):
                 out_ = cv_put(R, {date_at + lo_: struct.pack("<I", v_)})
-                cv_verdict("view date +%d: %s, traced" % (lo_, what_), out_, R, True)
-                cv_verdict("view date +%d: %s, reference" % (lo_, what_), R, out_, True)
+                cv_verdict("view date +%d: %s, traced" % (lo_, what_), out_, R, True, pair_lo)
+                cv_verdict("view date +%d: %s, reference" % (lo_, what_), R, out_, True, pair_lo)
                 cv_verdict("view date +%d: %s against another date" % (lo_, what_), out_,
-                           cv_put(R, {date_at + lo_: struct.pack("<I", here_ + 14400)}), True)
+                           cv_put(R, {date_at + lo_: struct.pack("<I", here_ + 14400)}), True, pair_lo)
                 cv_verdict("view date +%d: %s on both sides is equal" % (lo_, what_), out_, out_, False)
+            # a pair of which either save holds an out-of-span word at it excuses nothing
+            for what_, v_ in (("0", 0), ("the unset 14400", 14400), ("one over the span", date_span[1] + 1)):
+                half_ = (cv_put(R, {date_at + lo_: struct.pack("<I", da_)}),
+                         cv_put(R, {date_at + lo_: struct.pack("<I", v_)}))
+                moved = cv_put(R, {date_at + lo_: struct.pack("<I", db_)})
+                cv_verdict("view date +%d: a moved date, the pair's null holding %s" % (lo_, what_),
+                           moved, R, True, half_)
+                cv_verdict("view date +%d: a moved date, the pair's control holding %s" % (lo_, what_),
+                           moved, R, True, half_[::-1])
+            # a pair that differs in an in-span date excuses the same word in the traced save and its reference
+            cv_verdict("view date +%d: the traced and the reference each holding another date, the pair differing"
+                       % lo_, cv_put(R, {date_at + lo_: struct.pack("<I", da_)}),
+                       cv_put(R, {date_at + lo_: struct.pack("<I", db_)}), False, pair_lo)
         triple = R
         for k_, lo_ in enumerate((1176, 1182, 1186)):
             triple = cv_put(triple, {date_at + lo_: struct.pack("<I", date_span[0] + 14400 * (k_ + 1))})
-        cv_verdict("the three view dates changed", triple, R, False)
+        cv_verdict("the three view dates changed, the pair agreeing", triple, R, True)
+        cv_verdict("the three view dates changed, the pair differing in all three", triple, R, False, triple_pair)
         # the unset words of the other view-state records are not noise: a date against the unset value
         for lo_ in (1176, 1182, 1186):
             cv_verdict("view date +%d: a date against the unset value in the 41363-byte record" % lo_,
                        cv_put(R, {unset_at + lo_: struct.pack("<I", date_span[0] + 14400)}), R, True)
-        both_ = cv_put(R, {unset_at + 1176: struct.pack("<I", date_span[0] + 14400)})
-        cv_verdict("view date +1176: two different dates in the 41363-byte record",
-                   cv_put(R, {unset_at + 1176: struct.pack("<I", date_span[0] + 28800)}), both_, False)
+            cv_verdict("view date +%d: a date against the unset value in the 41363-byte record, the pair "
+                       "differing in dates there" % lo_,
+                       cv_put(R, {unset_at + lo_: struct.pack("<I", da_)}), R, True,
+                       dpair(R, unset_at, (lo_,)))
+        both_ = cv_put(R, {unset_at + 1176: struct.pack("<I", da_)})
+        cv_verdict("view date +1176: two different dates in the 41363-byte record, the pair agreeing",
+                   cv_put(R, {unset_at + 1176: struct.pack("<I", db_)}), both_, True)
+        cv_verdict("view date +1176: two different dates in the 41363-byte record, the pair differing in them",
+                   cv_put(R, {unset_at + 1176: struct.pack("<I", db_)}), both_, False,
+                   dpair(R, unset_at, (1176,)))
         # the bytes around the words are compared, also beside a date that moved
-        moved = cv_put(R, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)})
+        one_ = dpair(R, los_=(1176,))
+        moved = cv_put(R, {date_at + 1176: struct.pack("<I", da_)})
         for what_, edit_ in (("the u16 at +1172", {date_at + 1172: b"\x65\x00"}),
                              ("the u16 at +1180", {date_at + 1180: b"\x65\x00"}),
                              ("the u16 at +1190", {date_at + 1190: b"\x80\x80"}),
                              ("the byte at +1175", {date_at + 1175: b"\x55"}),
                              ("the byte at +1100", {date_at + 1100: b"\x55"}),
-                             ("a word at +1100 set to a date", {date_at + 1100: struct.pack("<I", date_span[0] + 14400)}),
+                             ("a word at +1100 set to a date", {date_at + 1100: struct.pack("<I", da_)}),
                              ("the byte at +1194", {date_at + 1194: b"\x55"})):
             cv_verdict("the view-state record: %s" % what_, cv_put(R, edit_), R, True)
-            cv_verdict("the view-state record: %s beside a moved date" % what_, cv_put(moved, edit_), R, True)
+            cv_verdict("the view-state record: %s beside a moved date" % what_, cv_put(moved, edit_), R, True, one_)
+        cv_verdict("the view-state record: a moved date alone, the pair differing in it", moved, R, False, one_)
         # a date-sized word at +1100 is data: two different dates there on both sides fail
-        d1_ = cv_put(R, {date_at + 1100: struct.pack("<I", date_span[0] + 14400)})
-        d2_ = cv_put(R, {date_at + 1100: struct.pack("<I", date_span[0] + 28800)})
+        d1_ = cv_put(R, {date_at + 1100: struct.pack("<I", da_)})
+        d2_ = cv_put(R, {date_at + 1100: struct.pack("<I", db_)})
         cv_verdict("a word at +1100 holding two different dates in the view-state record", d1_, d2_, True)
+        cv_verdict("a word at +1100 holding two different dates, the pair differing at +1100", d1_, d2_, True,
+                   dpair(R, date_at + 1100 - 1176, (1176,)))
         cv_verdict("a word at +1100 holding the same date on both sides", d1_, d1_, False)
         # a view-state record is one of kind 1, of id 0x22400008 and of at least 1194 bytes
         kind2_ = cv_rebuilt(R, 3, lambda recs_: [r_.__setitem__(1, 2) for r_ in recs_ if r_[0] == 0x22400008])
         cv_verdict("a view-state record of kind 2 whose dates differ between the saves",
-                   cv_put(kind2_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), kind2_, True)
+                   cv_put(kind2_, {date_at + 1176: struct.pack("<I", da_)}), kind2_, True,
+                   dpair(kind2_, los_=(1176,)))
         cv_verdict("a view-state record of kind 2 on both sides is equal", kind2_, kind2_, False)
         other_ = cv_rebuilt(R, 3, lambda recs_: [r_.__setitem__(0, 0x22400009) for r_ in recs_ if r_[0] == 0x22400008])
         cv_verdict("a record of another id with the view-state record's payload, its dates differing",
-                   cv_put(other_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), other_, True)
+                   cv_put(other_, {date_at + 1176: struct.pack("<I", da_)}), other_, True,
+                   dpair(other_, los_=(1176,)))
         for size_, want_ in ((1193, True), (1194, False), (1202, False)):
             def cut_(recs_, size_=size_):
                 for r_ in recs_:
@@ -1736,22 +1792,79 @@ try:
                         r_[2] = r_[2][:size_] + bytearray(max(0, size_ - len(r_[2])))
             sized_ = cv_rebuilt(R, 3, cut_)
             cv_verdict("a view-state record of %d bytes whose dates differ" % size_,
-                       cv_put(sized_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), sized_, want_)
+                       cv_put(sized_, {date_at + 1176: struct.pack("<I", da_)}), sized_, want_,
+                       dpair(sized_, los_=(1176,)))
         # and, as the stamp, in a bag block that chains exactly
         jam_ = cv_rebuilt(R, 3, lambda recs_: b"\x01\x02\x03\x04\x05")
         cv_verdict("a bag block that does not chain: a moved date",
-                   cv_put(jam_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), jam_, True)
+                   cv_put(jam_, {date_at + 1176: struct.pack("<I", da_)}), jam_, True,
+                   dpair(jam_, los_=(1176,)))
         plain_ = cv_rebuilt(R, 3, lambda recs_: None, rekey_=0x20400007)
         cv_verdict("a block that is not of the bag key: a moved date",
-                   cv_put(plain_, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), plain_, True)
+                   cv_put(plain_, {date_at + 1176: struct.pack("<I", da_)}), plain_, True,
+                   dpair(plain_, los_=(1176,)))
         # a block whose length word runs past the end of the stream is not read to the stream's end
         blk3_ = [o_ for u_, o_, k_ in blocks(R[cv_meta_n]) if u_ == 3 and k_ == 0x20400006][0]
         cut_b = bytearray(R[cv_n][:blk3_ + 4 + struct.unpack_from("<I", R[cv_n], blk3_)[0]])
         struct.pack_into("<I", cut_b, blk3_, len(cut_b) - blk3_ - 4 + 100)
         cut_s = dict(R, **{cv_n: bytes(cut_b)})
         cv_verdict("a bag block whose length word runs 100 bytes past the stream: a moved date",
-                   cv_put(cut_s, {date_at + 1176: struct.pack("<I", date_span[0] + 14400)}), cut_s, True)
+                   cv_put(cut_s, {date_at + 1176: struct.pack("<I", da_)}), cut_s, True,
+                   dpair(cut_s, los_=(1176,)))
         cv_verdict("a bag block whose length word runs past the stream, on both sides, is equal", cut_s, cut_s, False)
+        # the pair's own block is read as the saves' are: one that runs past the stream excuses nothing
+        cv_verdict("view date +1176: a moved date, the pair's control and null holding the block's length word "
+                   "100 bytes past the stream", moved, R, True, dpair(cut_s, los_=(1176,)))
+        # the pair is read at the record's place in its block: a pair that differs in the block's first
+        # view-state record excuses none of the second
+        twin_ = cv_rebuilt(R, 3, lambda recs_: recs_.append(
+            [0x22400008, 1, bytearray(R[cv_n][date_at:date_at + 1530]), b""]))
+        twin_at = [r_[0] for r_ in bag_records(twin_[cv_n], twin_[cv_meta_n])
+                   if r_[2] == 0x22400008 and r_[1] == 1530][-1]
+        check("W36b-0.2 the stream with a second 1530-byte view-state record in block 3 holds it after the first",
+              twin_at > date_at and twin_[cv_n][twin_at:twin_at + 1530] == R[cv_n][date_at:date_at + 1530])
+        cv_verdict("view date +1176: the first of two view-state records moved, the pair differing in it",
+                   cv_put(twin_, {date_at + 1176: struct.pack("<I", da_)}), twin_, False,
+                   dpair(twin_, date_at, (1176,)))
+        cv_verdict("view date +1176: the second of two view-state records moved, the pair differing in it",
+                   cv_put(twin_, {twin_at + 1176: struct.pack("<I", da_)}), twin_, False,
+                   dpair(twin_, twin_at, (1176,)))
+        cv_verdict("view date +1176: the second of two view-state records moved, the pair differing in the first",
+                   cv_put(twin_, {twin_at + 1176: struct.pack("<I", da_)}), twin_, True,
+                   dpair(twin_, date_at, (1176,)))
+        cv_verdict("view date +1176: the first of two view-state records moved, the pair differing in the second",
+                   cv_put(twin_, {date_at + 1176: struct.pack("<I", da_)}), twin_, True,
+                   dpair(twin_, twin_at, (1176,)))
+        # a pair whose control or null holds fewer view-state records than the block masked, or none of the
+        # block or of the stream, excuses nothing and the gate does not raise
+        twin_moved = cv_put(twin_, {twin_at + 1176: struct.pack("<I", da_)})
+        cv_verdict("view date +1176: the second of two records moved, the control's block holding one record",
+                   twin_moved, twin_, True, (dpair(R, los_=(1176,))[0], dpair(twin_, twin_at, (1176,))[1]))
+        cv_verdict("view date +1176: the second of two records moved, the null's block holding one record",
+                   twin_moved, twin_, True, (dpair(twin_, twin_at, (1176,))[0], dpair(R, los_=(1176,))[1]))
+        bare_ = {k_: v_ for k_, v_ in R.items() if k_ != cv_n}
+        cv_verdict("view date +1176: a moved date, the pair's control without the CV_iew stream",
+                   moved, R, True, (bare_, one_[1]))
+        cv_verdict("view date +1176: a moved date, the pair's null without the CV_iew stream",
+                   moved, R, True, (one_[0], bare_))
+        cv_verdict("view date +1176: a moved date, the pair's control and null without the CV_iew stream",
+                   moved, R, True, (bare_, bare_))
+        bare_meta_ = {k_: v_ for k_, v_ in R.items() if k_ != cv_meta_n}
+        cv_verdict("view date +1176: a moved date, the pair's control without the CV_iew VarMeta",
+                   moved, R, True, (bare_meta_, one_[1]))
+        cv_verdict("view date +1176: a moved date, the pair's null without the CV_iew VarMeta",
+                   moved, R, True, (one_[0], bare_meta_))
+        # the pair is read by the record's place in its block and by its length: a pair whose control or null
+        # holds that record at another length, or another record, excuses nothing
+        long_ = cv_rebuilt(R, 3, lambda recs_: [r_.__setitem__(2, r_[2] + bytearray(2)) for r_ in recs_
+                                                 if r_[0] == 0x22400008 and len(r_[2]) == 1530])
+        check("W36b-0.2 the stream with the 1530-byte view-state record widened to 1532 bytes holds it at the "
+              "same place", long_[cv_n][date_at + 1176:date_at + 1180] == R[cv_n][date_at + 1176:date_at + 1180])
+        for what_, mixed_ in (("the control's record 2 bytes longer", (dpair(long_, los_=(1176,))[0], one_[1])),
+                              ("the null's record 2 bytes longer", (one_[0], dpair(long_, los_=(1176,))[1]))):
+            cv_verdict("view date +1176: a moved date, the pair with %s" % what_, moved, R, True, mixed_)
+        cv_verdict("view date +1176: a moved date, the pair differing in another view-state record only",
+                   moved, R, True, dpair(R, unset_at, (1176,)))
         # a stamp is named by its block: a raw 0 in one block is not made equal by a stamp in another
         dup_ = cv_rebuilt(R, 1, lambda recs_: recs_.append([0x22400015, 1, bytearray(R[cv_n][stamp_at:stamp_at + 20]), b""]))
         dup_at = 4 + cv_u32(R[cv_n], 0) + 12
@@ -3660,8 +3773,11 @@ try:
             vm_unit_ = max(1, round(ref_u_ * vm_width_ / ref_w_))
             moved_date_ = struct.pack("<I", cv_u32(zr_[cv_n], zat_[0] + 1176) + 28800)
             zv("the reference against itself", zr_, False)
+            # W36b-0.2 (R36W-1): the zoom window's dates are what a zoom writer must get right.  The pair's
+            # control and null agree in them, so a date moved is data (it was noise before 0.2)
             zv("the VM's shape: width %d, unit %d, the first date moved" % (vm_width_, vm_unit_),
-               zput(vm_width_, vm_unit_, {1176: moved_date_}), False)
+               zput(vm_width_, vm_unit_, {1176: moved_date_}), True)
+            zv("the reference's shape with its first date moved", zput(None, None, {1176: moved_date_}), True)
             zv("the VM's width and unit, the dates as the reference's", zput(vm_width_, vm_unit_), False)
             # W36-C.1 (R36G0f-1): the unit follows the width.  The VM's recorded unit of each recording, read
             # from the VM's saved copy (the Gantt record's +1180), is inside the ratio rule.
@@ -3708,6 +3824,19 @@ try:
                       (problems_ >= 1 and any(cv_n in ln for ln in lines_)) if want_fail_ else problems_ == 0,
                       "%r" % (lines_,))
 
+            # W36b-0.2 (R36W-1, the review's case): a zoom-custom save with the window's two dates, +1176 and
+            # +1182 of the Gantt record, moved by 30 days (432000) inside the span FAILs against the real control
+            # and null, in each direction; the reference against itself passes
+            for lo_ in (1176, 1182):
+                check("W36b-0.2 the zoom-custom reference's window date +%d is inside the span" % lo_,
+                      date_span[0] <= cv_u32(zr_[cv_n], zat_ + lo_) <= date_span[1] - 432000)
+            both_dates_ = {zat_ + lo_: struct.pack("<I", cv_u32(zr_[cv_n], zat_ + lo_) + 432000)
+                           for lo_ in (1176, 1182)}
+            zv2("the zoom window's dates +1176 and +1182 moved by 30 days, traced",
+                zbytes(zr_, both_dates_), zr_, True)
+            zv2("the zoom window's dates +1176 and +1182 moved by 30 days, reference",
+                zr_, zbytes(zr_, both_dates_), True)
+            zv2("the zoom reference against itself", zr_, zr_, False)
             # the other 41363-byte record is the same kind: its width 100 compared against a pane width fails,
             # two pane widths are noise
             other_at_ = [r_[0] for r_ in bag_records(zr_[cv_n], zr_[cv_meta_n])
