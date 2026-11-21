@@ -14,7 +14,10 @@ Remove-Item Env:TEMP -ErrorAction SilentlyContinue
 function Get-CimInstance { $null }
 . $Host1
 Check 'host.ps1 loads with TEMP unset and has a temp folder' ($null -eq $env:TEMP -and $script:tmp -and (Test-Path -LiteralPath $script:tmp))
-function Set-Kvp($n, $d) { 0 }
+# W36c-0.2 (R36bCI-2): keep what vmx writes ("<id>|<code>" in `cmd`); the fake answers with that id, never
+# with one the test guessed from the clock.
+$script:sent = @{}
+function Set-Kvp($n, $d) { $script:sent[$n] = $d; 0 }
 # The reply the real guest agent (kvp/agent.ps1) sends, W36-0b.6 (R36G0-7).  The code vmx sends
 # returns the base64 text; the agent runs it through `Out-String -Width 300`, which ends the text
 # with a newline (CRLF in Windows PowerShell), announces `$o.Length` including that newline, and
@@ -48,21 +51,36 @@ function Reply([string]$text, [bool]$goodSha, [int]$lenDelta, [string]$nl = "`r`
     }
     $script:meta = "{0}|{1}|{2}|x" -f $script:seq, $n, ($o.Length + $lenDelta)
 }
+# W36c-0.2 (R36bCI-2): `$script:tickClock` makes every Get-Date call answer one second later than the one
+# before, a clock boundary between any two calls (a slow runner crosses one between Run and vmx).
+$script:tickCount = 0; $script:tickClock = $false
+function Get-Date {
+    [CmdletBinding()] param([Alias('f')][string]$Format)
+    if (-not $script:tickClock) { return Microsoft.PowerShell.Utility\Get-Date @PSBoundParameters }
+    $script:tickCount++
+    $d = [datetime]::Now.AddSeconds($script:tickCount)
+    if ($Format) { $d.ToString($Format) } else { $d }
+}
 function Get-GuestKvp {
     $h = $script:fake.Clone()
-    # the id vmx made is "HHmmss<seq>": answer with whatever id it asked for
-    $h['out_meta'] = $script:lastid + $script:meta.Substring($script:meta.IndexOf('|'))
+    # the id vmx made is "HHmmss<seq>", the text before the first '|' of what it wrote to `cmd`
+    $id = ([string]$script:sent['cmd']).Split('|')[0]
+    $h['out_meta'] = $id + $script:meta.Substring($script:meta.IndexOf('|'))
     $h
 }
 function Run($text, $goodSha, $lenDelta, $nl = "`r`n", $keepCr = $false, $dropPiece = -1, $raw = $null) {
     $script:seq = 0
     Reply $text $goodSha $lenDelta $nl $keepCr $dropPiece $raw
-    $script:lastid = "{0}{1}" -f (Get-Date -f HHmmss), 1
+    $script:sent = @{}
     try { $r = vmx 'x' 5; return @{ threw = $false; out = ($r -join "`n") } }
     catch { return @{ threw = $true; out = $_.Exception.Message } }
 }
 $r = Run 'hello' $true 0
 Check 'host.ps1 good reply (CRLF dropped by the XML parse): returns the text, no throw' (-not $r.threw -and $r.out -match 'hello')
+$script:tickClock = $true
+$r = Run 'hello' $true 0
+$script:tickClock = $false
+Check 'host.ps1 good reply with the clock a second on between Run and vmx (forced boundary): returns the text, no throw' (-not $r.threw -and $r.out -match 'hello')
 $r = Run 'hello' $true 0 "`r`n" $true
 Check 'host.ps1 good reply (CR kept as &#13;): returns the text, no throw' (-not $r.threw -and $r.out -match 'hello')
 $r = Run 'hello' $true 0 "`n"
