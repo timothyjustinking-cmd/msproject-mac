@@ -1093,6 +1093,29 @@ void test_edit_refusals(TestContext& t) {
         framing_refuses(damaged_bytes, {0x02400005u, 0, summary_ok},
                         "does not walk to its end by its record count",
                         "framing: a stream that does not walk to its end refused");
+        /* W36b-0.4 (R36W-4, R36G2-3): a record already in the stream is not
+         * appended a second time, whether the stream held it or the framing
+         * put it there; no pair updates a record by an insert. */
+        mppwrite::PropsRecordEdit const note{0x02400005u, 0, summary_ok};
+        mppwrite::PropsRecordEdit const baseline{
+            0x02401393u, 0, utf16_text(kBaselineText, 2)};
+        Bytes const note_once = mppwrite::props_insert_framing(bytes, note);
+        Bytes const baseline_once =
+            mppwrite::props_insert_framing(bytes, baseline);
+        framing_refuses(note_once, note, "is already in the stream",
+                        "framing: the note record twice refused");
+        framing_refuses(baseline_once, baseline, "is already in the stream",
+                        "framing: the baseline record twice refused");
+        /* the refusal is by id: another payload of the same id is refused,
+         * and the other measured id is still appended beside the first */
+        framing_refuses(note_once,
+                        {0x02400005u, 0, utf16_text("another note", 2)},
+                        "is already in the stream",
+                        "framing: the note id with another payload refused");
+        Bytes const both = mppwrite::props_insert_framing(note_once, baseline);
+        t.check(both.size() > note_once.size() &&
+                    u32_at(both, 12) == u32_at(bytes, 12) + 2,
+                "framing: the second measured id is appended beside the first");
     }
     {
         /* W35-0.4 (RC-W7): a record that exists but that no pair updated is
