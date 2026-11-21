@@ -211,20 +211,32 @@ if(CORE_BUILD_TESTS)
 
         # W36-2.4 (W36-0d.8, 0e.1): the guard meta-test removes each guard of the gate, named and
         # derived, in a copy and asserts the acceptance test above goes red (hundreds of gate copies,
-        # one test run each, 6 at a time: 75 minutes on a full run here, so it has its own limit).  Label trace_gate_meta:
-        # `ctest -L trace_gate_meta` runs it, `ctest -LE trace_gate_meta` leaves it out.  It runs on a
-        # fresh tree at each group close and in the CI job trace-gate-meta.
-        add_test(
-            NAME trace_gate_meta
-            COMMAND "${Python3_EXECUTABLE}"
-                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_gate_guards_meta.py"
-        )
-        set_tests_properties(trace_gate_meta PROPERTIES
-            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-            SKIP_RETURN_CODE 77
-            LABELS trace_gate_meta
-            TIMEOUT 10800
-        )
+        # one test run each, 6 at a time: 75 minutes on a full run here).  W36b-0.6 (R36W-6): it is two
+        # tests, one per shard, so each fits a CI job's limit: trace_gate_meta_named (the named GUARDS,
+        # `--only named`) and trace_gate_meta_derived (the derived candidates, `--only derived`).  Both carry
+        # the label trace_gate_meta, so `ctest -LE trace_gate_meta` leaves both out and
+        # `ctest -L trace_gate_meta` runs both; `-L trace_gate_meta_named` / `-L trace_gate_meta_derived` run
+        # one.  They run on a fresh tree at each group close and in the CI jobs trace-gate-meta-named and
+        # trace-gate-meta-derived.
+        # Local timings, one shard at a time through ctest, six workers on an eleven-core machine: named
+        # 24.2 minutes (1449 s), derived 41.0 minutes (2457 s).  The TIMEOUTs are three times that, for a
+        # hosted runner with fewer cores.
+        set(trace_gate_meta_timeout_named_ 4500)
+        set(trace_gate_meta_timeout_derived_ 7500)
+        foreach(shard_ named derived)
+            add_test(
+                NAME trace_gate_meta_${shard_}
+                COMMAND "${Python3_EXECUTABLE}"
+                        "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_gate_guards_meta.py"
+                        --only ${shard_}
+            )
+            set_tests_properties(trace_gate_meta_${shard_} PROPERTIES
+                WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+                SKIP_RETURN_CODE 77
+                LABELS "trace_gate_meta;trace_gate_meta_${shard_}"
+                TIMEOUT ${trace_gate_meta_timeout_${shard_}_}
+            )
+        endforeach()
     endif()
 
     # W36-0.5: the trace host scripts (vmx throws on a sha MISMATCH or a wrong reply length;

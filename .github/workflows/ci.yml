@@ -353,18 +353,22 @@ jobs:
                 --output-on-failure --timeout 180
 
   # Wave 36 (W36-2.4): the trace gate's guard-removal run (tools/trace/test_gate_guards_meta.py)
-  # left trace_gate_guards and is its own ctest, labelled trace_gate_meta, with its own TIMEOUT.
-  # The two jobs above exclude it (-LE trace_gate_meta); this is the one CI job that runs it.  It
-  # is Python only, so the tree is configured (that is what registers the test) and not built.
-  trace-gate-meta:
+  # left trace_gate_guards and is its own ctest.  W36b-0.6 (R36W-6): one job of about 75 minutes did not
+  # fit a hosted runner with room to spare, so it is two tests (trace_gate_meta_named: the named guards;
+  # trace_gate_meta_derived: the derived candidates), both labelled trace_gate_meta, one per job below.
+  # The two jobs above exclude both (-LE trace_gate_meta).  Each is Python only, so the tree is
+  # configured (that is what registers the tests) and not built.  Local timings, one shard at a time,
+  # six workers on an eleven-core machine: named 24.2 minutes, derived 41.0 minutes; the job limits are
+  # about three times those, for a runner with fewer cores.
+  trace-gate-meta-named:
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event != 'push')
-    name: trace-gate-meta
+    name: trace-gate-meta-named
     runs-on: ubuntu-latest
-    # A full run took 75 minutes on the builder's machine (eleven cores); the ctest TIMEOUT is 180.
-    timeout-minutes: 200
+    # 24.2 minutes locally for this shard; the ctest TIMEOUT of the test is set in CMakeLists.txt.
+    timeout-minutes: 90
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -389,6 +393,43 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCORE_WARNINGS_AS_ERRORS=ON
 
-      - name: Test the trace gate's guards (remove each, the acceptance test must go red)
+      - name: Test the trace gate's named guards (remove each, the acceptance test must go red)
         shell: bash
-        run: ctest --test-dir build -C Release -L trace_gate_meta --output-on-failure
+        run: ctest --test-dir build -C Release -L trace_gate_meta_named --output-on-failure
+
+  trace-gate-meta-derived:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event != 'push')
+    name: trace-gate-meta-derived
+    runs-on: ubuntu-latest
+    # 41.0 minutes locally for this shard; the ctest TIMEOUT of the test is set in CMakeLists.txt.
+    timeout-minutes: 150
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Python with olefile
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install olefile
+        shell: bash
+        run: python -m pip install --quiet olefile
+
+      - name: Configure
+        shell: bash
+        run: |
+          cmake -S . -B build \
+            -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCORE_WARNINGS_AS_ERRORS=ON
+
+      - name: Test the trace gate's derived guards (remove each, the acceptance test must go red)
+        shell: bash
+        run: ctest --test-dir build -C Release -L trace_gate_meta_derived --output-on-failure

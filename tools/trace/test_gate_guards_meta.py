@@ -16,10 +16,11 @@ listed guard is red, every text to remove was found in the gate exactly as many 
 the unmodified gate passes (`--skip-baseline` leaves that to a caller that has run
 test_trace_gate.py itself).  Exit 1 otherwise; 77 when olefile is absent.
 
-W36-2.4: this is its own ctest, `trace_gate_meta` (label `trace_gate_meta`, own TIMEOUT), and no
-longer runs at the end of test_trace_gate.py, so `ctest -R trace_gate_guards` runs the acceptance
-sweeps only.  Run it with `ctest -L trace_gate_meta` on a fresh tree at each group close and in
-the CI job `trace-gate-meta`.
+W36-2.4: this is its own ctest and no longer runs at the end of test_trace_gate.py, so
+`ctest -R trace_gate_guards` runs the acceptance sweeps only.  W36b-0.6: it is two ctests, one per
+shard, `trace_gate_meta_named` (`--only named`) and `trace_gate_meta_derived` (`--only derived`), each
+with its own TIMEOUT and both labelled `trace_gate_meta`.  Run both with `ctest -L trace_gate_meta` on
+a fresh tree at each group close; the CI jobs are `trace-gate-meta-named` and `trace-gate-meta-derived`.
 
 W36-0e.1 (R36G0d-1): the named list above can only hold the guards someone thought of, so the
 candidates are also DERIVED from the gate with `ast`: the condition of an `if` that returns,
@@ -31,7 +32,8 @@ Each is run as a named guard is.  A candidate that stays GREEN must be on REDUND
 `key: (cover, reason)`, where the cover is a guard or candidate that is itself red and whose removal
 leaves the same files passing; a stale entry (not derived, red itself, or a cover that is not red)
 is an error.  A CRASH (the test died with no FAIL line) is an error: a removal is red by a named FAIL.
-`--only named` or `--only derived` runs one of the two lists.
+`--only named` or `--only derived` runs one of the two lists; the end-of-run check of the REDUNDANT
+list judges an entry or cover by its result only where it ran, so each shard checks its own.
 """
 
 import ast
@@ -816,13 +818,14 @@ def main(argv):
     n_crash = [g for g, _, _, _ in guards if results[g][0] == "CRASH"]
     d_nofit = [c[0] for c in derived if results[c[0]][0] == "NOFIT"]
     # a stale entry: not a derived key, no longer green (it is red: the entry is not needed), or a
-    # cover that is not a guard, is the entry itself, or is not red when removed
+    # cover that is not a guard, is the entry itself, or is not red when removed.  With `--only` (W36b-0.6)
+    # only the entries and covers that ran are judged on their result; the rest are judged in the other shard.
     stale = []
     if not picks:
         for key, (cover, why) in REDUNDANT.items():
             if key not in keys:
                 stale.append("%s (not a derived candidate)" % key)
-            elif results[key][0].startswith("red"):
+            elif key in results and results[key][0].startswith("red"):
                 stale.append("%s (red when removed: take it off the list)" % key)
             elif cover == key or (cover not in named and cover not in keys):
                 stale.append("%s (the cover %r is not another guard)" % (key, cover))
