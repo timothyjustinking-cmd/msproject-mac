@@ -18,10 +18,9 @@
  *
  *   header   16 B: +0 and +4 = stream_size - 4 (measured on both streams),
  *            +8 = 0x00010000, +12 = the undecoded "declared entries" word,
- *            preserved verbatim (it is NOT the record count: the reference
- *            114/Props has 161 records and 262 there, and stays 262 through a
- *            record update; wave30-baseline moves it to 263, which is one more
- *            reason insertion is not this writer's shape).
+ *            preserved verbatim by every save this writer makes (W36-2.2
+ *            decoded it as the full record count, scalars included, 262 of
+ *            them in the reference; see "insert framing" below).
  *   records  from +16, back to back, no padding: u32 payload_length, u32 id
  *            (byte 2 is 0x40 on every measured id), u32 kind, payload.  The
  *            record area ends at the first offset that is not a record
@@ -51,24 +50,22 @@
  *            the save has laid out, so the growth writers no longer carry a
  *            measured copy of each word.  The Task freed counter and the
  *            Assignment dirty flag are in no table and stay the caller's.
- *   insert   W36-2.2: an id absent from the stream is appended AT THE END of
- *            the stream, after the typed-property section, as
+ *   insert framing (decoded, NOT a save path; W36-2.2, lifted by no one)
+ *            an id absent from the stream is appended AT THE END of the
+ *            stream, after the typed-property section, as
  *            [u32 length][u32 id][u32 kind-and-flags = 0][payload]; the two
  *            leading size words become stream_size - 4 and the record count
- *            word at +12 goes up by one per record (it IS the full record
- *            count: a walk of that many records from +16, 12 + length each,
- *            ends exactly at the stream end in 624/624 committed files, with
- *            no repeated id and no odd length).  Derived from the baseline
- *            trace (trace-props-framing-r4.md: FUN_140253fe4, not-found
- *            branch) and the wave30-baseline pair (id 0x02401393, the 98-byte
- *            "Used for Microsoft Project 98 Baseline Calendar" text, 110 B
- *            appended, count 262 -> 263); held out, never used to derive it:
- *            12 more pairs append that same record (wave35-g3-baseline-set-
- *            nested and the wave36-r7-w37-b-* pairs, all 110 B) and two
- *            append id 0x02400005, the summary note text (64 and 514 B
- *            payloads, wave36-r7-w37-c-note-summary-*).  The odd-length pad of
- *            the disassembly (+1) was never exercised by any file, so an odd
- *            payload is refused.  Only those two ids insert.
+ *            word at +12 goes up by one (a walk of that many records from
+ *            +16, 12 + length each, ends exactly at the stream end in
+ *            624/624 committed files).  Derived from the baseline trace
+ *            (FUN_140253fe4, not-found branch; the private trace notes) and
+ *            the wave30-baseline pair (id 0x02401393, 98 B of text, 110 B
+ *            appended, count 262 -> 263); 8 held-out pairs append the same
+ *            record or id 0x02400005 (the summary note, 64 and 514 B).
+ *            props_insert_framing() builds that stream for the tests to
+ *            compare with Project's bytes.  It is not a save: Project's
+ *            reopen of a save that carries only this record shows no
+ *            baseline and no note, so nothing here lifts the refusal.
  *   marker   The Props14 edit marker (edit_marker.h) is written on every save,
  *            as every measured editor save writes it.
  *
@@ -89,10 +86,15 @@
  *   214/Props  refused (no pair)               BE 0x01000100 only
  *   any other  refused                          refused
  *
- *   insert      114/Props: ids 0x02401393 and 0x02400005 only (see "insert"
- *               above; W36-2.2 decoded the +110 B growth wave30-baseline
- *               showed as an appended record).  Every other id, a kind
- *               other than 0, an odd payload and 214/Props are refused.  The
+ *   insert      refused on both streams: NOT LIFTED (W36b-0.1).  The framing
+ *               of the two appended records is decoded (props_insert_framing,
+ *               below) but Project's reopen of the port's nine Props-only
+ *               insert saves shows no baseline and no note: the baseline
+ *               values are in the task tables and the note text in the Task
+ *               Var2Data, which this writer does not write (lift rule (c)
+ *               fails, wave36-verification/coord-4e-g2.md).  save_props_edit
+ *               refuses every id that is not already in 114/Props, as it did
+ *               before W36-2.2; no save path calls the framing function.  The
  *               custom-field SET pair's 88-byte insert is in the per-table
  *               Props streams (114/TBkndTask/Props 86 -> 174), not in
  *               114/Props.
@@ -111,10 +113,7 @@
  *     stream_size - 4, a format word that is not 0x00010000, or a record whose
  *     length runs past the stream end (the 0x00400000 id family is how the
  *     record area ends and the tail begins);
- *   - a record edit on 214/Props; a target id absent that is not one of the
- *     two inserted ids (W36-2.2), or an insert whose kind, length or text no
- *     pair measured, a stream that does not walk to its end by its count
- *     word, an id already after the typed-property section; a target id
+ *   - a record edit on 214/Props; a target id absent (any insert, W36b-0.1),
  *     present twice,
  *     or outside the six a pair updated (0x0240138b, 0x024013be from
  *     wave30-wbs-code; 0x02401392, 0x024013c5 from wave34-field-set;
@@ -224,7 +223,6 @@ struct PropsRecordWrite {
     std::size_t new_offset = 0;
     std::size_t old_payload_bytes = 0;
     std::size_t new_payload_bytes = 0;
-    bool inserted = false;        /* W36-2.2: appended, so old_* are 0 */
 };
 
 struct PropsEditWrite {
@@ -236,10 +234,20 @@ struct PropsEditWrite {
     std::size_t tail_offset_before = 0;
     std::size_t tail_offset_after = 0;
     std::size_t scalars_updated = 0;
-    std::size_t records_inserted = 0; /* W36-2.2: appended at the stream end */
-    std::size_t appended_bytes = 0;   /* 12 + payload of every appended record */
     std::vector<PropsRecordWrite> record_writes;
 };
+
+/* W36b-0.1: the decoded framing of an appended 114/Props record, for the tests
+ * that compare it with Project's bytes.  Returns `props_stream` with `record`
+ * appended, the two size words and the count word at +12 updated.  Throws
+ * Error for an id other than 0x02401393 and 0x02400005, a kind other than 0, an
+ * odd payload, a payload that does not end in two NUL code units, a baseline
+ * text other than the measured one, a note past 514 bytes, a stream that does
+ * not walk to its end by its count word and an id already in the stream.  No
+ * save path calls it and save_props_edit refuses every insert. */
+std::vector<std::uint8_t> props_insert_framing(
+    std::vector<std::uint8_t> const& props_stream,
+    PropsRecordEdit const& record);
 
 /*
  * Apply `edit` to `doc`, write the package to `path`, re-open it and prove

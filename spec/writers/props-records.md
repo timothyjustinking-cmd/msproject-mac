@@ -317,3 +317,10 @@ noise.
 Not measured, so refused: any other id, a kind-and-flags word other than 0, an odd payload length (the disassembly
 pads an odd length by one byte; no file has one), a note past 514 bytes, a baseline text other than the measured one,
 an id already present after the typed-property section, and a stream that does not walk to its end by its count word.
+
+**W36b-0.1 (22 November 2026): framing decoded, not lifted.**  The section above does not supersede the insert
+refusal for any save.  Project's reopen of the port's nine Props-only insert saves shows no baseline and no note
+(`docs/handoff/wave36-verification/coord-4e-g2.md`): the baseline values are in the task tables and the note text
+in the Task `Var2Data`, neither of which the Props record carries.  `save_props_edit` refuses every id that is not
+already in `114/Props`; `props_insert_framing()` builds the decoded record for the tests that compare it with
+Project's bytes, and no save path calls it.

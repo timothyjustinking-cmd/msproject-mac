@@ -15,7 +15,8 @@ house rules of wave 35g are the last section of that file, "Standing rules and s
 * **Wave 36 (the writer wave)** puts the Project 2021 trace's rules into the writers.  Brief
   `docs/handoff/wave36-brief.md`, record `docs/handoff/wave36-complete.md`, builder Claude Sonnet
   5.5, nothing pushed.  Done: G0 to G0f (the trace gate and the records), G1 and G1b (the font item),
-  G2 (Props; closes R35cG0-4) and CLOSE (the G0f review's R36G0f-1 to -3 and -8, fixed in `de97271`,
+  G2 (Props; closes R35cG0-4; the Props insert is framing decoded, not lifted: Project's reopen shows no
+  baseline and no note, W36b-0.1) and CLOSE (the G0f review's R36G0f-1 to -3 and -8, fixed in `de97271`,
   `1a581b2`, `79109bb`, `429f241`); the markers are in `wave36-complete.md`.  G3 (Insert Task,
   Milestone, Summary) is not started: no rule predicts a held-out pair (`trace-insert-rules-r6.md`;
   the five `wave36-r7-insert-*` recordings are committed but no note derives or checks a rule on them).

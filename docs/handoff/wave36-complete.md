@@ -783,3 +783,17 @@ candidate (`_task_uids:if-never:data is None`) was green at C.2 and is red by a 
   `trace-gate-meta` CI job has not run on a runner.
 
 WAVE-36-COMPLETE
+
+## Correction, Sun 22 Nov 2026 (wave 36b, W36b-0.1): W36-2.2 is "framing decoded, not lifted"
+
+Nothing above is edited; this section replaces what it says about W36-2.2.  The row "W36-2.2 | new-record framing | `7961a6e`" and the paragraph "Lift rule (section 0), per writer change" call W36-2.2 "the only item
+that lifts a refusal" and name 4(e) as "the coordinator's, not run".  4(e) has now run (`wave36-verification/coord-4e-g2.md`): Project opens all nine port saves and its reopen shows no baseline (no Baseline
+Start, Finish, Duration, saved date or Work) and no note.  The baseline values live in the task tables and the note text in the Task `Var2Data`; the Props record the insert wrote is not where Project reads
+either from.  Lift rule (c) fails, so the refusal is **not lifted**.
+
+* **W36-2.2 stands as the decoded framing only**: `[length][id][kind+flags 0][payload]` at the stream end, the two size words, the +12 count up by one; it equals Project's appended bytes in the nine pairs
+  of `test_insert_pairs`.  It is now `mppwrite::props_insert_framing()`, which the test calls and no save path calls.
+* **`save_props_edit` refuses every record whose id is not already in `114/Props`**, as it did before `7961a6e` (W36b-0.1; the commit's message holds the red and the green).  This closes R36G2-4 (two inserts in
+  one save) and R36G2-5 (unmeasured note shapes) for the save path: neither can be reached.
+* `props_edit.h`'s insert paragraphs and START-HERE's wave 36 line say "framing decoded, not lifted".
+* The record's other W36-2.2 claims (the nine pairs, the refusals of the framing function) hold.
