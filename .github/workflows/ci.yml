@@ -355,7 +355,8 @@ jobs:
        github.event.workflow_run.event != 'push')
     name: trace-gate-meta
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    # A full run took 75 minutes on the builder's machine (eleven cores); the ctest TIMEOUT is 180.
+    timeout-minutes: 200
     steps:
       - name: Check out
         uses: actions/checkout@v4

@@ -197,7 +197,7 @@ if(CORE_BUILD_TESTS)
 
         # W36-2.4 (W36-0d.8, 0e.1): the guard meta-test removes each guard of the gate, named and
         # derived, in a copy and asserts the acceptance test above goes red (hundreds of gate copies,
-        # one test run each, 6 at a time: minutes, so it has its own limit).  Label trace_gate_meta:
+        # one test run each, 6 at a time: 75 minutes on a full run here, so it has its own limit).  Label trace_gate_meta:
         # `ctest -L trace_gate_meta` runs it, `ctest -LE trace_gate_meta` leaves it out.  It runs on a
         # fresh tree at each group close and in the CI job trace-gate-meta.
         add_test(
