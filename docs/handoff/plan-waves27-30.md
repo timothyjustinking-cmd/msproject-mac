@@ -538,3 +538,21 @@ assigned:
 - **Found at W36-C.2, queued:** the VM recordings that rewrite the stamp of a row or block the control and the
   reference share (the 15 Task, 6 assignment and 5 resource targets of 0f.4.7) FAIL again as data.  Either a
   control/null pair shows the stamp moving in an existing row, or those recordings stay OPEN.
+
+## Queued from wave 36b (CLOSE): the wave 36 review's four Lows (22 November 2026)
+
+The whole-wave review is `wave36-verification/review-wave.md`.  Wave 36b fixed R36W-1 to -6 (`2f1c174`, `9e5fb70`,
+`8cb3e52`, `f0b55b1`, `e02a030`, `c3a4be8`; R36W-2 is `9e5fb70`, R36W-1 `2f1c174`).  The four Lows are queued, not
+fixed, because the brief names six items and no more; no wave is assigned:
+
+- **R36W-7 (Low):** the removed trace notes are still cited by name in `core/mppwrite/viewstream_edit.h`,
+  `core/mppwrite/props_edit.h`, `app/app_edits_cell_bold_tests.cpp`, `tests/roundtrip_viewstream.cpp`,
+  `tools/trace/new-trace-vm.ps1`, `tools/trace/odt-project-pinned.xml`, `tools/trace/trace_gate.py` and many
+  "DOSSIER" cites.  Nothing reads a removed file at run time.  Fix: say "(private trace notes)" at each.
+- **R36W-8 (Low):** the 44 deleted trace notes and the runbook stay in `main`'s history (`b2c0b19` and earlier).
+  Fix: say so in START-HERE, or rewrite before the public push (the operator's call; history is not rewritten here).
+- **R36W-9 (Low):** `trace_gate.py` `streams()` lists streams only, so a save missing an empty storage, or with
+  other storage names or directory order, passes.  Fix: compare the storage names, or state the limit in the
+  docstring.
+- **R36W-10 (Low):** `review-g0e.md` and `review-g0f.md` list local worktree paths (`D:/dev/msproject-mac-wt-*`),
+  the machine's layout.  Fix: replace them with a label.
