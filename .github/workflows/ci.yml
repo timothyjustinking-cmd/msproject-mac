@@ -51,6 +51,13 @@ on:
 permissions:
   contents: read
 
+# Wave 36b (W36b-0.5 / R36W-5): trace_gate_guards and trace_gate_meta skip (exit 77, ctest SKIPPED) without
+# olefile.  In CI that would let a job that lost its `pip install olefile` pass with both skipped, so every
+# job sets this: the two scripts then exit 1 with a FAIL line instead.  Locally it is unset and the skip
+# stays.  tools/trace/test_require_olefile.py (ctest trace_gate_require_olefile) proves both.
+env:
+  MPP_REQUIRE_OLEFILE: "1"
+
 jobs:
   build-and-test:
     # Wave 24 (W24-10): see the trigger comment.  `event` is the triggering
@@ -136,7 +143,8 @@ jobs:
           fi
 
       # Wave 36 (W36-0b.10 / G0b): trace_gate_guards (tools/trace/test_trace_gate.py) needs
-      # olefile and exits 77, which ctest reports as SKIPPED, without it.  setup-python puts one
+      # olefile and exits 77, which ctest reports as SKIPPED, without it (in CI, with the workflow's
+      # MPP_REQUIRE_OLEFILE set, it exits 1 and ctest reports it failed).  setup-python puts one
       # interpreter first on PATH, so the Configure step below finds the one olefile went into.
       - name: Python with olefile (for trace_gate_guards)
         uses: actions/setup-python@v5

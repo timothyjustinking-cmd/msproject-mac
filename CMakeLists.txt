@@ -179,7 +179,8 @@ if(CORE_BUILD_TESTS)
 
     # W36-0.4: the trace gate fails where it must (one flipped byte in every stream of a
     # committed pair, no null, a mask of the wrong length).  It needs olefile; without it
-    # the script exits 77 and ctest reports SKIPPED, not a pass.
+    # the script exits 77 and ctest reports SKIPPED, not a pass (in CI, MPP_REQUIRE_OLEFILE=1,
+    # it exits 1 and ctest reports it failed: W36b-0.5).
     if(Python3_Interpreter_FOUND AND EXISTS "${Python3_EXECUTABLE}")
         add_test(
             NAME trace_gate_guards
@@ -192,6 +193,19 @@ if(CORE_BUILD_TESTS)
         set_tests_properties(trace_gate_guards PROPERTIES
             WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             SKIP_RETURN_CODE 77
+            TIMEOUT 600
+        )
+
+        # W36b-0.5 (R36W-5): in CI (MPP_REQUIRE_OLEFILE=1, set by the workflow) a missing olefile makes
+        # the two scripts above exit 1, not 77.  This test hides olefile behind a PYTHONPATH shim and
+        # checks both exit codes, so the switch itself is under test; it needs no olefile and runs at once.
+        add_test(
+            NAME trace_gate_require_olefile
+            COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_require_olefile.py"
+        )
+        set_tests_properties(trace_gate_require_olefile PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
             TIMEOUT 600
         )
 

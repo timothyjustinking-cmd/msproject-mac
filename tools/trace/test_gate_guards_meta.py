@@ -49,6 +49,10 @@ TEST = os.path.join(HERE, "test_trace_gate.py")
 try:
     import olefile  # noqa: F401
 except ImportError:
+    # W36b-0.5 (R36W-5): in CI (MPP_REQUIRE_OLEFILE set) a missing olefile is a failure, not a skip
+    if os.environ.get("MPP_REQUIRE_OLEFILE", "") not in ("", "0"):
+        print("FAIL: olefile is not installed and MPP_REQUIRE_OLEFILE is set")
+        sys.exit(1)
     print("SKIP: olefile is not installed (pip install olefile)")
     sys.exit(77)
 
