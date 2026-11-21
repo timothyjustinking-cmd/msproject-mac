@@ -132,10 +132,10 @@ IDENT = {
 #   guid         absolute offsets of 16-byte GUIDs
 #   props        {record id: class} payload fields of a Props stream: "word" (4 bytes), "guid" (16
 #                bytes), "guidstr" (the 32 hex digits of a UTF-16 GUID string)
-#   row_stamp    (lo, hi) in-record bytes of a Task FixedData row: a creation stamp, masked when
-#                both sides hold a stamp inside the committed span (W36-0f.4.7)
-#   varkey       {key: (lo, hi)} bytes of the Var2Data block of that key (located through the
-#                VarMeta), masked on the same condition
+#   row_stamp    (lo, hi) in-record bytes of a Task FixedData row whose uid is not in the control: a
+#                creation stamp, masked when both sides hold a stamp inside the committed span
+#   varkey       {key: (lo, hi)} bytes of the Var2Data block of that key, for a block whose uid is
+#                not in the control's VarMeta, masked on the same condition (W36-C.2)
 #   stale        {key: (address, lo, hi)} the stale memory of the 76-byte baseline sub-record of that
 #                key: its +18 and +38 words and bytes lo..hi (W36-0f.4.8)
 # A GUID is masked only when both sides hold a version-1 GUID (all zeros against a real GUID FAILs: W36-0c.2).  Every row cites its
@@ -155,9 +155,8 @@ NOISE = {
     "???114/TBkndCal/Fixed2Data": {"guid_record": (0,)},
     # FIELDS:16  Cons Fixed2Data GUID at +0
     "???114/TBkndCons/Fixed2Data": {"guid_record": (0,)},
-    # FIELDS:22  creation stamp of a Task row (record +128, 4 bytes); W36-0f.4.7: of every row, not only
-    # a row the control lacks (DOSSIER, "Task row creation stamp (+128)": the VM writes a later stamp
-    # into a row the control and the reference share, 15 targets)
+    # FIELDS:22  creation stamp of a new Task row (record +128, 4 bytes), a row the control lacks; W36-C.2:
+    # the stamp of a row the control has is compared (a control and its null differ in 0 of 788 shared rows)
     "???114/TBkndTask/FixedData": {"row_stamp": (128, 132)},
     # FIELDS:18-19  the per-save words and GUIDs; 0x02401394 is per-file identity, not noise
     # (FIELDS:20), so it is not listed
@@ -179,8 +178,8 @@ NOISE = {
     # carry it at +444, +674 and +536, +674 (guid_rows: first offset, row size)
     "???214/CTable/FixedData": {"guid": (214,), "guid_rows": (214, 230)},
     "???214/CV_iew/FixedData": {"guid": (122, 260, 398), "guid_rows": (122, 138)},
-    # FIELDS:23  the assignment creation stamp is a var block located through VarMeta; W36-0f.4.7: of
-    # every assignment (6 targets) and, key 0x0C4002D6, of every resource (5 targets)
+    # FIELDS:23  the assignment creation stamp is a var block located through VarMeta, and, key 0x0C4002D6,
+    # the resource's; W36-C.2: only of a block whose uid the control's VarMeta lacks
     # FIELDS:43  W36-0f.4.8: the stale memory of a baseline sub-record (stale: {key: (address, lo, hi)}; DOSSIER,
     # "stale memory in a baseline sub-record"): the 76-byte block's +18 and +38 words, one value, and the
     # bytes lo..hi (a heap pointer's low bytes) beside the 0x0100 count at +56
@@ -887,6 +886,14 @@ def _guidstr_digits(payload):
     return [2 * i for i in range(38) if i not in (0, 9, 14, 19, 24, 37)]
 
 
+def _task_uids(data):
+    """The uid word (row +0) of every row of a Task FixedData stream."""
+    base, size = STRIDE["???114/TBkndTask/FixedData"]
+    if data is None:
+        return set()
+    return {_u32(data, base + r * size) for r in range((len(data) - base) // size)}
+
+
 def _meta_blocks(meta):
     """[(uid, offset, key)] of a VarMeta stream."""
     if meta is None or len(meta) < 24:
@@ -933,10 +940,10 @@ def _stale_ok(blob, off, address):
 
 def noise_windows(name, data, meta=None, ctl=None, other=None):
     """The set of offsets of the named noise fields of one stream's bytes.  `meta` is the
-    companion VarMeta of a Var2Data stream, `ctl` the control's streams (no rule reads it since
-    W36-0f.4.7: a creation stamp is masked for every row, not only for one the control lacks) and
-    `other` the other side's bytes of the same stream (a GUID is masked only when both sides hold
-    a version-1 GUID, a stamp only when both hold one inside the span)."""
+    companion VarMeta of a Var2Data stream, `ctl` the control's streams (a creation stamp is masked
+    only for a row, assignment or resource the control lacks: W36-C.2) and `other` the other side's
+    bytes of the same stream (a GUID is masked only when both sides hold a version-1 GUID, a stamp
+    only when both hold one inside the span)."""
     rule = _noise_rule(name)
     offs = set()
     if name == CVIEW_VAR2:
@@ -955,10 +962,13 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
                 if _guid_ok(data[row + lo:row + lo + 16]) and _guid_ok(other[row + lo:row + lo + 16]):
                     offs.update(range(row + lo, row + lo + 16))
         if "row_stamp" in rule:
+            known = _task_uids(ctl.get(name))
             lo, hi = rule["row_stamp"]
             for r in range(nrec):
                 row = base + r * size
-                if _stamp_ok(data[row + lo:row + hi]) and _stamp_ok(other[row + lo:row + hi]):
+                if _u32(data, row) not in known and \
+                        (row + 4 > len(other) or _u32(other, row) not in known) and \
+                        _stamp_ok(data[row + lo:row + hi]) and _stamp_ok(other[row + lo:row + hi]):
                     offs.update(range(row + lo, row + hi))
     for at in rule.get("guid", ()):
         if _guid_ok(data[at:at + 16]) and _guid_ok(other[at:at + 16]):
@@ -988,8 +998,9 @@ def noise_windows(name, data, meta=None, ctl=None, other=None):
                 if digits == _guidstr_digits(other[at:at + length]):   # [] == [] masks nothing
                     offs.update(at + d for d in digits)
     if "varkey" in rule:
+        known = {uid for uid, _, _ in _meta_blocks(ctl.get(VAR_META[name]))}
         for uid, off, key in _meta_blocks(meta):
-            if key in rule["varkey"] and off != 0xFFFFFFFF:
+            if key in rule["varkey"] and off != 0xFFFFFFFF and uid not in known:
                 lo, hi = rule["varkey"][key]
                 at = off + 4 + lo
                 if _stamp_ok(data[at:off + 4 + hi]) and _stamp_ok(other[at:off + 4 + hi]):

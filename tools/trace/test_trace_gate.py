@@ -1064,14 +1064,19 @@ try:
                     if rid == 0x03400001 and length >= 76:
                         out.update(at + 2 * i for i in range(38) if i not in (0, 9, 14, 19, 24, 37))
             if name == "???114/TBkndTask/FixedData":
-                for row in range(max(0, (len(data) - 48) // 202)):   # W36-0f.4.7: every row, inside the span
+                ctl_task = ctl.get(name, b"")   # W36-C.2: a row the control lacks, inside the span
+                known_rows = {struct.unpack_from("<I", ctl_task, 48 + 202 * r_)[0]
+                              for r_ in range(max(0, (len(ctl_task) - 48) // 202))}
+                for row in range(max(0, (len(data) - 48) // 202)):
                     at = 48 + 202 * row
-                    if 0x3D141482 <= struct.unpack_from("<I", data, at + 128)[0] <= 0x3D2C15EA:
+                    if struct.unpack_from("<I", data, at)[0] not in known_rows and \
+                            0x3D141482 <= struct.unpack_from("<I", data, at + 128)[0] <= 0x3D2C15EA:
                         out.update(range(at + 128, at + 132))
             for var_name, stamp_key in STAMP_BLOCKS:
                 if name == var_name:
+                    known_blocks = {u_ for u_, o_, k_ in blocks(ctl.get(var_name.replace("Var2Data", "VarMeta")))}
                     for uid, off, key in blocks(meta):
-                        if key == stamp_key and off != 0xFFFFFFFF and \
+                        if key == stamp_key and off != 0xFFFFFFFF and uid not in known_blocks and \
                                 0x3D141482 <= struct.unpack_from("<I", data, off + 4)[0] <= 0x3D2C15EA:
                             out.update(range(off + 4, off + 8))
             for key_, (addr_, lo_, hi_) in STALE_BLOCKS.get(name, {}).items():
@@ -2026,25 +2031,82 @@ try:
         problems, lines = verdict(put(AR, task_n, [(last + 132, b"\x01")]), AR, short)
         check("W36-0b.4 Task FixedData: the byte after the stamp is data and fails",
               problems >= 1, "%r" % (lines,))
-        # W36-0f.4.7: the creation stamp is noise in a row the control has too (the VM writes a later one
-        # into a row the control and the reference share: DOSSIER, "Task row creation stamp (+128)"), as a
-        # stamp inside the span on both sides; the uid byte beside it still counts
+        # W36-C.2 (R36G0f-2): the stamp of a row the control has is compared, in the span or not: a control
+        # and its null differ in 0 of 788 shared rows, so a changed stamp there is a changed file.  The
+        # stamp of a row the control lacks is noise inside the span on both sides, a value out of it is data.
         stamp_at = base + size + 128
-        problems, lines = verdict(put(AR, task_n, [(stamp_at, in_span)]), AR, short)
-        check("W36-0f.4.7 Task FixedData: the stamp of a row the control has is noise inside the span",
-              problems == 0 and AR[task_n][stamp_at:stamp_at + 4] != in_span, "%r" % (lines,))
+        for which in ("traced", "reference"):
+            moved_ = put(AR, task_n, [(stamp_at, in_span)])
+            problems, lines = verdict(*((moved_, AR) if which == "traced" else (AR, moved_)), short)
+            check("W36-C.2 Task FixedData: the stamp of a row the control has, moved inside the span, in the %s fails"
+                  % which,
+                  AR[task_n][stamp_at:stamp_at + 4] != in_span and
+                  lines == ["bytes-differ %s %d" % (task_n, sum(a != b for a, b in zip(moved_[task_n], AR[task_n])))],
+                  "%r" % (lines,))
         for vname, val in (("zero", 0), ("all ones", 0xFFFFFFFF), ("one", 1), ("0x7fffffff", 0x7FFFFFFF),
                            ("one over the span's top", 0x3D2C15EB), ("one under the span's bottom", 0x3D141481)):
             for which in ("traced", "reference"):
-                bad_ = put(AR, task_n, [(stamp_at, struct.pack("<I", val))])
-                problems, lines = verdict(*((bad_, AR) if which == "traced" else (AR, bad_)), AC)
-                check("W36-0f.4.7 Task FixedData: a stamp of %s in the %s row fails" % (vname, which),
-                      lines == ["bytes-differ %s %d" % (task_n, sum(a != b for a, b in zip(bad_[task_n], AR[task_n])))],
-                      "%r" % (lines,))
-        edited = put(AR, task_n, [(stamp_at, in_span), (base + size, bytes([AR[task_n][base + size] ^ 0x40]))])
+                for row_name, at_, ctl_ in (("a row the control has", stamp_at, AC),
+                                            ("a row the control lacks", last + 128, short)):
+                    bad_ = put(AR, task_n, [(at_, struct.pack("<I", val))])
+                    problems, lines = verdict(*((bad_, AR) if which == "traced" else (AR, bad_)), ctl_)
+                    check("W36-0f.4.7 Task FixedData: a stamp of %s in the %s of %s fails" % (vname, which, row_name),
+                          lines == ["bytes-differ %s %d" % (task_n, sum(a != b for a, b in zip(bad_[task_n], AR[task_n])))],
+                          "%r" % (lines,))
+        # the stamp of a new row is noise on one side only when the other side's row is new too, and the uid
+        # byte beside it is data
+        edited = put(AR, task_n, [(last + 128, in_span), (last, bytes([AR[task_n][last] ^ 0x40]))])
         problems, lines = verdict(edited, AR, short)
         check("W36-0f.4.7 Task FixedData: the stamp is noise and the uid byte beside it is data: 1 byte differs",
               lines == ["bytes-differ %s 1" % task_n], "%r" % (lines,))
+        # a new row traced where the reference holds a row the control has: the stamp is compared too
+        # (every differing byte counts, not only the uid's)
+        swapped_ = put(AR, task_n, [(base + size, bytes([AR[task_n][base + size] ^ 0x40])), (stamp_at, in_span)])
+        problems, lines = verdict(swapped_, AR, short)
+        check("W36-C.2 Task FixedData: a stamp moved in a row whose uid is new on this side only is data",
+              lines == ["bytes-differ %s %d" % (task_n, sum(a != b for a, b in zip(swapped_[task_n], AR[task_n])))] and
+              sum(a != b for a, b in zip(swapped_[task_n], AR[task_n])) > 1, "%r" % (lines,))
+        problems, lines = verdict(AR, swapped_, short)
+        check("W36-C.2 Task FixedData: the same with the sides swapped is data",
+              lines == ["bytes-differ %s %d" % (task_n, sum(a != b for a, b in zip(swapped_[task_n], AR[task_n])))],
+              "%r" % (lines,))
+        # a control with no Task FixedData stream holds no row: every row is new, and the gate does not raise
+        no_task_ = {k_: v_ for k_, v_ in AR.items() if k_ != task_n}
+        moved_ = put(AR, task_n, [(stamp_at, in_span)])
+        try:
+            problems, lines = verdict(moved_, AR, no_task_)
+        except Exception as exc:   # noqa: BLE001 - a gate that raises is the finding
+            problems, lines = -1, ["gate raised %s: %s" % (type(exc).__name__, str(exc)[:60])]
+        check("W36-C.2 Task FixedData: a control with no Task stream: every row is new, its stamp is noise",
+              problems == 0, "%r" % (lines,))
+        # wave30-calculate (the brief's case): one existing row's stamp changed, in span, fails; a new row's passes
+        w_ref, w_ctl, w_nul = pair("wave30-calculate")
+        WR, WC = load(w_ref), load(w_ctl)
+        w_rows = (len(WR[task_n]) - base) // size
+        def task_uids(blob_):   # the test's own read of the uid word of each row
+            return {struct.unpack_from("<I", blob_, base + r_ * size)[0] for r_ in range((len(blob_) - base) // size)}
+
+        w_known = task_uids(WC[task_n])
+        w_old = [base + r_ * size + 128 for r_ in range(w_rows)
+                 if struct.unpack_from("<I", WR[task_n], base + r_ * size)[0] in w_known]
+        check("W36-C.2 wave30-calculate has Task rows the control has", len(w_old) >= 1, "%d" % len(w_old))
+        for at_ in w_old[:3]:
+            moved_ = put(WR, task_n, [(at_, struct.pack("<I", 0x3D200000))])
+            problems, lines = verdict(moved_, WR, WC)
+            check("W36-C.2 wave30-calculate: the stamp of an existing row (+%d) changed inside the span FAILs" % at_,
+                  WR[task_n][at_:at_ + 4] != struct.pack("<I", 0x3D200000) and problems >= 1 and
+                  any(task_n in ln for ln in lines), "%r" % (lines,))
+        # a row the control lacks: drop one row from the control and move that row's stamp inside the span
+        w_short = dict(WC)
+        w_short[task_n] = WC[task_n][:base + (w_rows - 1) * size]
+        w_last = base + (w_rows - 1) * size
+        check("W36-C.2 wave30-calculate: the control without its last row lacks that row's uid",
+              struct.unpack_from("<I", WR[task_n], w_last)[0] not in task_uids(w_short[task_n]))
+        moved_ = put(WR, task_n, [(w_last + 128, struct.pack("<I", 0x3D200000))])
+        problems, lines = verdict(moved_, WR, w_short)
+        check("W36-C.2 wave30-calculate: the stamp of a new row (the control lacks it) moved inside the span passes",
+              WR[task_n][w_last + 128:w_last + 132] != struct.pack("<I", 0x3D200000) and problems == 0,
+              "%r" % (lines,))
         var_n, meta_n2 = "???114/TBkndAssn/Var2Data", "???114/TBkndAssn/VarMeta"
         known = {uid for uid, _, _ in g._meta_blocks(AC[meta_n2])}
         stamps = [(uid, off) for uid, off, key in g._meta_blocks(AR[meta_n2])
@@ -2056,28 +2118,51 @@ try:
         problems, lines = verdict(put(AR, var_n, [(fresh_s[0], in_span)]), AR, AC)
         check("W36-0b.4 Assn Var2Data: the stamp of an assignment the control lacks is noise",
               problems == 0, "%r" % (lines,))
-        problems, lines = verdict(put(AR, var_n, [(old_s[0], in_span)]), AR, AC)
-        check("W36-0f.4.7 Assn Var2Data: the stamp of an assignment the control has is noise inside the span",
-              problems == 0 and AR[var_n][old_s[0]:old_s[0] + 4] != in_span, "%r" % (lines,))
+        for which in ("traced", "reference"):
+            moved_ = put(AR, var_n, [(old_s[0], in_span)])
+            problems, lines = verdict(*((moved_, AR) if which == "traced" else (AR, moved_)), AC)
+            check("W36-C.2 Assn Var2Data: the stamp of an assignment the control has, moved inside the span, in the %s fails"
+                  % which, AR[var_n][old_s[0]:old_s[0] + 4] != in_span and problems >= 1 and var_n in "".join(lines),
+                  "%r" % (lines,))
         rsc_n, rsc_meta = "???114/TBkndRsc/Var2Data", "???114/TBkndRsc/VarMeta"
         for stamp_name, stamp_meta, stamp_key in ((var_n, meta_n2, 0x0F40027A), (rsc_n, rsc_meta, 0x0C4002D6)):
+            ctl_uids = {uid for uid, _, _ in g._meta_blocks(AC[stamp_meta])}
             at_s = [off + 4 for uid, off, key in g._meta_blocks(AR[stamp_meta])
                     if key == stamp_key and off != 0xFFFFFFFF]
             check("W36-0f.4.7 the pair has a stamp block of key %#x in %s" % (stamp_key, stamp_name),
                   len(at_s) >= 1, "%r" % (at_s,))
             if not at_s:
                 continue
-            problems, lines = verdict(put(AR, stamp_name, [(at_s[0], in_span)]), AR, AC)
-            check("W36-0f.4.7 %s: the stamp of key %#x inside the span is noise" % (stamp_name, stamp_key),
+            # the control without the first stamp block's uid: that block is new, and only that one
+            first_uid = [uid for uid, off, key in g._meta_blocks(AR[stamp_meta])
+                         if key == stamp_key and off != 0xFFFFFFFF][0]
+            cut_ = bytearray(AC[stamp_meta])   # every entry of that uid renamed in the control's VarMeta
+            for k_ in range(struct.unpack_from("<I", cut_, 8)[0]):
+                if struct.unpack_from("<I", cut_, 24 + 12 * k_)[0] == first_uid:
+                    struct.pack_into("<I", cut_, 24 + 12 * k_, first_uid ^ 0x40000000)
+            ctl_cut = dict(AC)
+            ctl_cut[stamp_meta] = bytes(cut_)
+            check("W36-C.2 %s: the original control holds the uid of the stamp block, the cut one does not" % stamp_name,
+                  first_uid in ctl_uids and
+                  first_uid not in {u_ for u_, _, _ in g._meta_blocks(ctl_cut[stamp_meta])}, "%r" % (first_uid,))
+            problems, lines = verdict(put(AR, stamp_name, [(at_s[0], in_span)]), AR, ctl_cut)
+            check("W36-C.2 %s: the stamp of key %#x of a block the control lacks, inside the span, is noise" %
+                  (stamp_name, stamp_key),
                   problems == 0 and AR[stamp_name][at_s[0]:at_s[0] + 4] != in_span, "%r" % (lines,))
+            for which in ("traced", "reference"):
+                moved_ = put(AR, stamp_name, [(at_s[0], in_span)])
+                problems, lines = verdict(*((moved_, AR) if which == "traced" else (AR, moved_)), AC)
+                check("W36-C.2 %s: the stamp of key %#x of a block the control has, moved inside the span, in the %s fails"
+                      % (stamp_name, stamp_key, which), problems >= 1 and stamp_name in "".join(lines), "%r" % (lines,))
             for vname, val in (("zero", 0), ("all ones", 0xFFFFFFFF), ("one over the span's top", 0x3D2C15EB),
                                ("one under the span's bottom", 0x3D141481)):
                 for which in ("traced", "reference"):
-                    bad_ = put(AR, stamp_name, [(at_s[0], struct.pack("<I", val))])
-                    problems, lines = verdict(*((bad_, AR) if which == "traced" else (AR, bad_)), AC)
-                    check("W36-0f.4.7 %s: a stamp of %s in the %s block fails" % (stamp_name, vname, which),
-                          problems >= 1 and stamp_name in "".join(lines), "%r" % (lines,))
-            problems, lines = verdict(put(AR, stamp_name, [(at_s[0] + 4, b"\x01")]), AR, AC)
+                    for blk_name, ctl_ in (("a block the control has", AC), ("a block the control lacks", ctl_cut)):
+                        bad_ = put(AR, stamp_name, [(at_s[0], struct.pack("<I", val))])
+                        problems, lines = verdict(*((bad_, AR) if which == "traced" else (AR, bad_)), ctl_)
+                        check("W36-0f.4.7 %s: a stamp of %s in the %s of %s fails" % (stamp_name, vname, which, blk_name),
+                              problems >= 1 and stamp_name in "".join(lines), "%r" % (lines,))
+            problems, lines = verdict(put(AR, stamp_name, [(at_s[0] + 4, b"\x01")]), AR, ctl_cut)
             check("W36-0f.4.7 %s: the byte after the stamp is data and fails" % stamp_name,
                   problems >= 1 and stamp_name in "".join(lines), "%r" % (lines,))
 
@@ -2145,12 +2230,28 @@ try:
                 blob[at:at + len(raw)] = raw
             every[sname] = bytes(blob)
             n_fields += len(edits)
-        problems, lines = verdict(every, AR, AC)
+        # W36-C.2: a stamp is noise only in a row or block the control lacks, so the control here holds no
+        # row or block of the reference: every uid word of its Task rows and VarMeta entries is renamed
+        AC_new = dict(AC)
+        tb_ = bytearray(AC[task_n])
+        for r_ in range((len(tb_) - g.STRIDE[task_n][0]) // g.STRIDE[task_n][1]):
+            at_ = g.STRIDE[task_n][0] + r_ * g.STRIDE[task_n][1]
+            struct.pack_into("<I", tb_, at_, struct.unpack_from("<I", tb_, at_)[0] ^ 0x40000000)
+        AC_new[task_n] = bytes(tb_)
+        for stamp_meta_ in (meta_n2, "???114/TBkndRsc/VarMeta"):
+            mb_ = bytearray(AC[stamp_meta_])
+            for k_ in range(struct.unpack_from("<I", mb_, 8)[0]):
+                struct.pack_into("<I", mb_, 24 + 12 * k_, struct.unpack_from("<I", mb_, 24 + 12 * k_)[0] ^ 0x40000000)
+            AC_new[stamp_meta_] = bytes(mb_)
+        problems, lines = verdict(every, AR, AC_new)
         check("W36-0b.5 every noise field of every row changed (%d fields in %d streams) is a PASS"
               % (n_fields, len(W)), problems == 0 and n_fields > 50,"%r" % (lines,))
+        problems, lines = verdict(every, AR, AC)
+        check("W36-C.2 the same save against the real control fails: the stamps of its rows and blocks are data",
+              problems >= 1 and any(task_n in ln for ln in lines), "%r" % (lines,))
         data_byte = g.STRIDE[task_n][0] + 60              # a data byte of the first Task row
         plus = put(every, task_n, [(data_byte, bytes([every[task_n][data_byte] ^ 1]))])
-        problems, lines = verdict(plus, AR, AC)
+        problems, lines = verdict(plus, AR, AC_new)
         check("W36-0b.5 the same save with one data byte changed fails",
               problems >= 1 and task_n in "".join(lines), "%r" % (lines,))
         check("W36-0b.5 the gate has no ceiling left",
