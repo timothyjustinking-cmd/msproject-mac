@@ -648,3 +648,62 @@ final `REDUNDANT` loop raises a `KeyError` in a partial run, as G0e recorded; th
 * **A post-span capture FAILs** as data until the stamp span and the LastSave span are widened together (as G0e recorded); 0f.4.3 widened the stamp span to 0x3d28352a.
 
 WAVE-36-G0f-COMPLETE
+
+## G2: Props
+
+Brief `docs/handoff/wave36-brief.md` section 2 (G2); the facts are `trace-props-framing-r4.md`, `trace-baseline-r4.md` and `trace-calculate-r3.md`.  Builder Claude Sonnet 5.5.  W36-2.0 to 2.3 were built in an earlier session;
+W36-2.4 was checkpointed at `ba49c23` (the coordinator's commit, when the operator paused the wave; it carries the coordinator's trailer, not rule 1's) and finished in this one.  Items, one finding id per commit, in order:
+
+| item | id | commit | what |
+|---|---|---|---|
+| W36-2.0 | span widening | `8d0d032` | the gate's `STAMP_SPAN`, `CVIEW_STAMP_SPAN` and `LASTSAVE_SPAN` end at the decoded maximum of 1187 saved copies (624 committed, 563 recorded, 0 unreadable), read by `tools/trace/span_probe.py`; no end set by hand; one tick past the top FAILs, the top passes |
+| W36-2.1 | derived words | `7125071` | `props_table_words()` computes each table's size word and count word from the tables the save lays out; the measured-constant copies in `resource_growth` and the three `assignment_growth` shapes are gone; 624 of 624 committed files agree on all 8 words |
+| W36-2.2 | new-record framing | `7961a6e` | an id absent from `114/Props` is appended after the typed-property section as `[length][id][kind+flags 0][payload]`, the two size words follow and the +12 count goes up by one; only `0x02401393` (the fixed baseline text) and `0x02400005` (the summary note, at most 514 B) insert |
+| W36-2.3 | R35cG0-4 | `aa025f1` | the plan holds the Calculate Project Props pin as an FNV-1a 64 digest of `114/Props` (reader `props_digest`, adapter, `calculate_plan_refusal` against `mppwrite::calculate_props_pin_digest()`); the refusal is the last plan guard, so earlier needles keep their tests |
+| W36-2.4 | meta-test split | `bfd4c33` (code in `ba49c23`) | `trace_gate_meta` is its own ctest, labelled `trace_gate_meta`, `TIMEOUT` 10800, left out of the matrix and asan jobs and run in one CI job; `trace_gate_guards` runs the acceptance sweeps only; one full run timed at **75 minutes** |
+
+**Lift rule (section 0), per writer change.**  W36-2.2 is the only item that lifts a refusal.  (a) the trace names the routine (`FUN_140253fe4`, not-found branch) and every byte of the record is in the trace's framing or in the
+measured text; (b) held out, never used to derive the rule: `wave35-g3-baseline-set-nested`, the five `wave36-r7-w37-b-*` pairs and the two `wave36-r7-w37-c-note-summary` pairs (64 B and 514 B payloads), all equal to Project's appended
+bytes, the three header words and every control byte, and the note pairs to the whole stream outside the null-save noise (`tests/roundtrip_props.cpp`, `test_insert_pairs`); (c) the standing-rule 1 field-by-field comparison is that test;
+**4(e) reads the two inserts back through Project: the coordinator's, not run by the builder (no COM).**  Everything the pairs do not show stays refused: any other id, a kind word other than 0, an odd payload length (the
+disassembly pads an odd length by one byte; no committed file has one), a note past 514 B, another baseline text, an id already present, `214/Props`, and a stream whose count word does not walk to its end.
+
+**Acceptance (W36-2.0, `trace_gate_guards`).**  1739 checks, 0 FAIL, the same as at G0f; the sweeps are unchanged (negative 191 edits, 181 FAIL and 10 pinned PASS; positive 202 control-nulls, 180 PASS and 22 pinned OPEN).  The
+meta-test at the tip, one full run: **`named guards listed 184, red 184, not red 0`; `candidates derived 299 (run 299): removed red 283 (85 of them by a case that asserts the gate does not raise), listed redundant 16, green 0, crashed
+0`; the unmodified gate passes**, 4528 s (`build/w36/86044a0-W36-2.4-meta-full.log`).  Being one process, it ran the closing `REDUNDANT` loop that G0e's and G0f's partial runs could not.
+
+**Gate line.**  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each of the five carries both trailers (a
+range check at the tip, `build/w36/bfd4c33-W36-G2-range.log`).  W36-2.0 has no scan log of its own; the range was scanned again at the tip.  Per group at `86044a0`: core `ctest -E plan_recalc -LE trace_gate_meta` **67/67**, `plan_recalc`
+with `MPP_NO_CORPUS=1` **1/1**, M2 **332/332**, 268/268 and 64/64 fields, `check_fixtures` 0, app ctest **34/34**, Qt ctest **52/52**, `trace_gate_meta` **passes**.  The engine stays 7/8.  Per-item counts and logs are in
+`docs/handoff/wave36-verification/gates-g2.md`.  The builder used no COM, did not touch the VM, `build/trace-2021/` (read only, in 2.0) or `build/r7/`, and pushed nothing.
+
+### Guards seen red
+
+| item | red | green |
+|---|---|---|
+| 2.0 | the test's new span ends against the old gate: 8 FAIL, 1731 PASS | 1739 PASS; the named guard `stamp-span-vm` red when its top is removed |
+| 2.1 | size word off by one: `mppwrite_roundtrip_props`, `_assignment_growth`, `_resource_growth` FAIL (3 of 8 words) | core 67/67, `plan_recalc` 1/1 |
+| 2.2 | +12 count word left alone: `mppwrite_roundtrip_props` FAILs, "the record count word at header +12 is 262" | `roundtrip_props` 2717 checks, core 67/67 |
+| 2.3 | digest refusal switched off: `app_edits_calculate` FAILs 7 checks | `app_edits_calculate` passes; core 67/67, app 34/34 |
+| 2.4 | the meta-test ran at the end of `test_trace_gate.py` and `ctest -N -L trace_gate_meta` listed 0 tests | each of `-L trace_gate_meta`, `-R trace_gate_guards` and `-LE trace_gate_meta -R trace_gate` lists exactly its one test; the full run passes in 75 minutes |
+
+### Deferred
+
+* **A Props record of any other id, an odd-length payload, or the insert of a note past 514 B.**  Not lifted: needs a committed pair that appends one.  The odd-length pad of the disassembly is in no committed file (a walk of
+  all 624 has no odd record length), so the writer refuses an odd payload rather than guess the pad.
+
+### Queued (Low, not fixed)
+
+* None.  R35cG0-4 is fixed by `aa025f1`; per START-HERE only the coordinator's review closes the id.
+
+### Found, not fixed
+
+* **The message of `7961a6e` (W36-2.2) says `roundtrip_props` 2763 checks; the real count is 2717.**  Corrected in the message of `aa025f1`; history is not rewritten.
+* **The spec note for W36-2.2 counts twelve pairs that grow `114/Props` by one record; `test_insert_pairs` holds nine (one derived, eight held out).**  The other pairs are not in the test; whether each is a held-out check
+  of the same shape is not recorded.
+* **`ba49c23` carries the coordinator's `Co-Authored-By` and no `Generated-By` trailer.**  It is the coordinator's checkpoint commit, not the builder's.
+* **W36-2.0 has no per-commit scan log**; the range scan at the tip stands in for it.
+* **The `trace-gate-meta` CI job has not run on a runner**: its 200-minute limit is set from the builder's 75 minutes on eleven cores, and a hosted runner may need more.  The coordinator's CI dispatch decides it.
+* **4(e) for the two Props inserts** is the coordinator's (see the lift rule above).
+
+WAVE-36-G2-COMPLETE
