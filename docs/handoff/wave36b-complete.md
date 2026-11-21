@@ -77,3 +77,60 @@ Nothing in G0 is deferred.
   warnings-as-errors); the scratch change is not in the tree.
 
 WAVE-36b-G0-COMPLETE
+
+## CLOSE: the records and the fresh-tree gates
+
+Brief `docs/handoff/wave36b-brief.md` section 3.  Builder Claude Sonnet 5.5, 22 November 2026.  Nothing is pushed and no
+workflow is dispatched.  CLOSE changes no C++ source and no `CMakeLists.txt`.
+
+| item | commit | what |
+|---|---|---|
+| W36b-CLOSE.1 | `ec1c0d9` | the whole-wave review's four Lows (R36W-7 to -10) queued in `plan-waves27-30.md`, "Queued from wave 36b (CLOSE)"; not fixed, the brief names six items |
+| W36b-CLOSE.2 | `8fb0b87` | `docs/START-HERE.md` (8178 bytes, under 8 KB) and `memory/coordinator.md` brought to the end of the wave |
+
+Doc gates for each: `build/w36b/706078b-W36b-CLOSE.1-gates.status` and `ec1c0d9-W36b-CLOSE.2-gates.status`: `check_fixtures` 0,
+`check_markers` 0 (worktree and range), `guard_names` 0, `scan_client_names` 0, the `client-string` grep none, `git diff --check`
+clean; each commit carries both trailers.  Neither commit has a guard: they are records.
+
+### Gate line on fresh trees at the tip
+
+Three trees configured from nothing at `706078b` (the G0 record; the two CLOSE commits after it change docs only), `build/w36b-close-fresh`
+(core), `-app` and `-qt`, Release, `CORE_WARNINGS_AS_ERRORS=ON` (`build/w36b/closegates.sh`; logs `build/w36b/706078b-W36b-CLOSE-*`, status
+`706078b-W36b-CLOSE.status`):
+
+| gate | result |
+|---|---|
+| core configure and build | exit 0, exit 0 |
+| core `ctest -E plan_recalc -LE trace_gate_meta -j4` | 68/68 |
+| `MPP_NO_CORPUS=1 ctest -R plan_recalc` | 1/1 |
+| M2 recalc `--compare` | exit 0; 332/332, 268/268, 64/64 fields |
+| app tree (configure, build, ctest) | exit 0, exit 0; 34/34 |
+| Qt tree (configure, build, ctest) | exit 0, exit 0; 52/52 |
+| `check_fixtures`, name scans, markers, `git diff --check` | all 0 or none (at the tip of CLOSE.2 again before the record's commit, see below) |
+
+The engine stays 7/8 (`constraint-mso` expected-failing).
+
+### The full `trace_gate_meta` run, both shards, timed
+
+On the fresh core tree, through the real ctest, one shard after the other, nothing else running (07:19 end, 05:52 start for the whole script):
+
+* `trace_gate_meta_named` **Passed, 1430 s (23.8 minutes)**, limit 4500 s;
+* `trace_gate_meta_derived` **Passed, 2453 s (40.9 minutes)**, limit 7500 s;
+* **64.7 minutes in all** (`build/w36b/706078b-W36b-CLOSE-meta-named.log`, `-meta-derived.log`; the times are in the status file).
+
+These match the G0 local times (24.2 and 41.0 minutes), so the 90 and 150 minute CI limits are still three times local, for a hosted runner
+no one has measured.  `--output-on-failure` prints nothing for a pass, so the guard counts are not in these logs; the G0 shard logs hold them.
+
+### Deferred
+
+Nothing in CLOSE is deferred.  R36W-7 to -10 are queued by the commit above, not deferred from this brief.
+
+### Found, not fixed
+
+* **The CLOSE gate set ran at `706078b`**, before the two docs commits; those change no source, CMake or workflow file (`git diff --stat 706078b..HEAD`
+  lists `plan-waves27-30.md`, `START-HERE.md`, `memory/coordinator.md`).  The doc gates were run again on each.
+* **No CI job has run.**  The two shard jobs, `MPP_REQUIRE_OLEFILE=1` and `pip install olefile` are unproven on a runner; that is the coordinator's
+  dispatch.
+* **Still the coordinator's:** a fresh worktree and the gates there, every "Guards seen red" row put back to red, the independent review of the wave
+  diff, then on the operator's word the push, CI on every job and the merge of `wave36` and `wave36b` into `main`.  The G0 "Found, not fixed" list
+  above stands (the 0.1 message's undercount, the hash as a guard and not a secret, the VM-address history, the `SKIP_RETURN_CODE` coverage).
