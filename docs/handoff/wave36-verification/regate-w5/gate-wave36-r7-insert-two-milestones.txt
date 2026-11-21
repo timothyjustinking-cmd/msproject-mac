@@ -1,0 +1,4 @@
+96 streams, 96 checked, 0 not checked, 1 problems
+bytes-differ ???114/TBkndTask/FixedData 4
+sha256 7c33a71a10705670e4d0b1120e3b74c7590368a6a6fdab93c30a243724987109
+EXIT 1

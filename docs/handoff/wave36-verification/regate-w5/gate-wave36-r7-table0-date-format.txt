@@ -1,0 +1,4 @@
+96 streams, 96 checked, 0 not checked, 1 problems
+bytes-differ ???214/CTable/Var2Data 1
+sha256 2e2ef2bf88e8257d278aec2c2acfb6177fbd8cde865ca9d71e676a7ad3acb8e4
+EXIT 1

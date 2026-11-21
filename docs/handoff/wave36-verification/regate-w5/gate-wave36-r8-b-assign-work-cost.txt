@@ -1,0 +1,5 @@
+96 streams, 96 checked, 0 not checked, 2 problems
+bytes-differ ???114/TBkndAssn/Var2Data 8
+bytes-differ ???114/TBkndTask/Var2Data 4
+sha256 156896aee6969715709ae78c9640d8ad901c3b407fc6dd96bedcbb0c5502c6d8
+EXIT 1
