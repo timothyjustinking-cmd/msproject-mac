@@ -707,3 +707,77 @@ with `MPP_NO_CORPUS=1` **1/1**, M2 **332/332**, 268/268 and 64/64 fields, `check
 * **4(e) for the two Props inserts** is the coordinator's (see the lift rule above).
 
 WAVE-36-G2-COMPLETE
+
+## CLOSE: the G0f review's findings, the G3 re-check and the fresh-tree gates
+
+Brief `docs/handoff/wave36-brief.md` section 2 (CLOSE); the findings are `docs/handoff/wave36-verification/review-g0f.md` (the coordinator reproduced R36G0f-1 and -2 on the gate at `8d0d032`: exit 0, 0 problems).  Builder
+Claude Sonnet 5.5, 22 November 2026.  Items, one finding id per commit, in order, each seen red and then green:
+
+| item | id | commit | what |
+|---|---|---|---|
+| W36-C.1 | R36G0f-1 (Critical) | `de97271` | the Gantt unit word (u16 at +1180 of the 41363-byte view-state record) is masked only against a different pane width at +1172, with both units 1 up to their width and \|u1\*w2 - u2\*w1\| <= the larger width; each of the five zoom pairs with only the unit changed FAILs |
+| W36-C.2 | R36G0f-2 (High) | `1a581b2` | a creation stamp is masked only for a Task row, assignment block or resource block whose uid the control lacks; an existing row's stamp is compared, in the span or not |
+| W36-C.3 | R36G0f-3 | `79109bb` | the CEdl row record 0x2640003d is dropped only with kind word 1 (its value in 1140 of 1140 records); another kind is kept raw and compared; kind 1 to 0x99 on wave28-mark-auto FAILs |
+| W36-C.4 | R36G0f-8 | `429f241` | the host's network address is gone from `trace-gate-fields-g0b.md`, `review-g0c.md` and `review-g3.md`; a test reads every `.md` under `spec/` and `docs/` for the 12 hex digits |
+| W36-C.5 | R36G0f-4 to -7, -9 | `8f7786f` | queued in `plan-waves27-30.md`, "Queued from wave 36 (CLOSE)"; not fixed here, as the brief says |
+| G3 | the precondition | none | not started: no held-out insert pair (`trace-insert-rules-r6.md`) |
+
+**Ticks.**
+
+* R36G0f-1: **fixed**, `de97271`.
+* R36G0f-2: **fixed**, `1a581b2`.  The consequence is below: the VM's recordings of shared-row stamps now FAIL as data.
+* R36G0f-3: **fixed**, `79109bb`.
+* R36G0f-8: **fixed**, `429f241`.
+* R36G0f-4 (the VM's newer saves above three spans), -5 (the heap bytes unchecked), -6 (two meta-test survivors), -7 (the note fields as a format), -9 (the view word's span note): **queued in the plan, not
+  fixed**, `8f7786f`.
+* G3 (W36-3, Insert Task, Milestone, Summary): **not started**.  The precondition is that `trace-insert-rules-r6.md` states a rule that predicts both held-out pairs.  It does not: it derived its rule from the
+  four wave35-g3 pairs it predicts, so none is held out; `spec/writers/insert.md` still says items 3 and 5 are not decoded; and the seven round 7 recordings `tests/data/wave36-r7-insert-*` are committed but
+  only `scripts/oracle_r7_insert.py` refers to them, and no note derives a rule from them or checks one on them (`docs/handoff/wave36-verification/gates-close.md`, "G3: the precondition re-checked").  The writers
+  for Insert Task, Milestone and Summary stay refused.
+
+**Acceptance (the committed `tools/trace/test_trace_gate.py`).**  **1901 checks, 0 FAIL** (1739 at G0f and G2; +94 at C.1, +46 at C.2, +20 at C.3, +2 at C.4).  The negative and positive sweeps keep their shape (191 edits;
+202 control-nulls, 180 PASS and 22 pinned OPEN).  The meta-test, one full run on a fresh configure of `8f7786f`: **`named guards listed 194, red 194, not red 0`; `candidates derived 312 (run 312): removed red 296 (90 of them by a case that asserts the gate does not raise), listed redundant 16, green 0, crashed 0`; the unmodified gate passes**, 3488 s (`build/w36/8f7786f-W36-CLOSE-meta-full.log`).
+
+**Gate line.**  Every commit: `check_fixtures` 0, `check_markers` 0, `guard_names` 0, `scan_client_names` 0, the `client-string-[0-9a-f]{8}` grep none, `git diff --check` clean; LF only; each carries both trailers.  Per
+group at `8f7786f`: core build exit 0, core `ctest -E plan_recalc -LE trace_gate_meta -j4` **67/67**, `plan_recalc` with `MPP_NO_CORPUS=1` **1/1**, M2 **332/332**, 268/268 and 64/64 fields, `check_fixtures` 0, app
+ctest **34/34**, Qt ctest **52/52**, `trace_gate_meta` **passes** (58 minutes).  The engine stays 7/8.  CLOSE changes no C++ source and no `CMakeLists.txt`.  Per-item logs and counts are in
+`docs/handoff/wave36-verification/gates-close.md`.  The builder used no COM, did not touch the VM, `vmconnect`, `build/trace-2021/` or `build/r7/`, and pushed nothing.
+
+### Guards seen red
+
+Each red ran the new cases against the previous commit's gate; logs are `build/w36/<parent>-W36-C.N-*`.
+
+| item | red | green |
+|---|---|---|
+| C.1 | 60 FAIL, 1637 PASS | 1833 PASS; 14 named pane guards red; derived of the changed functions 30 of 31 red, 1 redundant |
+| C.2 | 18 FAIL, 1861 PASS | 1879 PASS; 14 named stamp guards red; derived 56 of 58 red, 2 redundant |
+| C.3 | 14 FAIL, 1885 PASS | 1899 PASS; 5 named row-record guards red; derived 22 of 23 red, 1 redundant |
+| C.4 | 2 FAIL, 1899 PASS | 1901 PASS; no gate guard |
+| C.5 | none (a note) | none |
+
+New named guards: C.1 `pane-unit-zero`, `-over`, `-same-width`, `-ratio`, `-ratio-wide`, `-other` (the old `pane-unit-width` and a dead default clause are gone); C.2 `stamp-row-known`,
+`stamp-row-known-other`, `stamp-row-known-ctl`, `varkey-known`, `varkey-known-ctl`; C.3 `rows-kind`, `rows-kind-value`.  Derived candidates: 308 after C.1, 312 after C.2 (299 at G2); none stays green.  One derived
+candidate (`_task_uids:if-never:data is None`) was green at C.2 and is red by a raise since a case with a control that has no Task stream was added.
+
+### Deferred
+
+* **R36G0f-4 to -7 and -9**: not fixed here by the brief's own rule; each is written in the plan with the finding and the fix it names.
+* **G3**: see the tick above.  A rule derived on the round 7 insert pairs and checked on the wave35-g3 pairs, or the reverse, would meet the precondition.
+
+### Queued (Low, not fixed)
+
+* R36G0f-4 to -7 and -9 as above (`plan-waves27-30.md`, "Queued from wave 36 (CLOSE)").
+
+### Found, not fixed
+
+* **C.2 makes the VM's recordings of shared-row stamps FAIL as data**: the 15 Task, 6 assignment and 5 resource stamp targets of W36-0f.4.7 are in rows the control and the reference share, and a control and its
+  null differ at such a stamp in 0 of 788 Task rows, 0 of 556 assignment blocks and 0 of 338 resource blocks.  That is a finding by design (R36G0f-4: 108 of 210 VM copies PASS); only the coordinator's re-gate
+  with a same-machine null can say whether the VM writes those stamps as noise.
+* **C.4's scope**: the check covers the 12 contiguous hex digits in `.md` files under `spec/` and `docs/`.  The recorded bytes in `analysis/*.tsv` and `core/mppwrite/assignment_growth.cpp` and the spaced hex dumps in
+  21 spec files are a record's data, not a printed address, and were left.  The VM's own node stays, as a different machine's.
+* **C.3's design**: the kind condition rather than the header kept in the canonical form, because the record's presence is session noise (one save only of 2 of 223 pairs); a header kept beside an absent record
+  would FAIL a legal save.
+* **The meta-test's time**: one full run on the tip is 58 minutes (3488 s, nothing else running), against 75 minutes at G2 (184 named guards and 299 derived candidates then; the lists have grown, the run was quieter).
+* **Still the coordinator's**: copying the new gate and `host.ps1` into the VM and the re-gate (R36G0b-8 needs a real recording), fresh-tree gates in the verify worktree, mutations at each new guard, the
+  independent reviewers, range scans, push and CI on all seven jobs, 4(e) for the two Props inserts (W36-2.2), the whole-wave review and the merge.  CI has no `olefile` until its jobs `pip install` it, and the
+  `trace-gate-meta` CI job has not run on a runner.

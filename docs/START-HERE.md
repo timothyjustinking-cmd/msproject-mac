@@ -1,6 +1,6 @@
 # START HERE: MS Project to native port
 
-_Updated 11 November 2026, wave 36 in progress on branch `wave36` (cut from `main` at `b2c0b19`).
+_Updated 22 November 2026, wave 36 at its CLOSE on branch `wave36` (cut from `main` at `b2c0b19`).
 Keep this file under 8 KB and current at every wave close; it is the only file a new session must
 read first.  Wave history is in `docs/handoff/history-waves34-35.md`: read it only to investigate
 a decision.  The writer inventory (which edits save, which are refused), the local Qt path and the
@@ -14,19 +14,22 @@ house rules of wave 35g are the last section of that file, "Standing rules and s
   `docs/handoff/wave32-verification/rewrite-sha-map.txt` (left old, right current).
 * **Wave 36 (the writer wave)** puts the Project 2021 trace's rules into the writers.  Brief
   `docs/handoff/wave36-brief.md`, record `docs/handoff/wave36-complete.md`, builder Claude Sonnet
-  5.5, nothing pushed.  Groups: G0, G0b and G0c the trace gate and the records, G1 and G1b the font item,
-  G2 Props (closes R35cG0-4), CLOSE.  G3 (Insert Task, Milestone, Summary) is
-  not started: no held-out insert pair (`spec/writers/evidence/trace-insert-rules-r6.md`).
-* **G0, G0b and G0c are done** (markers `WAVE-36-G0-COMPLETE`, `-G0b-`, `-G0c-`): `tools/trace/trace_gate.py`
-  compares a traced save with the reference outside named noise fields only, and the control mask excuses
-  nothing; a pair whose control or edit differs in a field nobody decoded FAILs and is OPEN in the test
-  (56 of 202 control-nulls, see `wave36-complete.md` G0c).  `tools/trace/test_trace_gate.py` (ctest
-  `trace_gate_guards`, acceptance sweeps only), `tools/trace/test_gate_guards_meta.py` (ctest
-  `trace_gate_meta`, label of the same name, own timeout: removes each guard and expects red; run on a
-  fresh tree at each group close and in the CI job `trace-gate-meta`; the matrix and asan jobs pass
-  `-LE trace_gate_meta`) and `tools/trace/test_host_skip.ps1` (ctest `trace_host_scripts`, needs `pwsh`)
-  guard them; the CI jobs `pip install olefile`, not yet run on a runner.  The VM still runs the frozen
-  gate and `host.ps1`; the coordinator copies the new ones in and re-gates (R36G0b-8 needs a real recording).
+  5.5, nothing pushed.  Done: G0 to G0f (the trace gate and the records), G1 and G1b (the font item),
+  G2 (Props; closes R35cG0-4) and CLOSE (the G0f review's R36G0f-1 to -3 and -8, fixed in `de97271`,
+  `1a581b2`, `79109bb`, `429f241`); the markers are in `wave36-complete.md`.  G3 (Insert Task,
+  Milestone, Summary) is not started: no rule predicts a held-out pair (`trace-insert-rules-r6.md`;
+  the five `wave36-r7-insert-*` recordings are committed but no note derives or checks a rule on them).
+* **The trace gate** `tools/trace/trace_gate.py` compares a traced save with the reference outside named
+  noise fields only; each mask names a field and checks its value; a pair whose control or edit differs in
+  an undecoded field FAILs and is OPEN in the test (22 of 202 control-nulls, 107 rows pinned).  A creation
+  stamp is masked only in a row the control lacks, so the VM recordings that rewrite a shared row's stamp
+  FAIL as data (R36G0f-2).  `tools/trace/test_trace_gate.py` (ctest `trace_gate_guards`),
+  `test_gate_guards_meta.py` (ctest `trace_gate_meta`, about 75 minutes: removes each guard and expects red;
+  CI job `trace-gate-meta`; the matrix and asan jobs pass `-LE trace_gate_meta`) and `test_host_skip.ps1`
+  (ctest `trace_host_scripts`, needs `pwsh`) guard it; CI jobs `pip install olefile`, not yet run on a
+  runner.  The VM still runs the frozen gate and `host.ps1`: the coordinator copies the new ones in and
+  re-gates (R36G0b-8 needs a real recording).  Queued, not fixed: R36G0f-4 to -7 and -9 (the VM's newer
+  saves lie above three spans: 108 of 210 PASS).
 * **Open, no Critical or High:** the Lows R35gG0-1 to -4, R35gG1-1 to -5 and R35gW-1 to -5;
   partly fixed or open R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), R35bW-1, R35bW-2, R35bG2-2,
   R35bG3-1, R35bG0-9, R35bG1-10, R35bG2-9.  All are queued in `docs/handoff/plan-waves27-30.md`.

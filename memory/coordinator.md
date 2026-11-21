@@ -1,4 +1,4 @@
-# memory: coordinator (11 November 2026, wave 36 G0 done; waves 34 to 35g merged)
+# memory: coordinator (22 November 2026, wave 36 at its CLOSE; waves 34 to 35g merged)
 
 **Entry point:** `docs/START-HERE.md`.  Current brief `docs/handoff/wave36-brief.md`, record
 `docs/handoff/wave36-complete.md`.  The wave 34 to 35g history, with the old wave states of this
@@ -10,9 +10,16 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
   checked, 3 not checked).  Waves 23 to 32 were merged on 27 October 2026 as `17f5782` after an
   operator-approved `git filter-branch`: every id in the wave 23 to 32 records is pre-rewrite; map
   it through `docs/handoff/wave32-verification/rewrite-sha-map.txt` (left old, right current).
-* `wave36` is cut from `main` at `b2c0b19`, local only.  G0, G1, G2 and CLOSE run; **G3 is not
-  started** (no held-out insert pair in `trace-insert-rules-r6.md`; the coordinator re-checks
-  before CLOSE).  Wave 37: Notes, Set Baseline, linked, lag and constraint Calculate.
+* `wave36` is cut from `main` at `b2c0b19`, local only.  G0 to G0f, G1, G1b, G2 and CLOSE are done
+  (`wave36-complete.md`); **G3 is not started** (re-checked at CLOSE: `trace-insert-rules-r6.md`
+  states no rule that predicts a held-out pair, and no note derives one from the five committed
+  `wave36-r7-insert-*` recordings).  Wave 37: Notes, Set Baseline, linked, lag and constraint
+  Calculate.  Still the coordinator's: fresh-tree gates, push and CI, 4(e), the whole-wave review.
+* **CLOSE (the G0f review), 22 November 2026:** C.1 the Gantt unit word is noise only against a
+  different pane width, in the ratio of the widths (`de97271`); C.2 a creation stamp is masked only
+  for a row, assignment or resource the control lacks (`1a581b2`), so the VM recordings of shared-row
+  stamps FAIL as data; C.3 the CEdl row record is dropped only with kind 1 (`79109bb`); C.4 the notes
+  print no host network address (`429f241`); R36G0f-4 to -7 and -9 are queued in the plan (`8f7786f`).
 * **G0 (the trace gate and the records), 11 November 2026:** W36-0.1 the noise allow-list is in
   `tools/trace/trace_gate.py` as per-stream windows and ceilings (the review's R36G0-1 to -5 found by-name waivers and regions in them; G0b fixes that), exit 0
   is PASS and `runone6.ps1` records it; 0.2 no wrong-length mask, fixed-stride streams masked per
@@ -20,9 +27,10 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
   (`tools/trace/test_trace_gate.py`, flips one byte per stream of a committed pair; G0b flips every offset outside the named fields); 0.5
   `r5b-skip.ps1` invokes only in a "Sign in" dialog and `kvp/host.ps1` `vmx` throws on a MISMATCH or
   a wrong reply length (ctest `trace_host_scripts`, needs `pwsh`); 0.6 the records.
-* **Watch:** the gate's windows are tuned to the null run and the 99 committed control pairs, so
-  the coordinator's re-gate of the 109 recordings may FAIL on same-machine noise: that is a
-  finding by design, not a gate fault.  CI has no `olefile`, so `trace_gate_guards` SKIPs there.
+* **Watch:** the gate's windows are tuned to the null run and the committed control pairs, so
+  the coordinator's re-gate of the recordings may FAIL on same-machine noise or a stamp past a span
+  (R36G0f-4: 108 of 210 VM copies PASS): that is a finding by design, not a gate fault.  CI has no
+  `olefile` until its jobs `pip install` it, so `trace_gate_guards` SKIPs there.
 * **Open, no Critical or High:** Lows R35gG0-1 to -4, R35gG1-1 to -5, R35gW-1 to -5; partly fixed
   or open R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), R35bW-1, R35bW-2, R35bG2-2, R35bG3-1,
   R35bG0-9, R35bG1-10, R35bG2-9.  Only the coordinator's review closes an id.
