@@ -1,6 +1,7 @@
 # START HERE: MS Project to native port
 
-_Updated 22 November 2026, wave 36 at its CLOSE on branch `wave36` (cut from `main` at `b2c0b19`).
+_Updated 22 November 2026, wave 36b at its CLOSE on branch `wave36b` (cut from `wave36` at `977d833`;
+`wave36` from `main` at `b2c0b19`).
 Keep this file under 8 KB and current at every wave close; it is the only file a new session must
 read first.  Wave history is in `docs/handoff/history-waves34-35.md`: read it only to investigate
 a decision.  The writer inventory (which edits save, which are refused), the local Qt path and the
@@ -13,27 +14,30 @@ house rules of wave 35g are the last section of that file, "Standing rules and s
   wave 23 to 32 records are pre-rewrite: map one through
   `docs/handoff/wave32-verification/rewrite-sha-map.txt` (left old, right current).
 * **Wave 36 (the writer wave)** puts the Project 2021 trace's rules into the writers.  Brief
-  `docs/handoff/wave36-brief.md`, record `docs/handoff/wave36-complete.md`, builder Claude Sonnet
-  5.5, nothing pushed.  Done: G0 to G0f (the trace gate and the records), G1 and G1b (the font item),
-  G2 (Props; closes R35cG0-4; the Props insert is framing decoded, not lifted: Project's reopen shows no
-  baseline and no note, W36b-0.1) and CLOSE (the G0f review's R36G0f-1 to -3 and -8, fixed in `de97271`,
-  `1a581b2`, `79109bb`, `429f241`); the markers are in `wave36-complete.md`.  G3 (Insert Task,
-  Milestone, Summary) is not started: no rule predicts a held-out pair (`trace-insert-rules-r6.md`;
-  the five `wave36-r7-insert-*` recordings are committed but no note derives or checks a rule on them).
+  `docs/handoff/wave36-brief.md`, record `wave36-complete.md`, builder Claude Sonnet 5.5, nothing pushed.
+  Done: G0 to G0f (the trace gate), G1 and G1b (the font item), G2 (Props; the insert is framing decoded,
+  not lifted: Project's reopen shows no baseline and no note) and CLOSE.  G3 (Insert Task, Milestone,
+  Summary) is not started: no rule predicts a held-out pair (`trace-insert-rules-r6.md`).
+* **Wave 36b (fix-only)** fixed the wave 36 review's three Highs and three Mediums, `wave36b-brief.md`,
+  record `wave36b-complete.md` (markers `WAVE-36b-G0-COMPLETE`, `WAVE-36b-COMPLETE`): `save_props_edit`
+  refuses an insert again (the framing is `props_insert_framing`, tests only); the Gantt zoom dates are
+  noise only where a control and its null differ; no note prints a network address; the "already in the
+  stream" refusal has a test; a missing `olefile` fails in CI; the meta run is two shards.  Nothing is
+  pushed: the coordinator verifies, pushes, dispatches CI and merges `wave36` and `wave36b` on the
+  operator's word.
 * **Trace notes** (`trace-*.md`, `trace-*.txt`, the runbook) live in the private repo beside this one,
   `../msproject-mac-trace` (D-8, Sun 22 Nov 2026); a citation by file name refers there.  The one public
   note is `spec/writers/evidence/trace-gate-fields-g0b.md`, the gate's field evidence.
 * **The trace gate** `tools/trace/trace_gate.py` compares a traced save with the reference outside named
   noise fields only; each mask names a field and checks its value; a pair whose control or edit differs in
-  an undecoded field FAILs and is OPEN in the test (22 of 202 control-nulls, 107 rows pinned).  A creation
-  stamp is masked only in a row the control lacks, so the VM recordings that rewrite a shared row's stamp
-  FAIL as data (R36G0f-2).  `tools/trace/test_trace_gate.py` (ctest `trace_gate_guards`),
-  `test_gate_guards_meta.py` (ctest `trace_gate_meta`, about 75 minutes: removes each guard and expects red;
-  CI job `trace-gate-meta`; the matrix and asan jobs pass `-LE trace_gate_meta`) and `test_host_skip.ps1`
-  (ctest `trace_host_scripts`, needs `pwsh`) guard it; CI jobs `pip install olefile`, not yet run on a
-  runner.  The VM still runs the frozen gate and `host.ps1`: the coordinator copies the new ones in and
-  re-gates (R36G0b-8 needs a real recording).  Queued, not fixed: R36G0f-4 to -7 and -9 (the VM's newer
-  saves lie above three spans: 108 of 210 PASS).
+  an undecoded field FAILs and is OPEN in the test (22 of 202 control-nulls).  A creation stamp is masked
+  only in a row the control lacks; the Gantt zoom dates (+1176, +1182, +1186) only where a control and its
+  null differ.  `tools/trace/test_trace_gate.py` (ctest `trace_gate_guards`), `test_host_skip.ps1`
+  (`trace_host_scripts`, needs `pwsh`) and the guard-removal run `test_gate_guards_meta.py` guard it; that
+  run is two ctests, `trace_gate_meta_named` (24 min) and `trace_gate_meta_derived` (41 min), label
+  `trace_gate_meta`, two CI jobs; the matrix and asan jobs pass `-LE trace_gate_meta`.  CI sets
+  `MPP_REQUIRE_OLEFILE=1`; the shard limits (90 and 150 minutes) are unmeasured on a runner.  The VM still runs the frozen gate and `host.ps1`: the coordinator copies the new ones
+  in and re-gates.  Queued, not fixed: R36G0f-4 to -7 and -9, R36W-7 to -10 (`plan-waves27-30.md`).
 * **Open, no Critical or High:** the Lows R35gG0-1 to -4, R35gG1-1 to -5 and R35gW-1 to -5;
   partly fixed or open R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), R35bW-1, R35bW-2, R35bG2-2,
   R35bG3-1, R35bG0-9, R35bG1-10, R35bG2-9.  All are queued in `docs/handoff/plan-waves27-30.md`.
@@ -47,7 +51,7 @@ house rules of wave 35g are the last section of that file, "Standing rules and s
 
 1. this file;
 2. `docs/handoff/standing-rules.md` (binds every wave);
-3. the current brief, `docs/handoff/wave36-brief.md`, and its record `wave36-complete.md`;
+3. the current brief, `docs/handoff/wave36b-brief.md`, and its record `wave36b-complete.md`;
 4. `memory/coordinator.md` (the compact current memory);
 5. `spec/README.md` (the writer decode notes) and `docs/ui-parity-spec.md` when the group needs
    them.
@@ -117,7 +121,7 @@ dispatch per milestone; `app-macos.yml` runs on push.
 ## Start a session with this (paste)
 
 ```
-Read docs/START-HERE.md, docs/handoff/standing-rules.md and docs/handoff/wave36-brief.md, then
-work on branch wave36 as the coordinator for your group only.  Run the three name scans and
+Read docs/START-HERE.md, docs/handoff/standing-rules.md and the current brief, then work on
+the current wave branch as the coordinator for your group only.  Run the three name scans and
 check_markers before every commit.  Push nothing.
 ```

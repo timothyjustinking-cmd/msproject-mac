@@ -1,7 +1,7 @@
-# memory: coordinator (22 November 2026, wave 36 at its CLOSE; waves 34 to 35g merged)
+# memory: coordinator (22 November 2026, wave 36b at its CLOSE; waves 34 to 35g merged)
 
-**Entry point:** `docs/START-HERE.md`.  Current brief `docs/handoff/wave36-brief.md`, record
-`docs/handoff/wave36-complete.md`.  The wave 34 to 35g history, with the old wave states of this
+**Entry point:** `docs/START-HERE.md`.  Current brief `docs/handoff/wave36b-brief.md`, record
+`docs/handoff/wave36b-complete.md` (the wave 36 brief and record: `wave36-brief.md`, `wave36-complete.md`).  The wave 34 to 35g history, with the old wave states of this
 file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinator-through-wave20-full.md`.
 
 ## State
@@ -15,6 +15,16 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
   states no rule that predicts a held-out pair, and no note derives one from the five committed
   `wave36-r7-insert-*` recordings).  Wave 37: Notes, Set Baseline, linked, lag and constraint
   Calculate.  Still the coordinator's: fresh-tree gates, push and CI, 4(e), the whole-wave review.
+* **Wave 36b (fix-only), 22 November 2026:** `wave36b` is cut from `wave36` at `977d833`, local only; G0
+  (`WAVE-36b-G0-COMPLETE`) and CLOSE (`WAVE-36b-COMPLETE`) are done, nothing pushed.  Fixed: R36W-2 and
+  R36G2-C1 (`9e5fb70`: `save_props_edit` refuses an insert; the framing is `props_insert_framing`, called by
+  tests only; W36-2.2 is "framing decoded, not lifted"); R36W-1 (`2f1c174`: the Gantt zoom dates are noise
+  only where a control and its null differ); R36W-3 (`8cb3e52`: no note prints a network address; the check
+  holds digests, not the address); R36W-4 (`f0b55b1`); R36W-5 (`e02a030`: `MPP_REQUIRE_OLEFILE=1` in every CI
+  job); R36W-6 (`c3a4be8`: `trace_gate_meta_named` 24 min and `trace_gate_meta_derived` 41 min, two CI jobs).
+  R36W-7 to -10 (Lows) are queued in the plan.  Still the coordinator's: a fresh worktree, every "Guards seen
+  red" claim put back to red, the independent review, then on the operator's word push, CI on every job (the
+  shard limits are unmeasured on a runner) and the merge of `wave36` and `wave36b`.
 * **CLOSE (the G0f review), 22 November 2026:** C.1 the Gantt unit word is noise only against a
   different pane width, in the ratio of the widths (`de97271`); C.2 a creation stamp is masked only
   for a row, assignment or resource the control lacks (`1a581b2`), so the VM recordings of shared-row
@@ -29,8 +39,8 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
   a wrong reply length (ctest `trace_host_scripts`, needs `pwsh`); 0.6 the records.
 * **Watch:** the gate's windows are tuned to the null run and the committed control pairs, so
   the coordinator's re-gate of the recordings may FAIL on same-machine noise or a stamp past a span
-  (R36G0f-4: 108 of 210 VM copies PASS): that is a finding by design, not a gate fault.  CI has no
-  `olefile` until its jobs `pip install` it, so `trace_gate_guards` SKIPs there.
+  (R36G0f-4: 108 of 210 VM copies PASS): that is a finding by design, not a gate fault.  CI jobs
+  `pip install olefile` and set `MPP_REQUIRE_OLEFILE=1`, so a missing one fails (locally it skips).
 * **Open, no Critical or High:** Lows R35gG0-1 to -4, R35gG1-1 to -5, R35gW-1 to -5; partly fixed
   or open R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), R35bW-1, R35bW-2, R35bG2-2, R35bG3-1,
   R35bG0-9, R35bG1-10, R35bG2-9.  Only the coordinator's review closes an id.
