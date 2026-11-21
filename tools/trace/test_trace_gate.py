@@ -2282,6 +2282,25 @@ try:
               not hasattr(g, "ceiling_for") and not any("ceiling" in r for r in g.NOISE.values()))
 
 
+        # W36-C.4 (R36G0f-8): a version-1 GUID's node is the machine's network address; the notes name it
+        # "the host's node" and print no address (the 12 hex digits, either case; a record's bytes in a hex
+        # dump, spaced, are data and not an address, and the .cpp and .tsv files hold recorded bytes)
+        node_ = re.compile("[host node]", re.IGNORECASE)
+        root_ = os.path.abspath(os.path.join(HERE, "..", ".."))
+        printed_ = []
+        for top_ in ("spec", "docs"):
+            for dir_, dirs_, files_ in os.walk(os.path.join(root_, top_)):
+                for fn_ in files_:
+                    if fn_.endswith(".md"):
+                        with open(os.path.join(dir_, fn_), encoding="utf-8", errors="replace") as fh_:
+                            if node_.search(fh_.read()):
+                                printed_.append(os.path.relpath(os.path.join(dir_, fn_), root_))
+        check("W36-C.4 no note under spec/ or docs/ prints the host's network address", not printed_,
+              "%r" % (printed_,))
+        check("W36-C.4 the evidence note names the host's node in its GUID rows",
+              open(os.path.join(root_, "spec", "writers", "evidence", "trace-gate-fields-g0b.md"),
+                   encoding="utf-8").read().count("the host's node") >= 2)
+
         # a gate that checked nothing is not a pass
         lines, problems, checked, unchecked = g.compare({}, {}, C, N)
         check("W36-0.4 nothing checked: a problem 'nothing checked'",

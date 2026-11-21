@@ -133,7 +133,7 @@ record, a view GUID string of zeros or with another version digit, a C1-control 
   `{00000000-0000-0000-0000-000000000000}`: **3 of 3 PASS**; the version digit (index 15) changed to `4`:
   **3 of 3 PASS**.  A non-hex digit and a string that is not a GUID FAIL (the test's cases).
 - **Evidence:** in all 624 committed files that have a view `Props`, the string is
-  `{xxxxxxxx-xxxx-F111-9F..-[host node]}`-shaped: 19 of the 32 masked digits (positions 15 to 18, 20 to 22,
+  `{xxxxxxxx-xxxx-F111-9F..-<the host's node>}`-shaped: 19 of the 32 masked digits (positions 15 to 18, 20 to 22,
   25 to 36) never change in 624 files, and no string is all zero.  The node digits may move on another
   machine; the version and variant digits cannot.
 - **Fix:** parse the string to 16 bytes in the same byte order as the binary view GUIDs (or compare the
