@@ -216,6 +216,7 @@ VAR_META = {
 CEDL_PATH_ID = 0x26400031        # UTF-16 file path ending "!" and NUL (the last CEdl record)
 CEDL_SLOTS_ID = 0x26400024       # the task uids in view order, then 0xffffffff fill (capacity)
 CEDL_ROWS_ID = 0x2640003D        # view row positions, from the slot table; in one save only at times
+CEDL_ROWS_KIND = 1               # its kind word in 1140 of 1140 records (592 committed, 548 of the VM's); another stays compared (W36-C.3)
 CEDL_SLOTS_MAX = 1024            # bytes: the capacity bound; the committed saves reach 144
 # The view's date words (4-byte payloads: tenths of a minute from 1 January 1984) and the 8-byte view
 # word are session fields (W36-0f.4.1; DOSSIER "CEdl view date word 0x2640002a", "0x2640002b",
@@ -374,7 +375,8 @@ def _canon_cedl_var2(data, streams):
             noise.update(range(pos, pos + 4))
             noise.update(range(pos + 12 + 4 * len(uids), end))
             derived.add("slots")
-        elif rid == CEDL_ROWS_ID and slots is not None and _rows_ok(payload, len(slots)):
+        elif rid == CEDL_ROWS_ID and kind == CEDL_ROWS_KIND and slots is not None and \
+                _rows_ok(payload, len(slots)):
             noise.update(range(pos, end))
             continue
         elif rid in CEDL_DATE_IDS and length == 4 and                 CEDL_DATE_SPAN[0] <= _u32(payload, 0) <= CEDL_DATE_SPAN[1]:

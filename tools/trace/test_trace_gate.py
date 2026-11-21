@@ -1282,8 +1282,8 @@ try:
                 if rid in drop:
                     continue
                 if rid == g.CEDL_PATH_ID:
-                    for aid, apl in (add or ()):
-                        body += struct.pack("<III", len(apl), aid, 1) + apl + bytes(len(apl) & 1)
+                    for aid, apl, *akind in (add or ()):   # (id, payload) or (id, payload, kind)
+                        body += struct.pack("<III", len(apl), aid, akind[0] if akind else 1) + apl + bytes(len(apl) & 1)
                         n_rec += 1
                 payload = d_[pos + 12:pos + 12 + length]
                 if swap and rid in swap:
@@ -1397,6 +1397,30 @@ try:
             odd_rows = cedl_rebuilt(base2, add=[(0x2640003D, mut(rows_payload(n_uid)))])
             cedl_verdict("%s of the row record, one side only" % label, odd_rows, base2, True)
             cedl_verdict("%s of the row record against the plain one" % label, odd_rows, rows_added, True)
+        # W36-C.3 (R36G0f-3): the record's kind word is compared: 1 in 1140 of 1140 committed and VM records, so
+        # a record of any other kind is not the row-position record, whether on one side only or on both
+        for kind_ in (0, 2, 0x99, 0x01000000):
+            kinded_ = cedl_rebuilt(base2, add=[(0x2640003D, rows_payload(n_uid), kind_)])
+            cedl_verdict("the row record of kind %#x, traced only" % kind_, kinded_, base2, True, tag="W36-C.3")
+            cedl_verdict("the row record of kind %#x, reference only" % kind_, base2, kinded_, True, tag="W36-C.3")
+            cedl_verdict("the row record of kind %#x against the plain one" % kind_, kinded_, rows_added, True,
+                         tag="W36-C.3")
+            cedl_verdict("the row record of kind %#x on both sides" % kind_, kinded_, kinded_, False, tag="W36-C.3")
+        # the committed pair of the brief: wave28-mark-auto's own row record, its kind changed from 1 to 0x99
+        m_ref, m_ctl, m_nul = pair("wave28-mark-auto")
+        MR, MC, MN = load(m_ref), load(m_ctl), load(m_nul)
+        m_recs = [r_ for r_ in g.frame_records(MR[cedl_n], 20) if r_[2] == 0x2640003D]
+        check("W36-C.3 wave28-mark-auto has one row-position record of kind 1 in the plain form",
+              len(m_recs) == 1 and m_recs[0][3] == 1, "%r" % (m_recs,))
+        m_kind = bytearray(MR[cedl_n])
+        struct.pack_into("<I", m_kind, m_recs[0][0] + 8, 0x99)
+        m_bad = dict(MR, **{cedl_n: bytes(m_kind)})
+        for label_, a_, b_ in (("traced", m_bad, MR), ("reference", MR, m_bad)):
+            lines_, problems_, checked_, unchecked_ = g.compare(a_, b_, MC, MN)
+            check("W36-C.3 wave28-mark-auto: the row record's kind 1 changed to 0x99 in the %s fails" % label_,
+                  problems_ >= 1 and any(cedl_n in ln for ln in lines_), "%r" % (lines_,))
+        lines_, problems_, checked_, unchecked_ = g.compare(MR, MR, MC, MN)
+        check("W36-C.3 wave28-mark-auto: the unchanged record passes", problems_ == 0, "%r" % (lines_,))
         # the same row record twice with different content on both sides is data
         other_rows = cedl_rebuilt(base2, add=[(0x2640003D, rows_payload(n_uid)[:-6] + struct.pack("<I", 23) + bytes(2))])
         cedl_verdict("a row record that differs between the two saves", other_rows, rows_added, True)
