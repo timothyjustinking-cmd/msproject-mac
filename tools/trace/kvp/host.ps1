@@ -49,7 +49,7 @@ function vmx([string]$code,[int]$timeout=120){
 
 
 
-$script:tmp = Join-Path $env:TEMP 'trace-kvp'; New-Item -ItemType Directory -Force $script:tmp | Out-Null
+$script:tmp = Join-Path ([IO.Path]::GetTempPath()) 'trace-kvp'; New-Item -ItemType Directory -Force $script:tmp | Out-Null
 function cdbq([string]$target,[string[]]$cmds,[string]$name,[int]$timeout=900,[string]$filter='.'){
   $cf = Join-Path $script:tmp "$name.txt"
   (@(".scriptload C:\trace\cmd\chain.js", ".logopen /u C:\trace\out\$name.log") + $cmds + @(".logclose","q")) | Set-Content $cf -Encoding ascii

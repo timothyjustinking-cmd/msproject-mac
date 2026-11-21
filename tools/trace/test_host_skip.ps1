@@ -8,8 +8,12 @@ $fail = 0
 function Check($label, $ok) { if ($ok) { "PASS $label" } else { "FAIL $label"; $script:fail++ } }
 
 # ---- host.ps1: dot-source with the CIM calls stubbed, then stub the KVP channel ----
+# W36c-0.1 (R36bCI-1): a Linux or macOS runner has no TEMP.  The test runs without it on every host,
+# so host.ps1 must take its temp folder from [IO.Path]::GetTempPath(), never from $env:TEMP.
+Remove-Item Env:TEMP -ErrorAction SilentlyContinue
 function Get-CimInstance { $null }
 . $Host1
+Check 'host.ps1 loads with TEMP unset and has a temp folder' ($null -eq $env:TEMP -and $script:tmp -and (Test-Path -LiteralPath $script:tmp))
 function Set-Kvp($n, $d) { 0 }
 # The reply the real guest agent (kvp/agent.ps1) sends, W36-0b.6 (R36G0-7).  The code vmx sends
 # returns the base64 text; the agent runs it through `Out-String -Width 300`, which ends the text
