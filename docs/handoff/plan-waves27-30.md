@@ -589,3 +589,30 @@ assigned:
 - **R36bG0-7 (Info):** the insert refusal of `save_props_edit` is tested only through `props_insert_framing` (no save calls
   it); no test covers an id already in the typed-property section of a real stream.  Fix: if the framing is ever called by
   a save, add that case first.
+
+## Queued from wave 36c (coordinator): the G0 review and the CLOSE check (22 November 2026)
+
+The review is `wave36c-verification/review-g0.md`, the record `wave36c-verification/coord-verify.md`.  No Critical or
+High; no wave is assigned:
+
+- **R36cG0-1 (Medium):** the baseline (unmutated) run of `test_gate_guards_meta.py` is plain `subprocess.run`, not
+  under the 2 GiB hold, so a gate that only fails under the hold shows as stale REDUNDANT entries, not as a red baseline.
+  Fix: run the baseline through `run_limited`.
+- **R36cG0-2 (Medium):** nothing goes red if `run_mutant` goes back to plain `subprocess.run` (the coordinator planted it:
+  every test green); `--check-limit` tests `run_limited` directly.  Fix: a test that the real mutant path is held (for
+  example, a mutant that allocates past the limit ends `red (raise)` with MemoryError).
+- **R36cG0-3 (Low):** POSIX `preexec_fn` from pool threads (Python warns it is unsafe); a container limit under 2 GiB
+  would abort the run only after the queue drains.
+- **R36cG0-4 (Low):** Windows job object: the handle leaks if `SetInformationJobObject` fails; `CloseHandle` has no
+  argtypes; `p._handle` is private.
+- **R36cG0-5 (Low):** the 36c record cites `mem/cand136-capped.*` for "red in about two seconds" (that log ran 0
+  candidates) and "N = 1 to 5" from a log holding N = 3 only; the coordinator saw 2 s and the reviewer N = 1 to 8 clean.
+- **R36cG0-6 (Low):** `trace_gate_meta_shards` proves `partition`, not the `mine` filter `main` uses for `--shard`.
+- **R36cG0-7 (Low):** stale comments in CMakeLists.txt (about lines 207 to 221) and ci.yml (about 355 to 363) still
+  describe one derived test of 41 minutes; the derived job's name is now "(K of 4)", so a required check naming the
+  old job would wait forever.
+- **R36cG0-8 (Low):** edges: a `--shard` pick in another shard runs 0 and exits 0; `--check-shards 0` falls through to a
+  full run; `--list` ignores `--shard`; a REDUNDANT cover in another shard relies on that shard; still no per-mutant
+  timeout.
+- **R36cC-1 (Low):** the START-HERE rewrite line says the host's node is "gone from text"; it stays in spaced GUID byte
+  dumps and recorded data (R36bG0-1).
