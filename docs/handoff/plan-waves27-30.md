@@ -556,3 +556,36 @@ fixed, because the brief names six items and no more; no wave is assigned:
   docstring.
 - **R36W-10 (Low):** `review-g0e.md` and `review-g0f.md` list local worktree paths (`D:/dev/msproject-mac-wt-*`),
   the machine's layout.  Fix: replace them with a label.
+
+## Queued from wave 36c (CLOSE): the wave 36b G0 review's seven findings (22 November 2026)
+
+The review is `wave36b-verification/review-g0.md` (diff `e1b2ee5..706078b`; commit ids there and in the 36b records are
+pre-rewrite).  No Critical or High.  Wave 36c is fix-only for the three CI failures and fixes none of these; no wave is
+assigned:
+
+- **R36bG0-1 (Medium):** the host's node is still printed in 19 notes under `spec/` and `docs/` as spaced GUID byte dumps
+  (the node is the last six bytes of a version-1 GUID), and in `analysis/{com_validation,unnamed_inferred,unnamed_probe}.tsv`,
+  `core/mppwrite/assignment_growth.cpp` and `tests/data/README.md`.  The W36-C.4 check's comment calls a spaced dump "data
+  and out of scope", so it passes; its message and the 36b record's "Found, not fixed" say more than the tip holds.  The
+  VM's node is gone from the tip in every form.  Fix: say plainly in the record that spaced GUID dumps keep the host's
+  node (evidence bytes), or redact the last six bytes in the dumps and add the spaced and byte-reversed forms to
+  `address_hits`.
+- **R36bG0-2 (Low):** the view date mask blinds the gate in every pair whose control and null differ in a date word (21 of
+  196 pairs; none of the five zoom references).  A zoom writer save recorded in such a session, with a wrong date at that
+  word, passes.  Fix: one line in `trace-gate-fields-g0b.md`; if a zoom pair is ever recorded in such a session, require
+  the target's word to equal one of the pair's two values or lie in the span of the pair's own dates.
+- **R36bG0-3 (Low):** the address check (`address_hits` in `test_trace_gate.py`) walks only `.md` and `.txt` (not the 60
+  `.json`, `.tsv`, `.csv`, `.py` under `spec/` and `docs/`), strips only `:` and `-`, and finds no dotted, spaced or
+  byte-reversed form.  Confirmed by the reviewer's own scan: no VM hit, no host hit beyond R36bG0-1.  Fix with R36bG0-1.
+- **R36bG0-4 (Low):** nothing pins the CI wiring: no test reads `ci.yml`, so deleting `MPP_REQUIRE_OLEFILE` silently
+  restores the skip; the shard union was by construction (wave 36c's `trace_gate_meta_shards` now tests the derived
+  union); the job names changed from `trace-gate-meta` (a required-status-check setting naming the old one would wait
+  forever).  Fix: a test that parses `ci.yml` for the variable and the job names.
+- **R36bG0-5 (Low):** the 36b CI limits were thin on a 2-vCPU runner (superseded for the derived shard by wave 36c's four
+  shards; `trace_gate_meta_named` is unchanged: 24 min local, ctest 75 min, job 90).  Fix: measure the named shard on a
+  runner, then set the limits.
+- **R36bG0-6 (Low):** a stale heading above the correction in `spec/writers/props-records.md` (line 297, "Supersedes the
+  insert refusal above (W34-2.2) for two ids"); the closing paragraph corrects it.  Fix: reword the heading.
+- **R36bG0-7 (Info):** the insert refusal of `save_props_edit` is tested only through `props_insert_framing` (no save calls
+  it); no test covers an id already in the typed-property section of a real stream.  Fix: if the framing is ever called by
+  a save, add that case first.
