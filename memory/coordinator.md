@@ -1,7 +1,8 @@
-# memory: coordinator (22 November 2026, wave 36b at its CLOSE; waves 34 to 35g merged)
+# memory: coordinator (22 November 2026, wave 36c at its CLOSE; waves 34 to 35g merged)
 
-**Entry point:** `docs/START-HERE.md`.  Current brief `docs/handoff/wave36b-brief.md`, record
-`docs/handoff/wave36b-complete.md` (the wave 36 brief and record: `wave36-brief.md`, `wave36-complete.md`).  The wave 34 to 35g history, with the old wave states of this
+**Entry point:** `docs/START-HERE.md`.  Current brief `docs/handoff/wave36c-brief.md`, record
+`docs/handoff/wave36c-complete.md` (wave 36b and 36: `wave36b-brief.md`, `wave36b-complete.md`, `wave36-brief.md`,
+`wave36-complete.md`).  The wave 34 to 35g history, with the old wave states of this
 file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinator-through-wave20-full.md`.
 
 ## State
@@ -15,6 +16,22 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
   states no rule that predicts a held-out pair, and no note derives one from the five committed
   `wave36-r7-insert-*` recordings).  Wave 37: Notes, Set Baseline, linked, lag and constraint
   Calculate.  Still the coordinator's: fresh-tree gates, push and CI, 4(e), the whole-wave review.
+* **History rewrite, Sun 22 November 2026 (the operator's word):** `main`, `wave36` and `wave36b` were rewritten
+  from 8 November 2026 (the trace notes under `spec/writers/evidence/trace-*`, `trace-runbook.md`, `mapdiff.py`
+  and `r6_ins4.py` gone from every commit; the VM's and host's node gone from note text and messages).
+  **Commit ids in records written before Sun 22 Nov 2026 name pre-rewrite commits**; the old-to-new map is the
+  coordinator's, private.  Detail: `wave36b-verification/coord-verify.md` section 4.
+* **Wave 36c (fix-only), 22 November 2026:** `wave36c` is cut from `wave36b` after the rewrite, local only; G0
+  (`WAVE-36c-G0-COMPLETE`) and CLOSE (`WAVE-36c-COMPLETE`) are done, nothing pushed.  Fixed the three failures
+  of the first `wave36b` CI run: R36bCI-1 (`2ab6e29`: `host.ps1` takes its temp folder from `GetTempPath()`);
+  R36bCI-2 (`f39cdb5`: the fake guest answers with the id `vmx` wrote, not one stamped from the clock);
+  R36bCI-3 (`eb781b5`: one candidate, `_canon_summary:if-always`, grew a set to 4 billion offsets and took 36 GB, so
+  every mutant is held to 2 GiB per process, the derived run is four shards `trace_gate_meta_derived_KofN` of
+  three workers, each its own CI job, with a flushed line per candidate and a union test).  R36bG0-1 to -7 (the 36b
+  review: the host's node still in 19 spaced GUID dumps, Medium) are queued in the plan (`3c8d5fe`).  Still the
+  coordinator's: a fresh worktree, every "Guards seen red" claim put back to red, the independent review, then
+  on the operator's word the push, CI on every job (the Linux `RLIMIT_AS` path and every shard's limits are
+  unrun on a runner) and the merge of `wave36`, `wave36b` and `wave36c`.
 * **Wave 36b (fix-only), 22 November 2026:** `wave36b` is cut from `wave36` at `977d833`, local only; G0
   (`WAVE-36b-G0-COMPLETE`) and CLOSE (`WAVE-36b-COMPLETE`) are done, nothing pushed.  Fixed: R36W-2 and
   R36G2-C1 (`9e5fb70`: `save_props_edit` refuses an insert; the framing is `props_insert_framing`, called by
