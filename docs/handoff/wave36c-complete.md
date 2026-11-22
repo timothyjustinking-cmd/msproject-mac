@@ -192,3 +192,5 @@ Nothing in CLOSE is deferred, and nothing in G0.  R36bG0-1 to -7 are queued by C
 * **Still the coordinator's:** a fresh worktree and the gates there, every "Guards seen red" row put back to red, the
   independent review of the wave diff, then on the operator's word the push, CI on every job and the merge of `wave36`,
   `wave36b` and `wave36c` into `main`.  The G0 "Found, not fixed" list above stands.
+
+WAVE-36c-COMPLETE
