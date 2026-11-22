@@ -8,7 +8,8 @@ tail entry and the 2048-byte cap.  This script plants each removal in GUARDS, on
 temporary copy of the gate, runs tools/trace/test_trace_gate.py against it (`--gate-dir`) and asserts
 the test goes red.  A guard whose removal leaves the test green is a case that is missing.
 
-    python test_gate_guards_meta.py [--jobs N] [--skip-baseline] [--list] [ID ...]
+    python test_gate_guards_meta.py [--jobs N] [--only named|derived] [--shard K/N] [--log PATH]
+                                    [--check-shards N] [--skip-baseline] [--list] [ID ...]
 
 It prints one line per guard (`red` with the first failing case, `red (crash)` when the mutant made
 the test raise, or `GREEN`), then `guards listed N, red M` (and the baseline).  Exit 0 only when every
@@ -19,8 +20,14 @@ test_trace_gate.py itself).  Exit 1 otherwise; 77 when olefile is absent.
 W36-2.4: this is its own ctest and no longer runs at the end of test_trace_gate.py, so
 `ctest -R trace_gate_guards` runs the acceptance sweeps only.  W36b-0.6: it is two ctests, one per
 shard, `trace_gate_meta_named` (`--only named`) and `trace_gate_meta_derived` (`--only derived`), each
-with its own TIMEOUT and both labelled `trace_gate_meta`.  Run both with `ctest -L trace_gate_meta` on
-a fresh tree at each group close; the CI jobs are `trace-gate-meta-named` and `trace-gate-meta-derived`.
+with its own TIMEOUT and both labelled `trace_gate_meta`.  W36c-0.3 (R36bCI-3): the derived list is
+further split, `--shard K/N` runs the K-th of N round-robin slices of it (`partition`), CMake registers
+`trace_gate_meta_derived_KofN` for each and CI runs each as its own job; `--check-shards N` (ctest
+`trace_gate_meta_shards`) proves the N slices hold every derived candidate exactly once and that the
+check reports a candidate dropped or doubled.  Every finished guard or candidate prints one flushed
+line (`[done/total] state key`), also to `--log PATH`, so a killed run leaves a log.  Run all with
+`ctest -L trace_gate_meta` on a fresh tree at each group close; the CI jobs are `trace-gate-meta-named`
+and `trace-gate-meta-derived (K of N)`.
 
 W36-0e.1 (R36G0d-1): the named list above can only hold the guards someone thought of, so the
 candidates are also DERIVED from the gate with `ast`: the condition of an `if` that returns,
@@ -717,13 +724,94 @@ def splice(src, span, repl):
     return (raw[:span[0]] + repl.encode("utf-8") + raw[span[1]:]).decode("utf-8")
 
 
+# W36c-0.3 (R36bCI-3): a removal can turn a bounded loop into one that allocates without end (the candidate
+# `_canon_summary:if-always:pid in (SI_AUTHOR, ...)` adds a range of 4 billion offsets to a set).  Run on
+# the full derived list at six workers it took the whole process tree to 11.6 GB of working set and 36.6 GB
+# of commit, and the hosted runner (16 GB) was lost.  Every process of a mutant run is held to this much
+# memory; a mutant that needs more gets the MemoryError it would have got at the machine's limit, which is
+# what its red result already was ("gate raised on the command line: MemoryError").
+MUTANT_MEMORY_LIMIT = 2 * 1024 ** 3
+
+
+def _job_with_memory_limit(limit):
+    """Windows: a job object that holds every process assigned to it (and their children) to `limit` bytes of
+    commit each, and kills them when the handle closes.  -> the handle."""
+    import ctypes
+    from ctypes import wintypes
+
+    class Basic(ctypes.Structure):
+        _fields_ = [("PerProcessUserTimeLimit", ctypes.c_int64), ("PerJobUserTimeLimit", ctypes.c_int64),
+                    ("LimitFlags", wintypes.DWORD), ("MinimumWorkingSetSize", ctypes.c_size_t),
+                    ("MaximumWorkingSetSize", ctypes.c_size_t), ("ActiveProcessLimit", wintypes.DWORD),
+                    ("Affinity", ctypes.c_size_t), ("PriorityClass", wintypes.DWORD),
+                    ("SchedulingClass", wintypes.DWORD)]
+
+    class IoCounters(ctypes.Structure):
+        _fields_ = [(n, ctypes.c_uint64) for n in ("r", "w", "o", "rb", "wb", "ob")]
+
+    class Extended(ctypes.Structure):
+        _fields_ = [("Basic", Basic), ("Io", IoCounters), ("ProcessMemoryLimit", ctypes.c_size_t),
+                    ("JobMemoryLimit", ctypes.c_size_t), ("PeakProcessMemoryUsed", ctypes.c_size_t),
+                    ("PeakJobMemoryUsed", ctypes.c_size_t)]
+
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateJobObjectW.restype = wintypes.HANDLE
+    k32.SetInformationJobObject.argtypes = [wintypes.HANDLE, ctypes.c_int, ctypes.c_void_p, wintypes.DWORD]
+    k32.AssignProcessToJobObject.argtypes = [wintypes.HANDLE, wintypes.HANDLE]
+    job = k32.CreateJobObjectW(None, None)
+    info = Extended()
+    info.Basic.LimitFlags = 0x100 | 0x2000      # PROCESS_MEMORY | KILL_ON_JOB_CLOSE
+    info.ProcessMemoryLimit = limit
+    if not job or not k32.SetInformationJobObject(job, 9, ctypes.byref(info), ctypes.sizeof(info)):
+        raise OSError("job object: error %d" % ctypes.get_last_error())
+    return job, k32
+
+
+def run_limited(cmd, limit=MUTANT_MEMORY_LIMIT, **kw):
+    """subprocess.run with every process of the run held to `limit` bytes of memory (None: no limit)."""
+    if limit is None:
+        return subprocess.run(cmd, **kw)
+    if os.name == "posix":
+        import resource
+
+        def hold():
+            resource.setrlimit(resource.RLIMIT_AS, (limit, limit))
+        return subprocess.run(cmd, preexec_fn=hold, **kw)
+    import ctypes
+    job, k32 = _job_with_memory_limit(limit)
+    try:
+        # the job takes the process after it starts; the test it runs starts no child for a while yet
+        with subprocess.Popen(cmd, **{k: v for k, v in kw.items() if k not in ("capture_output",)},
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE) as p:
+            if not k32.AssignProcessToJobObject(job, int(p._handle)):
+                raise OSError("job object assign: error %d" % ctypes.get_last_error())
+            out, err = p.communicate()
+        return subprocess.CompletedProcess(cmd, p.returncode, out, err)
+    finally:
+        k32.CloseHandle(job)
+
+
+def check_limit(limit=MUTANT_MEMORY_LIMIT):
+    """0 when a process that takes 1.5 times the limit is refused (MemoryError) by `run_limited` and one that
+    takes a quarter of it is not; 1 otherwise.  `check_limit(None)` shows the first half failing."""
+    over = "x = bytearray(%d); print('allocated')" % int(limit * 1.5 if limit else 3 * 1024 ** 3)
+    under = "x = bytearray(%d); print('allocated')" % int((limit or 2 * 1024 ** 3) // 4)
+    r_over = run_limited([sys.executable, "-c", over], limit=limit, capture_output=True, text=True)
+    r_under = run_limited([sys.executable, "-c", under], limit=limit, capture_output=True, text=True)
+    refused = r_over.returncode != 0 and "MemoryError" in r_over.stderr
+    print("over the limit: %s" % ("refused with MemoryError" if refused else
+                                  "NOT refused (exit %d: %s)" % (r_over.returncode, r_over.stdout.strip() or r_over.stderr.strip()[-80:])))
+    print("under the limit: %s" % ("allowed" if r_under.returncode == 0 else "REFUSED: " + r_under.stderr.strip()[-80:]))
+    return 0 if refused and r_under.returncode == 0 else 1
+
+
 def run_mutant(gid, mutant, tmp):
     d = os.path.join(tmp, "m%04d" % next(_COUNTER))
     os.makedirs(d)
     with open(os.path.join(d, "trace_gate.py"), "w", encoding="utf-8", newline="\n") as f:
         f.write(mutant)
-    r = subprocess.run([sys.executable, TEST, "--gate-dir", d, "--fail-fast"],
-                       capture_output=True, text=True, cwd=HERE)
+    r = run_limited([sys.executable, TEST, "--gate-dir", d, "--fail-fast"],
+                    capture_output=True, text=True, cwd=HERE)
     fails = [ln for ln in r.stdout.splitlines() if ln.startswith("FAIL")]
     if r.returncode == 0:
         return "GREEN", ""
@@ -749,8 +837,49 @@ def run_candidate(cand, src, tmp):
     return key, state, detail
 
 
+def partition(keys, n):
+    """W36c-0.3 (R36bCI-3, R36bG0-4): the derived candidate keys dealt round robin into n shards."""
+    return [keys[i::n] for i in range(n)]
+
+
+def check_union(keys, shards):
+    """-> the problems of a split: a key in no shard, a key in more than one, a key that is not a candidate."""
+    seen, problems = {}, []
+    for k, shard in enumerate(shards, 1):
+        for key in shard:
+            seen.setdefault(key, []).append(k)
+    for key in keys:
+        if key not in seen:
+            problems.append("missing from every shard: %s" % key)
+        elif len(seen[key]) > 1:
+            problems.append("in shards %s: %s" % (",".join(map(str, seen[key])), key))
+    problems += ["not a candidate: %s" % key for key in seen if key not in set(keys)]
+    return problems
+
+
+def check_shards(keys, n):
+    """The shards of `partition` hold every candidate once; the check itself is proved by a split with one
+    candidate dropped and one doubled, which it must report.  Prints one line per shard; 0 ok, 1 not."""
+    shards = partition(keys, n)
+    problems = check_union(keys, shards)
+    for k, shard in enumerate(shards, 1):
+        print("shard %d/%d: %d candidates" % (k, n, len(shard)))
+    print("candidates %d, in the shards %d, problems %d" % (len(keys), sum(map(len, shards)), len(problems)))
+    for p in problems:
+        print("  " + p)
+    dropped = [list(s) for s in shards]
+    gone = dropped[0].pop()
+    doubled = [list(s) for s in shards]
+    doubled[-1].append(doubled[0][0])
+    caught = (any(gone in p for p in check_union(keys, dropped)) and
+              any(doubled[0][0] in p for p in check_union(keys, doubled)))
+    print("the check reports a dropped and a doubled candidate: %s" % ("yes" if caught else "NO"))
+    return 0 if not problems and caught else 1
+
+
 def main(argv):
     jobs, skip_baseline, listing, picks, only = min(6, os.cpu_count() or 1), False, False, [], None
+    shard, check_n, log_path = None, None, None
     args = list(argv)
     while args:
         a = args.pop(0)
@@ -758,6 +887,18 @@ def main(argv):
             jobs = int(args.pop(0))
         elif a == "--only":
             only = args.pop(0)      # "named" or "derived"
+        elif a == "--shard":        # K/N: the K-th of N shards of the derived candidates (1-based)
+            k_, n_ = args.pop(0).split("/")
+            shard = (int(k_), int(n_))
+            if not 1 <= shard[0] <= shard[1]:
+                print("--shard K/N needs 1 <= K <= N")
+                return 2
+        elif a == "--check-shards":
+            check_n = int(args.pop(0))
+        elif a == "--check-limit":
+            return check_limit()
+        elif a == "--log":          # progress lines are also appended to this file, flushed as written
+            log_path = args.pop(0)
         elif a == "--skip-baseline":
             skip_baseline = True
         elif a == "--list":
@@ -778,8 +919,16 @@ def main(argv):
     if len(set(keys)) != len(keys):
         print("duplicate candidate key")
         return 1
+    if check_n:
+        return check_shards(keys, check_n)
+    if shard:
+        if only == "named":
+            print("--shard splits the derived candidates; it does not go with --only named")
+            return 2
+        only = "derived"
+        mine = set(partition(keys, shard[1])[shard[0] - 1])
     guards = [g for g in GUARDS if (not picks or g[0] in picks) and only != "derived"]
-    derived = [c for c in cands if (not picks or c[0] in picks) and only != "named"]
+    derived = [c for c in cands if (not picks or c[0] in picks) and only != "named" and (not shard or c[0] in mine)]
     if listing:
         for gid, finding, what, _ in GUARDS:
             print("%-26s %-10s %s" % (gid, finding, what))
@@ -795,9 +944,26 @@ def main(argv):
             if not skip_baseline and not picks:
                 base = pool.submit(subprocess.run, [sys.executable, TEST, "--fail-fast"],
                                    capture_output=True, text=True, cwd=HERE)
-            for fut in futures:
+            # W36c-0.3: one flushed line per finished guard or candidate, in the order they finish, so a
+            # job that is killed leaves a log of how far it got (and --log PATH keeps it on disk too).
+            log = open(log_path, "a", encoding="utf-8", newline="\n") if log_path else None
+            head = "meta run: %d named guards, %d derived candidates%s, %d workers" % (
+                len(guards), len(derived), (" (shard %d/%d)" % shard) if shard else "", jobs)
+            outs = [sys.stdout] + ([log] if log else [])
+            for out in outs:
+                print(head, file=out, flush=True)
+            done = 0
+            for fut in concurrent.futures.as_completed(futures):
                 gid, state, detail = fut.result()
                 results[gid] = (state, detail)
+                done += 1
+                line = "[%d/%d] %-12s %s%s" % (done, len(futures), state, gid, (" -> " + detail) if detail else "")
+                for out in outs:
+                    print(line, file=out, flush=True)
+                if log:
+                    os.fsync(log.fileno())
+            if log:
+                log.close()
             if not skip_baseline and not picks:
                 baseline = base.result().returncode
     named = {g[0]: g for g in GUARDS}

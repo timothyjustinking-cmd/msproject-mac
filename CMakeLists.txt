@@ -222,21 +222,73 @@ if(CORE_BUILD_TESTS)
         # 24.2 minutes (1449 s), derived 41.0 minutes (2457 s).  The TIMEOUTs are three times that, for a
         # hosted runner with fewer cores.
         set(trace_gate_meta_timeout_named_ 4500)
-        set(trace_gate_meta_timeout_derived_ 7500)
-        foreach(shard_ named derived)
+        add_test(
+            NAME trace_gate_meta_named
+            COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_gate_guards_meta.py"
+                    --only named
+        )
+        set_tests_properties(trace_gate_meta_named PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            SKIP_RETURN_CODE 77
+            LABELS "trace_gate_meta;trace_gate_meta_named"
+            TIMEOUT ${trace_gate_meta_timeout_named_}
+        )
+
+        # W36c-0.3 (R36bCI-3): the derived candidates ran as one job of 150 minutes on a hosted runner (4 vCPU,
+        # 16 GB) and it was lost after 87 minutes ("starves it for CPU/Memory", no log).  They are now
+        # trace_gate_meta_derived_shards_ shards, `--shard K/N` of the derived candidates, each its own ctest
+        # (trace_gate_meta_derived_KofN, labels trace_gate_meta, trace_gate_meta_derived and the test's own
+        # name) and its own CI job, each run with trace_gate_meta_jobs_ workers: fewer than the runner's
+        # vCPU, so the runner's own agent keeps a core.  `ctest -L trace_gate_meta_derived` runs every shard.
+        # trace_gate_meta_shards (no trace_gate_meta label, so every job runs it, a second) checks that the
+        # shards hold every derived candidate exactly once and that the check itself reports a drop.
+        # Local timing at that worker count (shards 1 to 4: 1418, 1777, 2011 and 1918 s, the last three at once beside
+        # a fifth job, so on the slow side): see
+        # docs/handoff/wave36c-complete.md (W36c-0.3); the TIMEOUT, 6100 s, is three times the slowest.
+        set(trace_gate_meta_derived_shards_ 4)
+        set(trace_gate_meta_jobs_ 3)
+        set(trace_gate_meta_timeout_derived_ 6100)
+        foreach(k_ RANGE 1 ${trace_gate_meta_derived_shards_})
+            set(shard_name_ trace_gate_meta_derived_${k_}of${trace_gate_meta_derived_shards_})
             add_test(
-                NAME trace_gate_meta_${shard_}
+                NAME ${shard_name_}
                 COMMAND "${Python3_EXECUTABLE}"
                         "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_gate_guards_meta.py"
-                        --only ${shard_}
+                        --shard ${k_}/${trace_gate_meta_derived_shards_} --jobs ${trace_gate_meta_jobs_}
             )
-            set_tests_properties(trace_gate_meta_${shard_} PROPERTIES
+            set_tests_properties(${shard_name_} PROPERTIES
                 WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
                 SKIP_RETURN_CODE 77
-                LABELS "trace_gate_meta;trace_gate_meta_${shard_}"
-                TIMEOUT ${trace_gate_meta_timeout_${shard_}_}
+                LABELS "trace_gate_meta;trace_gate_meta_derived;${shard_name_}"
+                TIMEOUT ${trace_gate_meta_timeout_derived_}
             )
         endforeach()
+        add_test(
+            NAME trace_gate_meta_shards
+            COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_gate_guards_meta.py"
+                    --check-shards ${trace_gate_meta_derived_shards_}
+        )
+        set_tests_properties(trace_gate_meta_shards PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            SKIP_RETURN_CODE 77
+            TIMEOUT 600
+        )
+        # The same run holds every mutant to 2 GiB per process (one derived candidate allocates without end and
+        # took a whole process tree to 36.6 GB of commit); this proves the hold refuses a process that takes
+        # 1.5 times that and lets one of a quarter of it through.
+        add_test(
+            NAME trace_gate_meta_limit
+            COMMAND "${Python3_EXECUTABLE}"
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tools/trace/test_gate_guards_meta.py"
+                    --check-limit
+        )
+        set_tests_properties(trace_gate_meta_limit PROPERTIES
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            SKIP_RETURN_CODE 77
+            TIMEOUT 600
+        )
     endif()
 
     # W36-0.5: the trace host scripts (vmx throws on a sha MISMATCH or a wrong reply length;

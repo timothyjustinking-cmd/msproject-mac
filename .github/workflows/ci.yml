@@ -355,7 +355,8 @@ jobs:
   # Wave 36 (W36-2.4): the trace gate's guard-removal run (tools/trace/test_gate_guards_meta.py)
   # left trace_gate_guards and is its own ctest.  W36b-0.6 (R36W-6): one job of about 75 minutes did not
   # fit a hosted runner with room to spare, so it is two tests (trace_gate_meta_named: the named guards;
-  # trace_gate_meta_derived: the derived candidates), both labelled trace_gate_meta, one per job below.
+  # trace_gate_meta_derived: the derived candidates, since W36c-0.3 split again into shards), all labelled
+  # trace_gate_meta, one job each below.
   # The two jobs above exclude both (-LE trace_gate_meta).  Each is Python only, so the tree is
   # configured (that is what registers the tests) and not built.  Local timings, one shard at a time,
   # six workers on an eleven-core machine: named 24.2 minutes, derived 41.0 minutes; the job limits are
@@ -397,15 +398,28 @@ jobs:
         shell: bash
         run: ctest --test-dir build -C Release -L trace_gate_meta_named --output-on-failure
 
+  # Wave 36c (W36c-0.3 / R36bCI-3): the derived candidates as one job ended after 87 minutes with "The hosted
+  # runner lost communication with the server" and no log.  They are now four jobs, one shard each (CMakeLists.txt,
+  # trace_gate_meta_derived_shards_), run with three workers on the runner's four vCPU, and `ctest -V` streams the
+  # run's one-line-per-candidate progress into the step log as it goes.  The step "Every shard has a job" fails the
+  # job if CMakeLists.txt registers a different number of shards from the matrix below, so a shard cannot be left
+  # without a job; trace_gate_meta_shards (run in every job) proves the shards hold every candidate once.  The
+  # real cause of the lost runner was one candidate that allocates without end (36.6 GB of commit locally at six
+  # workers): every mutant is now held to 2 GiB per process (MUTANT_MEMORY_LIMIT, RLIMIT_AS on Linux), and
+  # trace_gate_meta_limit proves the hold bites.
   trace-gate-meta-derived:
     if: >-
       github.event_name != 'workflow_run' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.event != 'push')
-    name: trace-gate-meta-derived
+    name: trace-gate-meta-derived (${{ matrix.shard }} of 4)
     runs-on: ubuntu-latest
-    # 41.0 minutes locally for this shard; the ctest TIMEOUT of the test is set in CMakeLists.txt.
-    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    # The shard's ctest TIMEOUT (CMakeLists.txt, 6100 s = 102 minutes) plus ten minutes for checkout and configure.
+    timeout-minutes: 115
     steps:
       - name: Check out
         uses: actions/checkout@v4
@@ -430,6 +444,14 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCORE_WARNINGS_AS_ERRORS=ON
 
-      - name: Test the trace gate's derived guards (remove each, the acceptance test must go red)
+      - name: Every shard has a job
         shell: bash
-        run: ctest --test-dir build -C Release -L trace_gate_meta_derived --output-on-failure
+        run: |
+          n=$(ctest --test-dir build -N -L trace_gate_meta_derived | grep -c 'Test *#')
+          echo "shards registered: $n, matrix: ${{ strategy.job-total }}"
+          test "$n" = "${{ strategy.job-total }}"
+          ctest --test-dir build -C Release -R '^trace_gate_meta_(shards|limit)$' --output-on-failure --no-tests=error
+
+      - name: Test the trace gate's derived guards, shard ${{ matrix.shard }} (remove each, the acceptance test must go red)
+        shell: bash
+        run: ctest --test-dir build -C Release -L "trace_gate_meta_derived_${{ matrix.shard }}of${{ strategy.job-total }}" -V --no-tests=error
