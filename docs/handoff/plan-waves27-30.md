@@ -616,3 +616,28 @@ High; no wave is assigned:
   timeout.
 - **R36cC-1 (Low):** the START-HERE rewrite line says the host's node is "gone from text"; it stays in spaced GUID byte
   dumps and recorded data (R36bG0-1).
+
+## Queued at the wave 36 merge (coordinator, 22 November 2026)
+
+`main` = `2052d36` holds waves 36, 36b and 36c.  The id ledger of the 11 and 15 November work orders is
+`wave36c-verification/id-ledger.md`; these are its open rows.  No Critical or High; no wave is assigned:
+
+- **Closed, the lists were stale:** R35cG0-4 by `afdc3f2` (W36-2.3, the plan's Props digest; the G2 review's mutation went
+  red).  R36cC-1 by this commit (the START-HERE rewrite line now says the host's node stays in dumps and data).
+- **R36G0b-8:** no file the real Project wrote has met the gate through the positive sweep; the W-5 re-gate below is the
+  first such run, so close it against that at wave 37 planning.
+- **R36G0d-5 (R36G0c-10):** the control null proves nothing; changing it changes the capture specs (the coordinator's call).
+- **R36G0e-1 to -5:** the G0e review's Medium and four Lows carry no id in a later record; the W36-0f.5 commits (derived
+  and named guards) look like R36G0e-1.  Check each against `review-g0e.md` before wave 37.  R36G0e-6 reads as fixed by
+  `464b742` (inferred, the record does not name it).
+- **The OPEN pairs:** 22 of 202 (was 56): `test_trace_gate.py` positive sweep at `2052d36`, 180 PASS, 22 OPEN, 0 FAIL.
+- **R36W5-1 to -11:** the W-5 re-gate's 46 FAILs (`wave36-verification/regate-w5/README.md`): R36W5-1 (17, VM row
+  stamps), -2 (6), -3 (6, host references without the edit), -4 (2), -5 (3, noise without a mask), -6 (2), -7 (1), -8
+  (6), -9 (1), -10 (1), -11 (1); 14 targets are undecided where the 15 November order counted six (D-6: findings).
+- **A-5 residual:** `wave30-inactivate-second` and `wave30-level` still FAIL at the re-gate (R36W5-4, R36W5-10).
+- **C-6 / W-4:** the round 7 insert pairs were not tested byte for byte against an insert rule (only a document re-check,
+  `wave36-verification/gates-close.md`); G3 (Insert Task, Milestone, Summary) is not started.
+- **The font item's 4(e) read-back** (W36-1.4): planned, not run; it needs Project, so the licence (D-7).
+- **D-7:** no new recording without a Project 2021 licence; no decision recorded.  Default: no purchase without the
+  operator; decide at wave 37 planning.
+- **The CI limits:** `trace-gate-meta-named` took 60 minutes on the runner against a 90-minute job (R36bG0-5).

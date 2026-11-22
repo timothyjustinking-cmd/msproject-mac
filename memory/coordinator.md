@@ -1,4 +1,4 @@
-# memory: coordinator (22 November 2026, wave 36c at its CLOSE; waves 34 to 35g merged)
+# memory: coordinator (22 November 2026; waves 34 to 36c merged, `main` = `2052d36`)
 
 **Entry point:** `docs/START-HERE.md`.  Current brief `docs/handoff/wave36c-brief.md`, record
 `docs/handoff/wave36c-complete.md` (wave 36b and 36: `wave36b-brief.md`, `wave36b-complete.md`, `wave36-brief.md`,
@@ -7,15 +7,15 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
 
 ## State
 
-* `main` = `b2c0b19` (wave 35g merged; CI green on all seven jobs; 0 Critical, 0 High; 4(e) 7
-  checked, 3 not checked).  Waves 23 to 32 were merged on 27 October 2026 as `17f5782` after an
+* `main` = `2052d36` (waves 36, 36b and 36c merged and pushed 22 November 2026; CI green on all 12
+  jobs; 0 Critical, 0 High).  Wave 35g's 4(e): 7 checked, 3 not checked.  Waves 23 to 32 were merged on 27 October 2026 as `17f5782` after an
   operator-approved `git filter-branch`: every id in the wave 23 to 32 records is pre-rewrite; map
   it through `docs/handoff/wave32-verification/rewrite-sha-map.txt` (left old, right current).
-* `wave36` is cut from `main` at `b2c0b19`, local only.  G0 to G0f, G1, G1b, G2 and CLOSE are done
+* `wave36` was cut from `main` at `b2c0b19`; it is merged.  G0 to G0f, G1, G1b, G2 and CLOSE are done
   (`wave36-complete.md`); **G3 is not started** (re-checked at CLOSE: `trace-insert-rules-r6.md`
   states no rule that predicts a held-out pair, and no note derives one from the five committed
   `wave36-r7-insert-*` recordings).  Wave 37: Notes, Set Baseline, linked, lag and constraint
-  Calculate.  Still the coordinator's: fresh-tree gates, push and CI, 4(e), the whole-wave review.
+  Calculate.  Still open: the font item's 4(e) read-back (planned, not run; plan queue).
 * **History rewrite, Sun 22 November 2026 (the operator's word):** `main`, `wave36` and `wave36b` were rewritten
   from 8 November 2026 (the trace notes under `spec/writers/evidence/trace-*`, `trace-runbook.md`, `mapdiff.py`
   and `r6_ins4.py` gone from every commit; the VM's and host's node gone from note text and messages).
@@ -59,7 +59,7 @@ file, is `docs/handoff/history-waves34-35.md`.  Older: `memory/archive/coordinat
   (R36G0f-4: 108 of 210 VM copies PASS): that is a finding by design, not a gate fault.  CI jobs
   `pip install olefile` and set `MPP_REQUIRE_OLEFILE=1`, so a missing one fails (locally it skips).
 * **Open, no Critical or High:** Lows R35gG0-1 to -4, R35gG1-1 to -5, R35gW-1 to -5; partly fixed
-  or open R35dG2-1, R35cG0-2, R35cG0-4 (wave 36 G2), R35bW-1, R35bW-2, R35bG2-2, R35bG3-1,
+  or open R35dG2-1, R35cG0-2, R35bW-1, R35bW-2, R35bG2-2, R35bG3-1,
   R35bG0-9, R35bG1-10, R35bG2-9.  Only the coordinator's review closes an id.
 * **Engine stays 7/8** (`constraint-mso` expected-failing); `mppwrite::save_plan` is test-only.
 

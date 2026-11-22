@@ -45,3 +45,10 @@ The POSIX RLIMIT_AS path and the runner timings are untested here; the CI run on
 ## Merge decision
 0 Critical, 0 High open from wave 36c (G0 review: 2 Medium, 6 Low; CLOSE: 1 Low), all queued in the plan.  Merge into
 main when CI is green on every job of qt.yml, ci.yml and app-macos.yml for the wave36c tip.
+
+## CI and merge (22 November 2026)
+Runs on `2052d36`: qt.yml (macos-qt, linux-qt, windows-qt), ci.yml (windows-msvc 583 s, ubuntu-gcc 786 s, ubuntu-asan
+516 s, trace-gate-meta-named 3597 s, trace-gate-meta-derived 1 to 4 of 4: 1299, 1220, 1470, 1442 s), app-macos.yml
+(macos-appkit): all 12 jobs success.  The 2 GiB hold and the shards ran on Linux.  `main` fast-forwarded `1dabff4` to
+`2052d36` and pushed.  Trace gate at `2052d36`: 2009 PASS, 0 FAIL; positive sweep 202 control-nulls, 180 PASS, 22 OPEN;
+negative 191 edits, 181 FAIL, 10 PASS (the pinned no-ops).

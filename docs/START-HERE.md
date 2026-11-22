@@ -1,7 +1,6 @@
 # START HERE: MS Project to native port
 
-_Updated 22 November 2026, wave 36c at its CLOSE on branch `wave36c` (cut from `wave36b`; `wave36b` from
-`wave36`; `wave36` from `main` at `b2c0b19`).
+_Updated 22 November 2026: waves 36, 36b and 36c merged; `main` = `2052d36`, pushed.
 Keep this file under 8 KB and current at every wave close; it is the only file a new session must
 read first.  Wave history is in `docs/handoff/history-waves34-35.md`: read it only to investigate
 a decision; its last section, "Standing rules and standing facts", holds the writer inventory (which
@@ -9,11 +8,11 @@ edits save, which are refused), the local Qt path and the house rules of wave 35
 
 ## State
 
-* **`main` = `b2c0b19`**: waves 23 to 35g merged, CI green on all seven jobs, 0 Critical and 0 High
-  open, 4(e) 7 checked and 3 not (`docs/handoff/wave35g-verification/`).  Ids in the wave 23 to 32
+* **`main` = `2052d36`** (pushed 22 Nov 2026): waves 23 to 36c merged, CI green on all 12 jobs, 0 Critical
+  and 0 High open (`docs/handoff/wave36c-verification/`); wave 35g's 4(e): 7 checked, 3 not.  Ids in the wave 23 to 32
   records are pre-rewrite: map one through `docs/handoff/wave32-verification/rewrite-sha-map.txt`.
 * **History rewrite, Sun 22 Nov 2026:** `main`, `wave36` and `wave36b` were rewritten from 8 Nov 2026
-  (the trace notes and the VM's and host's node gone from text; `wave36b-verification/coord-verify.md`
+  (the trace notes and the VM's node gone; the host's stays in GUID dumps and data, R36bG0-1; `wave36b-verification/coord-verify.md`
   section 4).  **Commit ids in records before that date name pre-rewrite commits.**
 * **Wave 36 (the writer wave, `wave36-complete.md`)** done: the trace gate (G0 to G0f), the font item
   (G1, G1b), Props (G2; the insert is framing decoded, not lifted) and CLOSE.  G3 (Insert Task,
@@ -25,8 +24,7 @@ edits save, which are refused), the local Qt path and the house rules of wave 35
   `wave36c-complete.md`, markers `WAVE-36c-G0-COMPLETE` and `WAVE-36c-COMPLETE`): `host.ps1` takes its
   temp folder from `GetTempPath()`; the fake guest answers with the id `vmx` wrote; the derived meta
   run is four shards, one CI job each, every mutant held to 2 GiB (one candidate took 36 GB), one
-  progress line per candidate.  Nothing is pushed: the coordinator verifies, pushes, dispatches CI and
-  merges `wave36`, `wave36b`, `wave36c` on the operator's word.
+  progress line per candidate.  Verified, CI green, merged.
 * **Trace notes** (`trace-*.md`, `trace-*.txt`, the runbook) live in the private repo
   `../msproject-mac-trace` (D-8, 22 Nov 2026); a citation by file name refers there.  The one public
   note is `spec/writers/evidence/trace-gate-fields-g0b.md`.
@@ -37,11 +35,12 @@ edits save, which are refused), the local Qt path and the house rules of wave 35
   `test_gate_guards_meta.py`: `trace_gate_meta_named` (24 min), four derived shards
   `trace_gate_meta_derived_KofN` (3 workers, about 30 min each), `trace_gate_meta_shards` (the union) and
   `trace_gate_meta_limit`; label `trace_gate_meta`, five CI jobs; the matrix and asan jobs pass
-  `-LE trace_gate_meta`.  CI sets `MPP_REQUIRE_OLEFILE=1`; no limit has run on a runner.  The VM runs
+  `-LE trace_gate_meta`.  CI sets `MPP_REQUIRE_OLEFILE=1`; the limits held on the runners at `2052d36`.  The VM runs
   the frozen gate and `host.ps1`: the coordinator copies the new ones in.  Queued, not fixed:
-  R36G0f-4 to -7 and -9, R36W-7 to -10, R36bG0-1 to -7 (`plan-waves27-30.md`).
+  R36G0f-4 to -7 and -9, R36W-7 to -10, R36bG0-1 to -7, R36cG0-1 to -8, R36W5-1 to -11 and
+  the merge-time gaps (`plan-waves27-30.md`).
 * **Open, no Critical or High:** the Lows R35gG0-1 to -4, R35gG1-1 to -5, R35gW-1 to -5; partly fixed
-  or open R35dG2-1, R35cG0-2, R35cG0-4, R35bW-1, R35bW-2, R35bG2-2, R35bG3-1, R35bG0-9, R35bG1-10,
+  or open R35dG2-1, R35cG0-2, R35bW-1, R35bW-2, R35bG2-2, R35bG3-1, R35bG0-9, R35bG1-10,
   R35bG2-9.  All are queued in `plan-waves27-30.md`; only the coordinator's review closes an id.
 * **Wave 37:** Notes, Set Baseline, linked, lag and constraint Calculate.  **Engine stays 7/8**
   (`constraint-mso` is expected-failing).
