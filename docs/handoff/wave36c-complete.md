@@ -127,3 +127,68 @@ Nothing in G0 is deferred.
   independent review of the wave diff, then the push, CI on every job and the merge.
 
 WAVE-36c-G0-COMPLETE
+
+## CLOSE: the records and the fresh-tree gates
+
+Brief `docs/handoff/wave36c-brief.md` section 3.  Builder Claude Sonnet 5.5, 22 November 2026.  Nothing is pushed and no
+workflow is dispatched.  CLOSE changes no C++ source, no `CMakeLists.txt` and no workflow file.
+
+| item | commit | what |
+|---|---|---|
+| W36c-CLOSE.1 | `3c8d5fe` | the wave 36b G0 review's seven findings (R36bG0-1 to -7) queued in `plan-waves27-30.md`, "Queued from wave 36c (CLOSE)"; not fixed, the brief names three items |
+| W36c-CLOSE.2 | `93a5f3b` | `docs/START-HERE.md` (8143 bytes, under 8 KB) and `memory/coordinator.md` brought to the end of the wave, with the line on the history rewrite (commit ids in records before Sun 22 Nov 2026 name pre-rewrite commits) |
+
+Doc gates for each: `build/w36c/w36c-close1-gates.log` and `w36c-close2-gates.log`: `scan_client_names` 0, `guard_names` 0,
+`check_markers --worktree` 0, `check_fixtures` 0, the `client-string` grep none, `git diff --check` clean; each commit
+carries both trailers.  Neither commit has a guard: they are records.
+
+### Gate line on fresh trees at the tip
+
+Three trees configured from nothing at `93a5f3b` (the tip before this record), `build/w36c-close-fresh` (core), `-app`
+and `-qt`, Release, `CORE_WARNINGS_AS_ERRORS=ON` (`build/w36c/closegates.sh`; logs `build/w36c/93a5f3b-W36c-CLOSE-*`,
+status `93a5f3b-W36c-CLOSE.status`):
+
+| gate | result |
+|---|---|
+| core configure and build | exit 0, exit 0 |
+| core `ctest -E plan_recalc -LE trace_gate_meta -j4` | 70/70 |
+| `MPP_NO_CORPUS=1 ctest -R plan_recalc` | 1/1 |
+| M2 recalc `--compare` | exit 0; 332/332, 268/268, 64/64 fields |
+| app tree (configure, build, ctest) | exit 0, exit 0; 34/34 |
+| Qt tree (configure, build, ctest) | exit 0, exit 0; 52/52 |
+| `check_fixtures`, name scans (`guard_names main..HEAD`, `scan_client_names HEAD`), `check_markers` (worktree and `main..HEAD`), the `client-string` grep, `git diff --check` | all 0 or none |
+
+The engine stays 7/8 (`constraint-mso` expected-failing).
+
+### The full `trace_gate_meta` run, every shard, timed
+
+On the fresh core tree, through the real ctest (`-R` on each test's exact name, `-V`), one shard after the other, nothing
+else running on the machine (12 cores), 3 workers per derived shard as CI passes:
+
+| ctest | result | wall | limit (ctest TIMEOUT) |
+|---|---|---|---|
+| `trace_gate_meta_named` | Passed | 1501 s (25.0 min) | 4500 s |
+| `trace_gate_meta_derived_1of4` | Passed | 1160 s (19.3 min) | 6100 s |
+| `trace_gate_meta_derived_2of4` | Passed | 997 s (16.6 min) | 6100 s |
+| `trace_gate_meta_derived_3of4` | Passed | 1111 s (18.5 min) | 6100 s |
+| `trace_gate_meta_derived_4of4` | Passed | 1047 s (17.5 min) | 6100 s |
+
+**5816 s, 96.9 minutes in all** (`93a5f3b-W36c-CLOSE-meta-*.log`; the times are in the status file).  The derived shards'
+progress lines count 328 candidates in all (82 each), 312 red and 16 GREEN (1, 2, 7 and 6 per shard), the same split as the G0
+comparison of the capped, sharded run with the uncapped one.  These times are faster than the G0 shard times (1418 to 2011
+s), which ran beside other jobs; the limits (6100 s, 115 minutes) stay at three times the slower G0 time.  The named shard is
+1501 s here against 1430 s in wave 36b: it now runs with the memory hold.
+
+### Deferred
+
+Nothing in CLOSE is deferred, and nothing in G0.  R36bG0-1 to -7 are queued by CLOSE.1, not deferred from this brief.
+
+### Found, not fixed
+
+* **The CLOSE gate set ran at `93a5f3b`**, before this record; this record is the only later change (`git diff --stat
+  93a5f3b..HEAD` lists `wave36c-complete.md`).  The doc gates are run again on it.
+* **No CI job has run.**  The Linux `RLIMIT_AS` path, the four-job derived matrix and every shard's limits are unproven on a
+  runner; the numbers above are from a 12-core Windows machine.  That is the coordinator's dispatch.
+* **Still the coordinator's:** a fresh worktree and the gates there, every "Guards seen red" row put back to red, the
+  independent review of the wave diff, then on the operator's word the push, CI on every job and the merge of `wave36`,
+  `wave36b` and `wave36c` into `main`.  The G0 "Found, not fixed" list above stands.
